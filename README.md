@@ -1,6 +1,8 @@
-# SEPAL Sampling Design and Analysis Engine (sbae-design)
+# SEPAL Sampling Based Area Estimation Design (sbae-design)
 
-**`sbae-design` is an interactive SEPAL-UI application for designing statistically sound area estimation and accuracy assessment sampling strategies for land monitoring.** It is based on Pontus Olofsson, Giles M. Foody, Martin Herold, Stephen V. Stehman, Curtis E. Woodcock, Michael A. Wulder,Good practices for estimating area and assessing accuracy of land change,Remote Sensing of Environment,Volume 148,2014,Pages 42-57,ISSN 0034-4257,https://doi.org/10.1016/j.rse.2014.02.015. 
+**`sbae-design` is an interactive SEPAL-UI application for designing statistically sound area estimation and accuracy assessment sampling strategies for land monitoring.** It is based on Pontus Olofsson, Giles M. Foody, Martin Herold, Stephen V. Stehman, Curtis E. Woodcock, Michael A. Wulder,Good practices for estimating area and assessing accuracy of land change,Remote Sensing of Environment,Volume 148,2014,Pages 42-57,ISSN 0034-4257,https://doi.org/10.1016/j.rse.2014.02.015.
+
+The app is designed to be a modernization and python version of the existing Stratified Area Estimation - Design module in SEPAL based on R Shiny.
 
 It allows users to upload a map (raster or vector), calculate class areas, define sampling parameters based on overall accuracy or target class precision objectives, and generate sample points for subsequent analysis or collection. The application integrates an interactive map for visualizing the input map and the generated sample points.
 
