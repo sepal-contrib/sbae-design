@@ -1,31 +1,29 @@
 # sampling_design_tool/app_controller.py
 
-import ipyvuetify as v
-import sepal_ui.sepalwidgets as sui
-import traitlets
+import html  # For popups
 import os
-import pandas as pd
-import numpy as np
 import traceback
 from pathlib import Path
-import sys
+
+import ipyvuetify as v
 import ipywidgets as widgets
-import ipyleaflet
+import numpy as np
+import pandas as pd
+import sepal_ui.sepalwidgets as sui
+import traitlets
 from ipyleaflet import (
-    Map,
-    TileLayer,
-    basemaps,
-    LayersControl,
-    ZoomControl,
-    ScaleControl,
-    Marker,
+    CircleMarker,
+    FullScreenControl,
     GeoJSON,
     ImageOverlay,
-    CircleMarker,
     LayerGroup,
-    FullScreenControl,
+    LayersControl,
+    Map,
+    ScaleControl,
+    TileLayer,
+    ZoomControl,
+    basemaps,
 )
-import html  # For popups
 
 # Local module imports
 from component.model.app_model import AppModel
@@ -33,15 +31,16 @@ from component.model.app_model import AppModel
 # Import map_utils and then access its attributes
 from component.scripts import (
     map_utils,
-)  # Ensures map_utils is imported and its globals are set
+)
+from component.scripts import processing as proc  # Ensures processing is imported
+
+# Ensures map_utils is imported and its globals are set
 from component.scripts.map_utils import (
     _add_overlay_layer,
     generate_class_color_map,
-    target_crs_epsg as map_utils_target_crs_epsg,
 )
-
-from component.scripts import processing as proc  # Ensures processing is imported
-from component.scripts.processing import compute_map_area, get_output_dir, get_z_score
+from component.scripts.map_utils import target_crs_epsg as map_utils_target_crs_epsg
+from component.scripts.processing import compute_map_area, get_output_dir
 
 # Optional dependency flags from submodules for convenience in controller
 # Access flags AFTER modules are imported and their top-level code has run.
@@ -707,7 +706,6 @@ class AppController:
             )
             try:
                 import rasterio
-                import rasterio.warp as controller_rasterio_warp
 
                 print(
                     "DEBUG Controller Import Check (in _on_load_click): rasterio.warp successfully imported directly."
@@ -735,7 +733,7 @@ class AppController:
 
             if is_raster:
                 print(
-                    f"DEBUG _on_load_click: is_raster=True. Evaluating dependency flags for bounds calculation..."
+                    "DEBUG _on_load_click: is_raster=True. Evaluating dependency flags for bounds calculation..."
                 )
                 # Use the module-level flags here
                 print(
@@ -779,7 +777,7 @@ class AppController:
 
             elif is_vector:
                 print(
-                    f"DEBUG _on_load_click: is_vector=True. Checking GeoPandas availability..."
+                    "DEBUG _on_load_click: is_vector=True. Checking GeoPandas availability..."
                 )
                 if _geopandas_available_proc:
                     try:
