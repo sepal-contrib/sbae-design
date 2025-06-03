@@ -27,6 +27,7 @@ from ipyleaflet import (
     ZoomControl,
     basemaps,
 )
+from sepal_ui.sepalwidgets.file_input import FileInput
 
 from component.model.app_model import AppModel
 from component.scripts import processing as proc
@@ -306,7 +307,7 @@ class AppController:
 
     def _create_step_1_content(self):
         logger.debug("Creating Step 1 UI Content (File Input, Load Button, Map).")
-        self.file_input = sui.FileInput(
+        self.file_input = FileInput(
             label="Select Map File (.tif, .shp, .geojson, etc.)",
             folder=self.model.current_dir,
             extensions=[
