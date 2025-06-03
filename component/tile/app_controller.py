@@ -30,13 +30,8 @@ from component.scripts.map_utils import target_crs_epsg as map_utils_target_crs_
 from component.scripts.processing import compute_map_area, get_output_dir # Specific functions
 
 # Configure logging for the application
-# This should ideally be called once. If AppController is re-instantiated in Jupyter,
-# the setup_logging function has a clear_handlers mechanism.
-# Pass self.model.current_dir so logs can be relative to the app's starting CWD if desired,
-# or keep it default to save logs in the script's CWD/logs.
-# For simplicity, using default base_dir (os.getcwd()) for setup_logging here.
-# You can change log_to_console to True if you want to see logs in console as well.
-setup_logging(log_to_console=False) # Or True for console output
+log_base_directory = "/home/sepal-user" # Define the desired base directory
+setup_logging(base_dir=log_base_directory, log_to_console=False) # Or True for console output
 
 # Get a logger for this controller module, child of the main app logger
 logger = logging.getLogger(f"{LOG_APP_NAME}.{__name__}")
