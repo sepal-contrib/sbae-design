@@ -6,6 +6,8 @@ __pycache__/
 *[Uu]ntitled*
 # C extensions
 *.so
+logging_config.toml
+*instructions.md*
 
 # Distribution / packaging
 .Python
