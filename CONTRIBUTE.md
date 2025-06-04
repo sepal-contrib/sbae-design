@@ -4,15 +4,15 @@
 
 If you are developing this module inside a SEPAL environment, it is highly recommended to create a dedicated virtual environment for your work. This makes it easier to install and test packages specifically for this project without any dependency conflicts.
 
-### 1. Creating the virtual environment (first time only)
+### Creating the virtual environment (first time only)
 
 1.  Navigate to your project's root directory:
     ```bash
-    cd /path/to/your/project
+    cd /path/to/sbae-design
     ```
 2.  Run:
     ```bash
-    module_venv
+    module_venv (and then press Enter)
     ```
     - **What this does:**
       - Creates a fresh, local Python environment under  
@@ -21,7 +21,7 @@ If you are developing this module inside a SEPAL environment, it is highly recom
     - **Important:**
       - Because it installs everything from scratch, the initial setup may take **several minutes**. Please be patient—once it finishes, you'll have a self-contained environment that you can safely modify.
 
-### 2. Activating the environment in Jupyter notebooks
+### Activating the environment in Jupyter notebooks
 
 Once your virtual environment exists, you'll want to run and test your notebooks inside it. To do so:
 
@@ -33,13 +33,13 @@ Once your virtual environment exists, you'll want to run and test your notebooks
     - That "(test) sbae-design" entry corresponds to the virtual environment you created with `module_venv`.
     - Selecting it will ensure any code you run within your notebooks uses the packages and Python version from your local `sbae-design` environment—**not** the global SEPAL Python.
 
-### 3. Installing or updating packages later
+### Installing or updating packages later
 
 Whenever you need to install a new package (or update an existing one) inside your `sbae-design` environment, follow these steps:
 
 1.  From any SEPAL terminal, run:
     ```bash
-    activate_venv
+    activate_venv (and then press Enter)
     ```
 2.  Wait a few seconds. You will be prompted with a numbered list of all existing virtual environments on this SEPAL instance. For example:
     ```
