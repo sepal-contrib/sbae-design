@@ -12,7 +12,7 @@ If you are developing this module inside a SEPAL environment, it is highly recom
     ```
 2.  Run:
     ```bash
-    module_venv (and then press Enter)
+    module_venv # (and then press Enter)
     ```
     - **What this does:**
       - Creates a fresh, local Python environment under  
@@ -39,7 +39,7 @@ Whenever you need to install a new package (or update an existing one) inside yo
 
 1.  From any SEPAL terminal, run:
     ```bash
-    activate_venv (and then press Enter)
+    activate_venv # (and then press Enter)
     ```
 2.  Wait a few seconds. You will be prompted with a numbered list of all existing virtual environments on this SEPAL instance. For example:
     ```
@@ -49,11 +49,22 @@ Whenever you need to install a new package (or update an existing one) inside yo
     Select environment [1-3]:
     ```
 3.  Type the number corresponding to `sbae-design` (e.g., `1`) and press Enter. You should then see something like:
+
     ```
     Activating: /home/sepal-user/module-venv/sbae-design
     (sbae-design) sepal-user@sepal:~$
     ```
+
+    Or, if you already know the path to your virtual environment, you can directly activate it by running:
+
+    ```bash
+
+    source /home/sepal-user/module-venv/sbae-design/bin/activate
+
+    ```
+
     - At that point, your prompt is prefixed with `(sbae-design)`, indicating that the virtual environment is active.
+
 4.  Now install or update any package, for example:
     ```bash
     pip install --upgrade sepal_ui
