@@ -68,7 +68,9 @@ That's it! With this workflow, you'll have a reproducible, isolated environment 
 
 # Configure the logs
 
-There's a file called `logging_config.example.toml` in the root of the project. To configure the logs, copy this file to `logging_config.toml`, the module will use that file as configuration.
+There's a file called `logging_config.example.toml` in the root of the project. To configure the logs, copy this file to `logging_config.toml`, the module will use that file as configuration. The `logging_config.toml` file is already added to `.gitignore` to prevent it from being committed to the repository.
+
+> **Important for Production Environments**: In production deployments, the `logging_config.toml` file should **NOT** exist by default. This ensures that no logging occurs in production.
 
 There are two output streams configured by default: one for a file and one for a notebook console. You can change the configuration in the `logging_config.toml` file.
 
@@ -105,3 +107,18 @@ logger.warning("This is a warning message")
 logger.error("This is an error message")
 logger.critical("This is a critical message")
 ```
+
+## Verifying Logging Behavior
+
+To verify if logging is properly configured or intentionally disabled:
+
+```python
+import logging
+
+logger = logging.getLogger("sbae")
+print(f"Logging enabled: {logger.handlers != [logging.NullHandler()]}")
+print(f"Current log level: {logger.level}")
+print(f"Handlers configured: {[type(h).__name__ for h in logger.handlers]}")
+```
+
+In production environments, the first line should print `Logging enabled: False` when logging is correctly disabled. This helps ensure that the application is running with minimal overhead.
