@@ -107,18 +107,3 @@ logger.warning("This is a warning message")
 logger.error("This is an error message")
 logger.critical("This is a critical message")
 ```
-
-## Verifying Logging Behavior
-
-To verify if logging is properly configured or intentionally disabled:
-
-```python
-import logging
-
-logger = logging.getLogger("sbae")
-print(f"Logging enabled: {logger.handlers != [logging.NullHandler()]}")
-print(f"Current log level: {logger.level}")
-print(f"Handlers configured: {[type(h).__name__ for h in logger.handlers]}")
-```
-
-In production environments, the first line should print `Logging enabled: False` when logging is correctly disabled. This helps ensure that the application is running with minimal overhead.
