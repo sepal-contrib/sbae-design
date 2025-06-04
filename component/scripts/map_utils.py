@@ -13,15 +13,17 @@ import rasterio
 import rasterio.enums
 import rasterio.warp
 
+from component.scripts.parameter import (
+    raster_extensions,
+    vector_extensions,
+)
+
 # Get a logger for this module
 logger = logging.getLogger("sbae")
 
 logger.debug("rasterio and rasterio.warp imported successfully.")
 
 # --- Constants ---
-target_crs_epsg = 4326
-target_crs_str = f"EPSG:{target_crs_epsg}"
-
 
 # --- Utility Functions ---
 def generate_class_color_map(unique_classes):
@@ -90,29 +92,6 @@ def _add_overlay_layer(
     try:
         map_file_str = str(map_file_path)
         basename = os.path.basename(map_file_str)
-        raster_extensions = (
-            ".tif",
-            ".tiff",
-            ".img",
-            ".pix",
-            ".rst",
-            ".grd",
-            ".vrt",
-            ".hdf",
-            ".h5",
-            ".jpeg2000",
-        )
-        vector_extensions = (
-            ".shp",
-            ".sqlite",
-            ".gdb",
-            ".geojson",
-            ".json",
-            ".gml",
-            ".kml",
-            ".tab",
-            ".mif",
-        )
 
         if map_file_str.lower().endswith(raster_extensions):
             logger.debug(f"Processing Raster {basename} (ImageOverlay/DataURL)...")

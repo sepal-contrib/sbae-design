@@ -16,13 +16,16 @@ from pyproj import CRS, Transformer
 from scipy.special import ndtri
 from shapely.geometry import Point
 
+from component.scripts.parameter import (
+    raster_extensions,
+    target_crs_epsg,
+    vector_extensions,
+)
+
 logger = logging.getLogger("sbae")
 logger.debug("pyproj imported successfully.")
 
 # --- Constants ---
-target_crs_epsg = 4326
-target_crs_str = f"EPSG:{target_crs_epsg}"
-
 
 # --- Globals used by run_sample_design ---
 sample_size_output: widgets.Output = None
@@ -110,29 +113,6 @@ def compute_map_area(input_map_file_path_str: str):
 
     file_path_obj = Path(input_map_file_path_str)
     basename = file_path_obj.name
-    raster_extensions = (
-        ".tif",
-        ".tiff",
-        ".img",
-        ".pix",
-        ".rst",
-        ".grd",
-        ".vrt",
-        ".hdf",
-        ".h5",
-        ".jpeg2000",
-    )
-    vector_extensions = (
-        ".shp",
-        ".sqlite",
-        ".gdb",
-        ".geojson",
-        ".json",
-        ".gml",
-        ".kml",
-        ".tab",
-        ".mif",
-    )
 
     if file_path_obj.suffix.lower() in raster_extensions:
         logger.info(f"Processing '{basename}' as Raster for area computation...")
@@ -336,29 +316,6 @@ def generate_sample_points(
 
     map_file_path_obj = Path(map_file_str)
     basename = map_file_path_obj.name
-    raster_extensions = (
-        ".tif",
-        ".tiff",
-        ".img",
-        ".pix",
-        ".rst",
-        ".grd",
-        ".vrt",
-        ".hdf",
-        ".h5",
-        ".jpeg2000",
-    )
-    vector_extensions = (
-        ".shp",
-        ".sqlite",
-        ".gdb",
-        ".geojson",
-        ".json",
-        ".gml",
-        ".kml",
-        ".tab",
-        ".mif",
-    )
 
     try:
         if map_file_path_obj.suffix.lower() in raster_extensions:
