@@ -1,7 +1,9 @@
 SEPAL Sampling Based Area Estimation Design (sbae-design)
 =========================================================
 
-.. Add Image
+.. image:: https://raw.githubusercontent.com/sepal-contrib/sbae-design/refs/heads/main/utils/images/landing_dark.png
+   :alt: SBAE Design Landing Page
+   :align: center
 
 **sbae-design is an interactive SEPAL-UI application for designing statistically sound area estimation and accuracy assessment sampling strategies for land monitoring.** It is based on Pontus Olofsson, Giles M. Foody, Martin Herold, Stephen V. Stehman, Curtis E. Woodcock, Michael A. Wulder, Good practices for estimating area and assessing accuracy of land change, Remote Sensing of Environment, Volume 148, 2014, Pages 42-57, ISSN 0034-4257, https://doi.org/10.1016/j.rse.2014.02.015.
 
