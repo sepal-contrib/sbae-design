@@ -1,0 +1,40 @@
+# SBAE Application Configuration
+
+# Default parameter values
+DEFAULT_TARGET_ACCURACY = 0.90
+DEFAULT_ALLOWABLE_ERROR = 0.05
+DEFAULT_CONFIDENCE_LEVEL = 0.95
+DEFAULT_MIN_SAMPLES = 20
+DEFAULT_ALLOCATION_METHOD = "Proportional"
+DEFAULT_EXPECTED_ACCURACY = 0.85
+
+# File upload constraints
+MAX_FILE_SIZE_MB = 100
+SUPPORTED_RASTER_FORMATS = [".tif", ".tiff", ".img"]
+SUPPORTED_VECTOR_FORMATS = [".shp", ".geojson", ".gpkg", ".kml"]
+
+# Calculation limits
+MIN_CONFIDENCE_LEVEL = 0.80
+MAX_CONFIDENCE_LEVEL = 0.99
+MIN_TARGET_ACCURACY = 0.50
+MAX_TARGET_ACCURACY = 0.99
+MIN_ALLOWABLE_ERROR = 0.01
+MAX_ALLOWABLE_ERROR = 0.20
+MIN_SAMPLES_PER_CLASS = 5
+MAX_SAMPLES_PER_CLASS = 500
+
+# Point generation settings
+MAX_ATTEMPTS_MULTIPLIER = 100  # max_attempts = n_samples * this_value
+CHUNK_SIZE_FOR_LARGE_FILES = 1000  # Process large files in chunks
+
+# Map settings
+DEFAULT_MAP_ZOOM = 10
+MAP_CENTER_FALLBACK = [0, 0]  # If center calculation fails
+
+# Export settings
+CSV_DECIMAL_PLACES = 6
+GEOJSON_PRECISION = 6
+
+# UI settings
+PREVIEW_TABLE_ROWS = 100
+PAGINATION_SIZE = 10
