@@ -6,7 +6,7 @@
     position="relative"
   >
     <!-- Step number badge in top-left corner -->
-    <v-badge
+    <!-- <v-badge
       :content="number"
       color="white"
       class="step-badge"
@@ -14,7 +14,7 @@
       offset-x="10"
       offset-y="15"
     >
-    </v-badge>
+    </v-badge> -->
 
     <v-card-text
       class="d-flex flex-column justify-center align-center fill-height"
@@ -22,7 +22,7 @@
       <!-- Large Material Design Icon -->
       <div class="icon-container">
         <v-icon
-          color="secondary"
+          color="white"
           class="step-icon"
           style="font-size: 4rem !important"
         >
