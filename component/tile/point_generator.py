@@ -10,7 +10,7 @@ from component.widget.map import SbaeMap
 def PointGenerationTile(sbae_map: SbaeMap):
     """Step 4: Generate Sample Points Dialog."""
     with solara.Column():
-        solara.Markdown("## 📍 Generate Sample Points")
+        solara.Markdown("##Generate Sample Points")
         solara.Markdown(
             """
             Generate stratified random sample points based on your calculated
@@ -68,7 +68,7 @@ def point_generation_section() -> None:
             app_state.set_processing_status("")
             app_state.set_points_status(None)
 
-    with solara.Card("📍 Step 4: Generate Sample Points"):
+    with solara.Card("Step 4: Generate Sample Points"):
         solara.Markdown(
             """
         Generate random sample points based on your calculated sample allocation.

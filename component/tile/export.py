@@ -7,7 +7,7 @@ from component.model import app_state
 def ExportTile():
     """Step 5: Export Results Dialog."""
     with solara.Column():
-        solara.Markdown("## 📤 Export Sample Points")
+        solara.Markdown("##Export Sample Points")
         solara.Markdown(
             """
             Download your sample points for field work or further analysis.
@@ -29,7 +29,7 @@ def ExportTile():
 
 def export_section() -> None:
     """Export options component - self-contained with its own logic."""
-    with solara.Card("📤 Step 5: Export Sample Points"):
+    with solara.Card("Export Sample Points"):
         solara.Markdown(
             """
         Download your sample points for field work or further analysis.

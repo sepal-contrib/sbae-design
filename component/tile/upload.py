@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 import solara
@@ -19,16 +20,13 @@ logger = logging.getLogger("sbae.upload")
 @solara.component
 def UploadTile(sbae_map: SbaeMap):
     """Step 1: File Upload Dialog."""
-    # Local state for upload process
     is_loading = solara.use_reactive(False)
 
-    # Derived state - check if file is uploaded
     has_file = (
         app_state.uploaded_file_info.value is not None
         and app_state.file_path.value is not None
     )
 
-    # Effect: Add raster to map when file is uploaded
     def add_to_map():
         if has_file:
             file_path = app_state.file_path.value
@@ -38,17 +36,23 @@ def UploadTile(sbae_map: SbaeMap):
                 file_path,
                 uploaded_file_info,
             )
-            sbae_map.map.add_raster(file_path)
+            sbae_map.map.add_raster(
+                file_path, layer_name="Classification Map", key="clas"
+            )
 
-    # Use effect to handle side effects
-    solara.use_memo(add_to_map, [has_file, app_state.file_path.value])
+        def cleanup():
+            # Remove the layer if component unmounts or file changes
+            sbae_map.map.remove_layer("clas", none_ok=True)
+
+        return cleanup
+
+    solara.use_effect(add_to_map, [has_file, app_state.file_path.value])
 
     with solara.Column():
         UploadInstructions()
         SampleMapButton(is_loading=is_loading)
         FileUploadSection(is_loading=is_loading)
 
-        # Declarative success message
         if has_file:
             solara.Success(
                 "✅ File uploaded successfully! You can now proceed to edit class names."
@@ -74,7 +78,12 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
 
     def load_sample_map():
         """Load the sample map for testing."""
-        sample_file_path = "/home/dguerrero/Downloads/aa_test_congo.tif"
+        logger.debug("Loading sample map for testing.")
+        sample_file_path = (
+            Path(__file__).parent.parent.parent / "tests/data" / "aa_test_congo.tif"
+        )
+
+        logger.debug("Sample file path: {}", sample_file_path)
 
         if is_loading.value:  # Prevent multiple simultaneous loads
             return

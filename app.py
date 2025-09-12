@@ -11,10 +11,10 @@ from sepal_ui.solara import (
     setup_sessions,
     setup_solara_server,
     setup_theme_colors,
-    with_sepal_sessions,
 )
 from solara.lab.components.theming import theme
 
+from component.model.app_model import AppModel
 from component.tile.class_editor import ClassEditorTile
 from component.tile.export import ExportTile
 from component.tile.landing import LandingTile
@@ -38,10 +38,10 @@ def on_kernel_start():
 
 
 @solara.component
-@with_sepal_sessions(module_name="sbae_app")
+# @with_sepal_sessions(module_name="sbae_app")
 def Page():
     """Main SBAE application page using MapApp layout."""
-    current_dialog, set_current = solara.use_state(1)
+    app_model = AppModel()
 
     setup_theme_colors()
     theme_toggle = ThemeToggle()
@@ -54,8 +54,8 @@ def Page():
             "name": "Getting Started",
             "icon": "mdi-rocket",
             "display": "dialog",
-            "content": LandingTile(current_dialog, set_current),
-            "width": 1200,
+            "content": LandingTile(app_model),
+            "width": 900,
         },
         {
             "id": 2,
@@ -63,12 +63,12 @@ def Page():
             "icon": "mdi-upload",
             "display": "dialog",
             "content": UploadTile(sbae_map),
-            "width": 800,
+            "width": 900,
             "actions": [
                 {
-                    "label": "Cancel",
+                    "label": "Back",
+                    "next": 1,
                     "cancel": True,
-                    "close": True,
                 },
                 {"label": "Next", "next": 3},
             ],
@@ -79,11 +79,11 @@ def Page():
             "icon": "mdi-pencil",
             "display": "dialog",
             "content": ClassEditorTile(),
-            "width": 800,
+            "width": 900,
             "actions": [
                 {
                     "label": "Back",
-                    "next": 2,
+                    "next": 1,
                     "cancel": True,
                 },
                 {"label": "Next", "next": 4},
@@ -95,11 +95,11 @@ def Page():
             "icon": "mdi-calculator",
             "display": "dialog",
             "content": SampleCalculationTile(),
-            "width": 800,
+            "width": 900,
             "actions": [
                 {
                     "label": "Back",
-                    "next": 3,
+                    "next": 1,
                     "cancel": True,
                 },
                 {"label": "Next", "next": 5},
@@ -111,11 +111,11 @@ def Page():
             "icon": "mdi-map-marker-multiple",
             "display": "dialog",
             "content": PointGenerationTile(sbae_map),
-            "width": 800,
+            "width": 900,
             "actions": [
                 {
                     "label": "Back",
-                    "next": 4,  # Activates step with id=1
+                    "next": 1,
                     "cancel": True,
                 },
                 {"label": "Next", "next": 6},
@@ -127,14 +127,14 @@ def Page():
             "icon": "mdi-download",
             "display": "dialog",
             "content": ExportTile(),
-            "width": 800,
+            "width": 900,
             "actions": [
                 {
                     "label": "Back",
-                    "next": 5,  # Activates step with id=1
+                    "next": 1,
                     "cancel": True,
                 },
-                {"label": "Finish", "close": True},  # Closes the dialog
+                {"label": "Finish", "close": True},
             ],
         },
         {
@@ -181,11 +181,12 @@ def Page():
         steps_data=steps_data,
         initial_step=1,  # Start with About dialog
         theme_toggle=[theme_toggle],
-        dialog_width=800,
+        dialog_width=900,
         right_panel_config=right_panel_config,
         right_panel_content=right_panel_content,
         repo_url="https://github.com/your-repo/sbae-tool",
         docs_url="https://your-docs-url.com/sbae",
+        model=app_model,
     )
 
 

@@ -1,38 +1,63 @@
 <template>
   <v-card
     :elevation="elevation"
-    :style="{ height: height, textAlign: 'center' }"
+    :style="{
+      height: height,
+      textAlign: 'center',
+      cursor: 'pointer',
+      position: 'relative',
+    }"
     class="step-card"
-    position="relative"
+    @click="handleClick"
+    :hover="true"
   >
     <!-- Step number badge in top-left corner -->
-    <!-- <v-badge
+    <v-badge
       :content="number"
       color="white"
       class="step-badge"
       overlap
       offset-x="10"
       offset-y="15"
+      style="position: absolute; top: 12px; left: 12px; z-index: 2"
     >
-    </v-badge> -->
+    </v-badge>
 
     <v-card-text
       class="d-flex flex-column justify-center align-center fill-height"
     >
       <!-- Large Material Design Icon -->
-      <div class="icon-container">
+      <div
+        style="
+          margin: 20px 0;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        "
+      >
         <v-icon
-          color="white"
+          color="secondary"
           class="step-icon"
-          style="font-size: 4rem !important"
+          style="
+            font-size: 4rem !important;
+            width: auto !important;
+            height: auto !important;
+          "
         >
           {{ icon }}
         </v-icon>
       </div>
 
-      <!-- Step title without number -->
-      <div class="step-content">
-        <h3 class="step-title">
+      <!-- Step title -->
+      <div style="margin-top: 10px">
+        <h3
+          style="
+            margin: 0;
+            font-size: 1.1rem;
+            line-height: 1.3;
+            font-weight: normal;
+          "
+        >
           {{ title }}
         </h3>
       </div>
@@ -43,34 +68,12 @@
 <script>
 export default {
   name: "StepCard",
-  props: {
-    number: {
-      type: String,
-      required: true,
-    },
-    title: {
-      type: String,
-      required: true,
-    },
-    icon: {
-      type: String,
-      required: true,
-    },
-    color: {
-      type: String,
-      default: "primary",
-    },
-    elevation: {
-      type: Number,
-      default: 3,
-    },
-    height: {
-      type: String,
-      default: "280px",
-    },
-    iconSize: {
-      type: [String, Number],
-      default: 64,
+  methods: {
+    handleClick() {
+      // Call the click event (event_click from Python becomes "click" method)
+      if (this.click) {
+        this.click(parseInt(this.number));
+      }
     },
   },
 };

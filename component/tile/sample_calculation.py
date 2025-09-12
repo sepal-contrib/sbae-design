@@ -9,7 +9,7 @@ from component.scripts.calculations import calculate_sample_design
 def SampleCalculationTile():
     """Step 3: Calculate Sample Size Dialog."""
     with solara.Column():
-        solara.Markdown("## 🔢 Calculate Sample Size")
+        solara.Markdown("##Calculate Sample Size")
         solara.Markdown(
             """
             Configure sampling parameters and calculate the required sample size
