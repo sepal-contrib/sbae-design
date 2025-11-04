@@ -14,15 +14,15 @@ def LandingTile(app_model):
     with solara.Column():
         # Centered title
         with solara.Column(style={"text-align": "center", "margin-bottom": "30px"}):
-            solara.Markdown("# 🌍 SBAE - Sampling-Based Area Estimation Design")
+            solara.Markdown("# 🌍 Sampling-Based Area Estimation")
 
         # Create workflow step cards
         workflow_steps = [
-            {"number": "2", "title": "Upload Map", "icon": "mdi-upload", "step_id": 4},
+            {"number": "2", "title": "Design", "icon": "mdi-pencil", "step_id": 4},
             {
                 "number": "3",
-                "title": "Export Results",
-                "icon": "mdi-download",
+                "title": "Analyze",
+                "icon": "mdi-chart-bar",
                 "step_id": 3,
             },
         ]

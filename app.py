@@ -17,7 +17,7 @@ from sepal_ui.solara import (
 from solara.lab.components.theming import theme
 
 from component.model.app_model import AppModel
-from component.tile.export import ExportTile
+from component.tile.export import Export
 from component.tile.landing import LandingTile
 from component.tile.upload import UploadTile
 from component.widget.map import SbaeMap
@@ -78,27 +78,11 @@ def Page():
         },
         {
             "id": 4,
-            "name": "2. Sample Configuration",
+            "name": "Sample design",
             "icon": "mdi-tune",
             "display": "step",
             "content": [],
             "right_panel_action": "toggle",
-        },
-        {
-            "id": 3,
-            "name": "3. Export Results",
-            "icon": "mdi-download",
-            "display": "dialog",
-            "content": ExportTile(),
-            "width": 900,
-            "actions": [
-                {
-                    "label": "Back",
-                    "next": 2,
-                    "cancel": True,
-                },
-                {"label": "Finish", "close": True},
-            ],
         },
     ]
 
@@ -129,12 +113,12 @@ def Page():
             "content": [PointGeneration(sbae_map)],
             "description": "Generate sample points based on calculated sample sizes.",
         },
-        # {
-        #     "title": "Tools & Settings",
-        #     "icon": "mdi-cog",
-        #     "content": [Tools()],
-        #     "divider": True,
-        # },
+        {
+            "title": "Export Results",
+            "icon": "mdi-download",
+            "content": [Export()],
+            "description": "Generate sample points based on calculated sample sizes.",
+        },
     ]
 
     # Create the MapApp with the shared map instance

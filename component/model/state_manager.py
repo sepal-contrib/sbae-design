@@ -11,6 +11,8 @@ import geopandas as gpd
 import pandas as pd
 import solara
 
+from component.scripts.precision import calculate_current_moe
+
 
 class AppState:
     """Centralized state management for SBAE application using Solara reactive variables."""
@@ -250,7 +252,6 @@ class AppState:
 
         # Update the results object too
         if self.sample_results.value:
-            from component.scripts.calculations import calculate_current_moe
 
             results = self.sample_results.value.copy()
             for class_info in results.get("samples_per_class", []):

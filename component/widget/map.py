@@ -12,7 +12,7 @@ class SbaeMap:
 
     def __init__(self, theme_toggle: ThemeToggle):
         # Create the SepalMap with fullscreen enabled
-        self.map = SepalMap(fullscreen=True, theme_toggle=theme_toggle)
+        self.map = SepalMap(fullscreen=True, theme_toggle=theme_toggle, gee=False)
 
         # Layers for different data types
         self.classification_layer = None
