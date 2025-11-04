@@ -4,8 +4,6 @@ Contains reactive state management for the SBAE application.
 """
 
 import json
-import os
-import shutil
 import tempfile
 from typing import Dict, List
 
@@ -27,10 +25,27 @@ class AppState:
         # Area data
         self.area_data = solara.reactive(pd.DataFrame())
         self.original_area_data = solara.reactive(pd.DataFrame())
+        # Color palette extracted from raster or default
+        self.class_colors = solara.reactive({})
+        # Expected User's Accuracy per class (EUA)
+        self.expected_user_accuracies = solara.reactive({})
+        # Global high and low EUA values
+        self.high_eua = solara.reactive(0.90)  # 90% for high confidence
+        self.low_eua = solara.reactive(0.70)  # 70% for low confidence
+        # EUA selection mode per class: 'high', 'low', or 'custom'
+        self.eua_modes = solara.reactive({})  # {class_code: 'high'/'low'/'custom'}
 
         # Sample calculation parameters
         self.target_error = solara.reactive(5.0)
         self.confidence_level = solara.reactive(95.0)
+        self.min_samples_per_class = solara.reactive(100)
+        self.expected_accuracy = solara.reactive(85.0)
+        # Sampling mode: 'stratified' (default), 'simple' (user-specified n), 'systematic'
+        self.sampling_method = solara.reactive("stratified")
+        # Allocation method for stratified sampling: 'proportional', 'equal', 'neyman'
+        self.stratified_allocation_method = solara.reactive("proportional")
+        # When sampling_method == 'simple' this value is used as total sample size
+        self.simple_total_samples = solara.reactive(100)
 
         # Sample results
         self.sample_results = solara.reactive(None)
@@ -40,6 +55,9 @@ class AppState:
         # Generated points
         self.sample_points = solara.reactive(pd.DataFrame())
         self.points_generation_status = solara.reactive(None)
+        self.points_sampling_method = solara.reactive(
+            None
+        )  # Track method used for generated points
 
         # UI state
         self.current_step = solara.reactive(1)
@@ -50,62 +68,164 @@ class AppState:
         self.last_export_csv = solara.reactive("")
         self.last_export_geojson = solara.reactive("")
 
-    def reset_state(self):
-        """Reset all state to initial values."""
-        self.uploaded_file_info.value = None
-        self.file_path.value = None
-        self.file_error.value = None
-        self.area_data.value = pd.DataFrame()
-        self.original_area_data.value = pd.DataFrame()
-        self.sample_results.value = None
-        self.samples_per_class.value = {}
-        self.sample_points.value = pd.DataFrame()
-        self.points_generation_status.value = None
-        self.current_step.value = 1
-        self.processing_status.value = ""
-        self.error_messages.value = []
-        self.last_export_csv.value = ""
-        self.last_export_geojson.value = ""
-
-        # Clean up temp directory
-        if self.temp_dir.value and os.path.exists(self.temp_dir.value):
-
-            try:
-                shutil.rmtree(self.temp_dir.value)
-            except (OSError, PermissionError):
-                pass
-        self.temp_dir.value = tempfile.mkdtemp()
-
-    def set_file_info(self, file_info: Dict, file_path: str):
-        """Set uploaded file information."""
-        self.uploaded_file_info.value = file_info
-        self.file_path.value = file_path
-        self.file_error.value = None
-        self.current_step.value = max(self.current_step.value, 2)
-
-    def set_file_error(self, error: str):
-        """Set file processing error."""
-        self.file_error.value = error
-        self.uploaded_file_info.value = None
-        self.file_path.value = None
-
-    def set_area_data(self, area_df: pd.DataFrame):
-        """Set area data from file processing."""
-        self.area_data.value = area_df.copy()
-        self.original_area_data.value = area_df.copy()
-        self.current_step.value = max(self.current_step.value, 2)
-
     def update_class_name(self, map_code: int, new_name: str):
         """Update class name in area data."""
-        if not self.area_data.value.empty:
+        if self.area_data.value is not None and not self.area_data.value.empty:
             area_df = self.area_data.value.copy()
             mask = area_df["map_code"] == map_code
             if mask.any():
                 area_df.loc[mask, "map_edited_class"] = new_name
                 self.area_data.value = area_df
 
-    def set_sampling_parameters(self, target_error: float, confidence_level: float):
-        """Update sampling parameters."""
+    def update_global_high_eua(self, value: float):
+        """Update global high EUA value and apply to all 'high' classes.
+
+        Args:
+            value: High EUA value (0.0-1.0)
+        """
+        if value < 0.3 or value > 1.0:
+            raise ValueError("High EUA must be between 0.3 and 1.0")
+
+        self.high_eua.value = value
+
+        # Update all classes that are set to 'high' mode
+        eua_dict = self.expected_user_accuracies.value.copy()
+        for code, mode in self.eua_modes.value.items():
+            if mode == "high":
+                eua_dict[code] = value
+        self.expected_user_accuracies.value = eua_dict
+
+    def update_global_low_eua(self, value: float):
+        """Update global low EUA value and apply to all 'low' classes.
+
+        Args:
+            value: Low EUA value (0.0-1.0)
+        """
+        if value < 0.3 or value > 1.0:
+            raise ValueError("Low EUA must be between 0.3 and 1.0")
+
+        self.low_eua.value = value
+
+        # Update all classes that are set to 'low' mode
+        eua_dict = self.expected_user_accuracies.value.copy()
+        for code, mode in self.eua_modes.value.items():
+            if mode == "low":
+                eua_dict[code] = value
+        self.expected_user_accuracies.value = eua_dict
+
+    def set_eua_mode(self, map_code: int, mode: str):
+        """Set EUA mode for a class (high/low/custom).
+
+        Args:
+            map_code: Class code
+            mode: 'high', 'low', or 'custom'
+        """
+        if mode not in ("high", "low", "custom"):
+            raise ValueError("Mode must be 'high', 'low', or 'custom'")
+
+        mode_dict = self.eua_modes.value.copy()
+        mode_dict[map_code] = mode
+        self.eua_modes.value = mode_dict
+
+        # Update the actual EUA value based on mode
+        eua_dict = self.expected_user_accuracies.value.copy()
+        if mode == "high":
+            eua_dict[map_code] = self.high_eua.value
+        elif mode == "low":
+            eua_dict[map_code] = self.low_eua.value
+        # For 'custom', keep the current value
+        self.expected_user_accuracies.value = eua_dict
+
+    def update_expected_accuracy(self, map_code: int, eua_value: float):
+        """Update expected user's accuracy for a class.
+
+        Args:
+            map_code: Class code
+            eua_value: Expected User's Accuracy (0.0-1.0)
+        """
+        if eua_value < 0.3 or eua_value > 1.0:
+            raise ValueError("Expected accuracy must be between 0.3 and 1.0")
+
+        eua_dict = self.expected_user_accuracies.value.copy()
+        eua_dict[map_code] = eua_value
+        self.expected_user_accuracies.value = eua_dict
+
+        # When manually updating, set mode to custom
+        mode_dict = self.eua_modes.value.copy()
+        mode_dict[map_code] = "custom"
+        self.eua_modes.value = mode_dict
+
+    def set_sampling_parameters(
+        self,
+        target_error: float,
+        confidence_level: float,
+        min_samples_per_class: int = None,
+        expected_accuracy: float = None,
+        sampling_method: str = None,
+        simple_total_samples: int = None,
+        stratified_allocation_method: str = None,
+    ):
+        """Update sampling parameters.
+
+        Args:
+            target_error: Target margin of error percentage (1-10)
+            confidence_level: Confidence level percentage (90-99)
+            min_samples_per_class: Minimum samples per class (optional, maintains current if not provided)
+            expected_accuracy: Expected overall accuracy percentage (50-99, optional)
+            sampling_method: 'stratified', 'simple', or 'systematic' (optional)
+            simple_total_samples: Total samples for simple/systematic sampling (optional)
+            stratified_allocation_method: 'proportional', 'equal', or 'neyman' for stratified (optional)
+
+        Raises:
+            ValueError: If parameters are out of valid range
+        """
+        if target_error <= 0:
+            raise ValueError("Target error must be greater than 0")
+        if target_error < 1.0:
+            raise ValueError("Target error must be at least 1%")
+        if target_error > 10.0:
+            raise ValueError("Target error must not exceed 10%")
+
+        if confidence_level < 90.0:
+            raise ValueError("Confidence level must be at least 90%")
+        if confidence_level > 99.0:
+            raise ValueError("Confidence level must not exceed 99%")
+
+        if min_samples_per_class is not None:
+            if min_samples_per_class < 1:
+                raise ValueError("Minimum samples per class must be at least 1")
+            if min_samples_per_class > 100:
+                raise ValueError("Minimum samples per class must not exceed 100")
+            self.min_samples_per_class.value = min_samples_per_class
+
+        if expected_accuracy is not None:
+            if expected_accuracy < 50.0:
+                raise ValueError("Expected accuracy must be at least 50%")
+            if expected_accuracy > 99.0:
+                raise ValueError("Expected accuracy must not exceed 99%")
+            self.expected_accuracy.value = expected_accuracy
+
+        if sampling_method is not None:
+            if sampling_method not in ("stratified", "simple", "systematic"):
+                raise ValueError(
+                    "sampling_method must be one of: stratified, simple, systematic"
+                )
+            self.sampling_method.value = sampling_method
+
+        if simple_total_samples is not None:
+            if simple_total_samples < 1:
+                raise ValueError("simple_total_samples must be at least 1")
+            if simple_total_samples > 1000000:
+                raise ValueError("simple_total_samples is unreasonably large")
+            self.simple_total_samples.value = simple_total_samples
+
+        if stratified_allocation_method is not None:
+            if stratified_allocation_method not in ("proportional", "equal", "neyman"):
+                raise ValueError(
+                    "stratified_allocation_method must be one of: proportional, equal, neyman"
+                )
+            self.stratified_allocation_method.value = stratified_allocation_method
+
         self.target_error.value = target_error
         self.confidence_level.value = confidence_level
 
@@ -130,6 +250,8 @@ class AppState:
 
         # Update the results object too
         if self.sample_results.value:
+            from component.scripts.calculations import calculate_current_moe
+
             results = self.sample_results.value.copy()
             for class_info in results.get("samples_per_class", []):
                 if class_info["map_code"] == map_code:
@@ -140,17 +262,34 @@ class AppState:
             results["total_samples"] = total_samples
             results["allocation_method"] = "manual"
 
+            # Recalculate current MOE with new total
+            confidence_level = results.get("confidence_level", 95.0) / 100.0
+            expected_oa = self.expected_accuracy.value / 100.0
+            current_moe = calculate_current_moe(
+                current_sample_size=total_samples,
+                target_oa=expected_oa,
+                confidence_level=confidence_level,
+            )
+            results["current_moe_percent"] = current_moe * 100
+            results["current_moe_decimal"] = current_moe
+
+            # Update allocation_dict with new values
+            allocation_dict = results.get("allocation_dict", {}).copy()
+            allocation_dict[map_code] = samples
+            results["allocation_dict"] = allocation_dict
+
             self.sample_results.value = results
             self.allocation_method.value = "manual"
 
     def set_sample_points(self, points_df: pd.DataFrame):
         """Set generated sample points."""
         self.sample_points.value = points_df
+        # Store the sampling method used when generating these points
+        if self.sample_results.value:
+            self.points_sampling_method.value = self.sample_results.value.get(
+                "sampling_method", "stratified"
+            )
         self.current_step.value = max(self.current_step.value, 5)
-
-    def set_points_status(self, status: str):
-        """Set point generation status message."""
-        self.points_generation_status.value = status
 
     def add_error(self, error_message: str):
         """Add error message to the list."""
@@ -168,7 +307,7 @@ class AppState:
 
     def get_class_lookup(self) -> Dict[int, str]:
         """Get mapping of class codes to names."""
-        if self.area_data.value.empty:
+        if self.area_data.value is None or self.area_data.value.empty:
             return {}
 
         return dict(
@@ -180,7 +319,11 @@ class AppState:
 
     def get_allocation_data(self) -> List[Dict]:
         """Get allocation data for display."""
-        if not self.sample_results.value or self.area_data.value.empty:
+        if (
+            not self.sample_results.value
+            or self.area_data.value is None
+            or self.area_data.value.empty
+        ):
             return []
 
         allocation_data = []
@@ -210,60 +353,35 @@ class AppState:
     def is_ready_for_calculation(self) -> bool:
         """Check if ready for sample size calculation."""
         return (
-            not self.area_data.value.empty
+            self.area_data.value is not None
+            and not self.area_data.value.empty
             and self.target_error.value > 0
             and self.confidence_level.value > 0
         )
 
     def is_ready_for_point_generation(self) -> bool:
         """Check if ready for point generation."""
+        # For stratified sampling, need samples_per_class
+        # For simple/systematic, just need sample_results with total_samples
+        if self.sample_results.value:
+            sampling_method = self.sample_results.value.get(
+                "sampling_method", "stratified"
+            )
+            if sampling_method in ("simple", "systematic"):
+                # For non-stratified methods, just need total_samples and file_path
+                return (
+                    self.is_ready_for_calculation()
+                    and self.sample_results.value.get("total_samples", 0) > 0
+                    and self.file_path.value is not None
+                )
+
+        # For stratified sampling, need samples_per_class
         return (
             self.is_ready_for_calculation()
             and self.sample_results.value is not None
             and bool(self.samples_per_class.value)
             and self.file_path.value is not None
         )
-
-    def is_ready_for_export(self) -> bool:
-        """Check if ready for export."""
-        return not self.sample_points.value.empty
-
-    def get_summary_stats(self) -> Dict:
-        """Get summary statistics for the project."""
-        stats = {}
-
-        if not self.area_data.value.empty:
-            total_area = self.area_data.value["map_area"].sum()
-            stats.update(
-                {
-                    "total_area_hectares": total_area / 10000,
-                    "n_classes": len(self.area_data.value),
-                    "classes": self.get_class_lookup(),
-                }
-            )
-
-        if self.sample_results.value:
-            stats.update(
-                {
-                    "target_error": self.target_error.value,
-                    "confidence_level": self.confidence_level.value,
-                    "total_samples": self.sample_results.value.get("total_samples", 0),
-                    "allocation_method": self.allocation_method.value,
-                }
-            )
-
-        if not self.sample_points.value.empty:
-            points_per_class = (
-                self.sample_points.value.groupby("map_code").size().to_dict()
-            )
-            stats.update(
-                {
-                    "total_points_generated": len(self.sample_points.value),
-                    "points_per_class": points_per_class,
-                }
-            )
-
-        return stats
 
     def export_csv(self) -> str:
         """Export sample points to CSV format."""

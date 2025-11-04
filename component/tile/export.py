@@ -29,6 +29,9 @@ def ExportTile():
 
 def export_section() -> None:
     """Export options component - self-contained with its own logic."""
+    show_csv_download, set_show_csv_download = solara.use_state(False)
+    show_geojson_download, set_show_geojson_download = solara.use_state(False)
+
     with solara.Card("Export Sample Points"):
         solara.Markdown(
             """
@@ -44,30 +47,34 @@ def export_section() -> None:
             return
 
         with solara.Columns([6, 6]):
-
-            def download_csv():
-                csv_data = app_state.export_csv()
-                solara.download(
-                    csv_data.encode(),
-                    filename="sample_points.csv",
-                    mime_type="text/csv",
-                )
-
             solara.Button(
-                "Download CSV", on_click=download_csv, color="primary", outlined=True
+                "Download CSV",
+                on_click=lambda: set_show_csv_download(True),
+                color="primary",
+                outlined=True,
             )
-
-            def download_geojson():
-                geojson_data = app_state.export_geojson()
-                solara.download(
-                    geojson_data.encode(),
-                    filename="sample_points.geojson",
-                    mime_type="application/geo+json",
-                )
 
             solara.Button(
                 "Download GeoJSON",
-                on_click=download_geojson,
+                on_click=lambda: set_show_geojson_download(True),
                 color="success",
                 outlined=True,
             )
+
+        if show_csv_download:
+            csv_data = app_state.export_csv()
+            solara.FileDownload(
+                data=csv_data.encode(),
+                filename="sample_points.csv",
+                mime_type="text/csv",
+            )
+            set_show_csv_download(False)
+
+        if show_geojson_download:
+            geojson_data = app_state.export_geojson()
+            solara.FileDownload(
+                data=geojson_data.encode(),
+                filename="sample_points.geojson",
+                mime_type="application/geo+json",
+            )
+            set_show_geojson_download(False)

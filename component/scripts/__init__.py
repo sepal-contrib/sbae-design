@@ -21,9 +21,11 @@ from .geospatial import (
     compute_file_areas,
     export_points_to_csv,
     export_points_to_geojson,
+    extract_raster_colormap,
     generate_sample_points,
     generate_sample_points_raster,
     generate_sample_points_vector,
+    get_color_palette,
     get_file_info,
     is_raster_file,
     is_vector_file,
@@ -55,4 +57,6 @@ __all__ = [
     "export_points_to_csv",
     "export_points_to_geojson",
     "get_file_info",
+    "extract_raster_colormap",
+    "get_color_palette",
 ]

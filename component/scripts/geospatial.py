@@ -6,7 +6,7 @@ Contains functions for file I/O, area calculation, and point generation.
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import geopandas as gpd
 import numpy as np
@@ -26,6 +26,79 @@ def is_vector_file(file_path: str) -> bool:
     """Check if file is a supported vector format."""
     vector_extensions = [".shp", ".geojson", ".gpkg", ".kml"]
     return Path(file_path).suffix.lower() in vector_extensions
+
+
+def extract_raster_colormap(file_path: str) -> Dict[int, str]:
+    """Extract color palette from raster file.
+
+    Args:
+        file_path: Path to raster file
+
+    Returns:
+        Dictionary mapping class codes to hex color strings.
+        Returns empty dict if no colormap is found.
+    """
+    colors = {}
+
+    try:
+        with rasterio.open(file_path) as raster:
+            # Try to get the colormap from the raster
+            colormap = raster.colormap(1)
+
+            if colormap:
+                for class_code, rgba in colormap.items():
+                    # Convert RGBA tuple to hex color
+                    # rasterio returns values in 0-255 range
+                    r, g, b, a = rgba
+                    hex_color = f"#{r:02x}{g:02x}{b:02x}"
+                    colors[class_code] = hex_color
+
+    except Exception:
+        # If we can't extract colors, return empty dict
+        pass
+
+    return colors
+
+
+def get_color_palette(file_path: str, class_codes: List[int]) -> Dict[int, str]:
+    """Get color palette for given class codes, extracting from file if possible.
+
+    Args:
+        file_path: Path to raster or vector file
+        class_codes: List of class codes to get colors for
+
+    Returns:
+        Dictionary mapping class codes to hex color strings
+    """
+    # Default color palette (ECharts default colors)
+    default_colors = [
+        "#5470c6",
+        "#91cc75",
+        "#fac858",
+        "#ee6666",
+        "#73c0de",
+        "#3ba272",
+        "#fc8452",
+        "#9a60b4",
+        "#ea7ccc",
+    ]
+
+    # Try to extract colors from raster file
+    extracted_colors = {}
+    if is_raster_file(file_path):
+        extracted_colors = extract_raster_colormap(file_path)
+
+    # Build color mapping for each class code
+    color_map = {}
+    for idx, class_code in enumerate(sorted(class_codes)):
+        if class_code in extracted_colors:
+            # Use extracted color if available
+            color_map[class_code] = extracted_colors[class_code]
+        else:
+            # Fall back to default palette
+            color_map[class_code] = default_colors[idx % len(default_colors)]
+
+    return color_map
 
 
 def compute_area_from_raster(file_path: str) -> pd.DataFrame:
@@ -181,7 +254,10 @@ def save_uploaded_file(file_info, temp_dir: Optional[str] = None) -> str:
 
 
 def generate_sample_points_raster(
-    file_path: str, samples_per_class: Dict[int, int], class_lookup: Dict[int, str]
+    file_path: str,
+    samples_per_class: Dict[int, int],
+    class_lookup: Dict[int, str],
+    seed: Optional[int] = None,
 ) -> pd.DataFrame:
     """Generate stratified random sample points from raster data.
 
@@ -189,11 +265,16 @@ def generate_sample_points_raster(
         file_path: Path to raster file
         samples_per_class: Dictionary of samples needed per class
         class_lookup: Mapping of class codes to names
+        seed: Random seed for reproducibility (None for random)
 
     Returns:
         DataFrame with sample points (longitude, latitude, map_code, map_edited_class)
+        Points are always in EPSG:4326 (WGS84) geographic coordinates.
     """
     sample_points = []
+
+    if seed is not None:
+        np.random.seed(seed)
 
     try:
         with rasterio.open(file_path) as raster:
@@ -205,14 +286,12 @@ def generate_sample_points_raster(
                 if n_samples <= 0:
                     continue
 
-                # Find all pixels of this class
                 rows, cols = np.where(data == class_code)
 
                 if len(rows) == 0:
                     print(f"Warning: No pixels found for class {class_code}")
                     continue
 
-                # Randomly sample pixel locations
                 n_available = len(rows)
                 n_to_sample = min(n_samples, n_available)
 
@@ -223,20 +302,25 @@ def generate_sample_points_raster(
                     sampled_rows = rows[sampled_indices]
                     sampled_cols = cols[sampled_indices]
 
-                    # Convert pixel coordinates to geographic coordinates
                     for row, col in zip(sampled_rows, sampled_cols):
-                        # Get pixel center coordinates
                         x, y = xy(transform, row + 0.5, col + 0.5)
 
-                        # Transform to WGS84 if needed
                         if crs and not crs.is_geographic:
-                            # This is a simplified approach - for production use proper CRS transformation
-                            pass
+                            point_gdf = gpd.GeoDataFrame(
+                                geometry=[Point(x, y)], crs=crs
+                            )
+                            point_gdf = point_gdf.to_crs("EPSG:4326")
+                            lon, lat = (
+                                point_gdf.geometry.iloc[0].x,
+                                point_gdf.geometry.iloc[0].y,
+                            )
+                        else:
+                            lon, lat = x, y
 
                         sample_points.append(
                             {
-                                "longitude": x,
-                                "latitude": y,
+                                "longitude": lon,
+                                "latitude": lat,
                                 "map_code": class_code,
                                 "map_edited_class": class_lookup.get(
                                     class_code, f"Class {class_code}"
@@ -251,7 +335,10 @@ def generate_sample_points_raster(
 
 
 def generate_sample_points_vector(
-    file_path: str, samples_per_class: Dict[int, int], class_lookup: Dict[int, str]
+    file_path: str,
+    samples_per_class: Dict[int, int],
+    class_lookup: Dict[int, str],
+    seed: Optional[int] = None,
 ) -> pd.DataFrame:
     """Generate stratified random sample points from vector data.
 
@@ -259,11 +346,16 @@ def generate_sample_points_vector(
         file_path: Path to vector file
         samples_per_class: Dictionary of samples needed per class
         class_lookup: Mapping of class codes to names
+        seed: Random seed for reproducibility (None for random)
 
     Returns:
         DataFrame with sample points (longitude, latitude, map_code, map_edited_class)
+        Points are always in EPSG:4326 (WGS84) geographic coordinates.
     """
     sample_points = []
+
+    if seed is not None:
+        np.random.seed(seed)
 
     try:
         gdf = gpd.read_file(file_path)
@@ -285,8 +377,10 @@ def generate_sample_points_vector(
         if class_column is None:
             raise ValueError("No suitable class column found")
 
-        # Ensure we're in geographic CRS for lat/lon output
-        if gdf.crs and not gdf.crs.is_geographic:
+        if gdf.crs is None:
+            gdf.set_crs("EPSG:4326", inplace=True)
+            gdf_geo = gdf
+        elif not gdf.crs.is_geographic:
             gdf_geo = gdf.to_crs("EPSG:4326")
         else:
             gdf_geo = gdf.copy()
@@ -344,15 +438,366 @@ def generate_sample_points_vector(
     return pd.DataFrame(sample_points)
 
 
+def generate_simple_random_points_raster(
+    file_path: str,
+    total_samples: int,
+    class_lookup: Dict[int, str],
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Generate simple random sample points from raster (no stratification).
+
+    Args:
+        file_path: Path to raster file
+        total_samples: Total number of samples to generate
+        class_lookup: Mapping of class codes to names
+        seed: Random seed for reproducibility
+
+    Returns:
+        DataFrame with sample points in EPSG:4326 (WGS84) geographic coordinates.
+    """
+    sample_points = []
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    try:
+        with rasterio.open(file_path) as raster:
+            data = raster.read(1)
+            transform = raster.transform
+            crs = raster.crs
+
+            valid_mask = (
+                data != raster.nodata
+                if raster.nodata is not None
+                else np.ones_like(data, dtype=bool)
+            )
+            rows, cols = np.where(valid_mask)
+
+            if len(rows) == 0:
+                raise ValueError("No valid pixels found in raster")
+
+            n_available = len(rows)
+            n_to_sample = min(total_samples, n_available)
+
+            sampled_indices = np.random.choice(n_available, n_to_sample, replace=False)
+            sampled_rows = rows[sampled_indices]
+            sampled_cols = cols[sampled_indices]
+
+            for row, col in zip(sampled_rows, sampled_cols):
+                x, y = xy(transform, row + 0.5, col + 0.5)
+                class_code = int(data[row, col])
+
+                if crs and not crs.is_geographic:
+                    point_gdf = gpd.GeoDataFrame(geometry=[Point(x, y)], crs=crs)
+                    point_gdf = point_gdf.to_crs("EPSG:4326")
+                    lon, lat = (
+                        point_gdf.geometry.iloc[0].x,
+                        point_gdf.geometry.iloc[0].y,
+                    )
+                else:
+                    lon, lat = x, y
+
+                sample_points.append(
+                    {
+                        "longitude": lon,
+                        "latitude": lat,
+                        "map_code": class_code,
+                        "map_edited_class": class_lookup.get(
+                            class_code, f"Class {class_code}"
+                        ),
+                    }
+                )
+
+    except Exception as e:
+        raise ValueError(f"Error generating simple random points from raster: {str(e)}")
+
+    return pd.DataFrame(sample_points)
+
+
+def generate_systematic_points_raster(
+    file_path: str,
+    total_samples: int,
+    class_lookup: Dict[int, str],
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Generate systematic sample points from raster (grid-based sampling).
+
+    Args:
+        file_path: Path to raster file
+        total_samples: Total number of samples to generate
+        class_lookup: Mapping of class codes to names
+        seed: Random seed for starting point offset
+
+    Returns:
+        DataFrame with sample points in EPSG:4326 (WGS84) geographic coordinates.
+    """
+    sample_points = []
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    try:
+        with rasterio.open(file_path) as raster:
+            data = raster.read(1)
+            transform = raster.transform
+            crs = raster.crs
+            height, width = data.shape
+
+            total_pixels = height * width
+            grid_interval = int(np.sqrt(total_pixels / total_samples))
+            if grid_interval < 1:
+                grid_interval = 1
+
+            offset_row = (
+                np.random.randint(0, grid_interval)
+                if seed is not None
+                else grid_interval // 2
+            )
+            offset_col = (
+                np.random.randint(0, grid_interval)
+                if seed is not None
+                else grid_interval // 2
+            )
+
+            for row in range(offset_row, height, grid_interval):
+                for col in range(offset_col, width, grid_interval):
+                    if len(sample_points) >= total_samples:
+                        break
+
+                    if raster.nodata is not None and data[row, col] == raster.nodata:
+                        continue
+
+                    x, y = xy(transform, row + 0.5, col + 0.5)
+                    class_code = int(data[row, col])
+
+                    if crs and not crs.is_geographic:
+                        point_gdf = gpd.GeoDataFrame(geometry=[Point(x, y)], crs=crs)
+                        point_gdf = point_gdf.to_crs("EPSG:4326")
+                        lon, lat = (
+                            point_gdf.geometry.iloc[0].x,
+                            point_gdf.geometry.iloc[0].y,
+                        )
+                    else:
+                        lon, lat = x, y
+
+                    sample_points.append(
+                        {
+                            "longitude": lon,
+                            "latitude": lat,
+                            "map_code": class_code,
+                            "map_edited_class": class_lookup.get(
+                                class_code, f"Class {class_code}"
+                            ),
+                        }
+                    )
+
+                if len(sample_points) >= total_samples:
+                    break
+
+    except Exception as e:
+        raise ValueError(f"Error generating systematic points from raster: {str(e)}")
+
+    return pd.DataFrame(sample_points)
+
+
+def generate_simple_random_points_vector(
+    file_path: str,
+    total_samples: int,
+    class_lookup: Dict[int, str],
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Generate simple random sample points from vector (no stratification).
+
+    Args:
+        file_path: Path to vector file
+        total_samples: Total number of samples to generate
+        class_lookup: Mapping of class codes to names
+        seed: Random seed for reproducibility
+
+    Returns:
+        DataFrame with sample points in EPSG:4326 (WGS84) geographic coordinates.
+    """
+    sample_points = []
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    try:
+        gdf = gpd.read_file(file_path)
+
+        class_column = None
+        for col in gdf.columns:
+            if col != "geometry" and gdf[col].dtype in [
+                "int64",
+                "int32",
+                "object",
+                "string",
+            ]:
+                unique_vals = gdf[col].dropna().unique()
+                if len(unique_vals) > 0 and len(unique_vals) <= 50:
+                    class_column = col
+                    break
+
+        if class_column is None:
+            raise ValueError("No suitable class column found")
+
+        if gdf.crs is None:
+            gdf.set_crs("EPSG:4326", inplace=True)
+            gdf_geo = gdf
+        elif not gdf.crs.is_geographic:
+            gdf_geo = gdf.to_crs("EPSG:4326")
+        else:
+            gdf_geo = gdf.copy()
+
+        bounds = gdf_geo.total_bounds
+        minx, miny, maxx, maxy = bounds
+
+        samples_generated = 0
+        max_attempts = total_samples * 100
+
+        for attempt in range(max_attempts):
+            if samples_generated >= total_samples:
+                break
+
+            x = np.random.uniform(minx, maxx)
+            y = np.random.uniform(miny, maxy)
+            point = Point(x, y)
+
+            for idx, geom in enumerate(gdf_geo.geometry):
+                if geom.contains(point):
+                    class_code = int(gdf_geo.iloc[idx][class_column])
+                    sample_points.append(
+                        {
+                            "longitude": x,
+                            "latitude": y,
+                            "map_code": class_code,
+                            "map_edited_class": class_lookup.get(
+                                class_code, f"Class {class_code}"
+                            ),
+                        }
+                    )
+                    samples_generated += 1
+                    break
+
+    except Exception as e:
+        raise ValueError(f"Error generating simple random points from vector: {str(e)}")
+
+    return pd.DataFrame(sample_points)
+
+
+def generate_systematic_points_vector(
+    file_path: str,
+    total_samples: int,
+    class_lookup: Dict[int, str],
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Generate systematic sample points from vector (grid-based sampling).
+
+    Args:
+        file_path: Path to vector file
+        total_samples: Total number of samples to generate
+        class_lookup: Mapping of class codes to names
+        seed: Random seed for starting point offset
+
+    Returns:
+        DataFrame with sample points in EPSG:4326 (WGS84) geographic coordinates.
+    """
+    sample_points = []
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    try:
+        gdf = gpd.read_file(file_path)
+
+        class_column = None
+        for col in gdf.columns:
+            if col != "geometry" and gdf[col].dtype in [
+                "int64",
+                "int32",
+                "object",
+                "string",
+            ]:
+                unique_vals = gdf[col].dropna().unique()
+                if len(unique_vals) > 0 and len(unique_vals) <= 50:
+                    class_column = col
+                    break
+
+        if class_column is None:
+            raise ValueError("No suitable class column found")
+
+        if gdf.crs is None:
+            gdf.set_crs("EPSG:4326", inplace=True)
+            gdf_geo = gdf
+        elif not gdf.crs.is_geographic:
+            gdf_geo = gdf.to_crs("EPSG:4326")
+        else:
+            gdf_geo = gdf.copy()
+
+        bounds = gdf_geo.total_bounds
+        minx, miny, maxx, maxy = bounds
+
+        area = (maxx - minx) * (maxy - miny)
+        grid_spacing = np.sqrt(area / total_samples)
+
+        offset_x = (
+            np.random.uniform(0, grid_spacing) if seed is not None else grid_spacing / 2
+        )
+        offset_y = (
+            np.random.uniform(0, grid_spacing) if seed is not None else grid_spacing / 2
+        )
+
+        x_coords = np.arange(minx + offset_x, maxx, grid_spacing)
+        y_coords = np.arange(miny + offset_y, maxy, grid_spacing)
+
+        for x in x_coords:
+            for y in y_coords:
+                if len(sample_points) >= total_samples:
+                    break
+
+                point = Point(x, y)
+
+                for idx, geom in enumerate(gdf_geo.geometry):
+                    if geom.contains(point):
+                        class_code = int(gdf_geo.iloc[idx][class_column])
+                        sample_points.append(
+                            {
+                                "longitude": x,
+                                "latitude": y,
+                                "map_code": class_code,
+                                "map_edited_class": class_lookup.get(
+                                    class_code, f"Class {class_code}"
+                                ),
+                            }
+                        )
+                        break
+
+            if len(sample_points) >= total_samples:
+                break
+
+    except Exception as e:
+        raise ValueError(f"Error generating systematic points from vector: {str(e)}")
+
+    return pd.DataFrame(sample_points)
+
+
 def generate_sample_points(
-    file_path: str, samples_per_class: Dict[int, int], class_lookup: Dict[int, str]
+    file_path: str,
+    samples_per_class: Dict[int, int],
+    class_lookup: Dict[int, str],
+    seed: Optional[int] = None,
+    sampling_method: str = "stratified",
+    total_samples: Optional[int] = None,
 ) -> pd.DataFrame:
     """Automatically detect file type and generate sample points.
 
     Args:
         file_path: Path to classification file
-        samples_per_class: Dictionary of samples needed per class
+        samples_per_class: Dictionary of samples needed per class (empty for simple/systematic)
         class_lookup: Mapping of class codes to names
+        seed: Random seed for reproducibility (None for random)
+        sampling_method: "stratified", "simple", or "systematic"
+        total_samples: Total samples to generate (for simple/systematic methods)
 
     Returns:
         DataFrame with sample points
@@ -360,10 +805,35 @@ def generate_sample_points(
     Raises:
         ValueError: If file format is not supported
     """
+    # For simple random or systematic sampling, use non-stratified methods
+    if sampling_method == "simple" and total_samples:
+        if is_raster_file(file_path):
+            return generate_simple_random_points_raster(
+                file_path, total_samples, class_lookup, seed
+            )
+        elif is_vector_file(file_path):
+            return generate_simple_random_points_vector(
+                file_path, total_samples, class_lookup, seed
+            )
+    elif sampling_method == "systematic" and total_samples:
+        if is_raster_file(file_path):
+            return generate_systematic_points_raster(
+                file_path, total_samples, class_lookup, seed
+            )
+        elif is_vector_file(file_path):
+            return generate_systematic_points_vector(
+                file_path, total_samples, class_lookup, seed
+            )
+
+    # Default to stratified sampling
     if is_raster_file(file_path):
-        return generate_sample_points_raster(file_path, samples_per_class, class_lookup)
+        return generate_sample_points_raster(
+            file_path, samples_per_class, class_lookup, seed
+        )
     elif is_vector_file(file_path):
-        return generate_sample_points_vector(file_path, samples_per_class, class_lookup)
+        return generate_sample_points_vector(
+            file_path, samples_per_class, class_lookup, seed
+        )
     else:
         file_ext = Path(file_path).suffix.lower()
         raise ValueError(f"Unsupported file format: {file_ext}")
@@ -415,11 +885,29 @@ def get_file_info(file_path: str) -> Dict:
         "feature_count": 0,
     }
 
+    def get_crs_string(crs):
+        """Extract clean CRS representation."""
+        if not crs:
+            return None
+        epsg = crs.to_epsg()
+        if epsg:
+            return f"EPSG:{epsg}"
+        # Try to extract EPSG from the CRS string representation
+        crs_str = str(crs)
+        if 'AUTHORITY["EPSG"' in crs_str:
+            # Extract EPSG code from WKT string like AUTHORITY["EPSG","3116"]
+            import re
+
+            match = re.search(r'AUTHORITY\["EPSG","(\d+)"\]', crs_str)
+            if match:
+                return f"EPSG:{match.group(1)}"
+        return "Custom CRS"
+
     try:
         if is_raster_file(file_path):
             with rasterio.open(file_path) as raster:
                 info["file_type"] = "raster"
-                info["crs"] = str(raster.crs) if raster.crs else None
+                info["crs"] = get_crs_string(raster.crs)
                 info["bounds"] = list(raster.bounds)
                 info["width"] = raster.width
                 info["height"] = raster.height
@@ -428,7 +916,7 @@ def get_file_info(file_path: str) -> Dict:
         elif is_vector_file(file_path):
             gdf = gpd.read_file(file_path)
             info["file_type"] = "vector"
-            info["crs"] = str(gdf.crs) if gdf.crs else None
+            info["crs"] = get_crs_string(gdf.crs)
             info["bounds"] = list(gdf.total_bounds)
             info["feature_count"] = len(gdf)
 

@@ -12,6 +12,7 @@ fiona>=1.8.0
 numpy>=1.24.0
 pandas>=2.0.0
 scipy>=1.10.0
+ipecharts>=1.0.0
 
 # Mapping (assuming sepal-ui is available)
 # sepal-ui  # You may need to install this separately or use an alternative

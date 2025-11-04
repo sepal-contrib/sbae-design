@@ -25,13 +25,3 @@ def Tools():
         if app_state.processing_status.value:
             with solara.Card("📊 Status"):
                 solara.Markdown(f"**Current:** {app_state.processing_status.value}")
-
-        # Reset functionality
-        with solara.Card("🔄 Reset"):
-            solara.Markdown("Clear all data and start over:")
-            solara.Button(
-                "Reset Application",
-                on_click=app_state.reset_state,
-                color="warning",
-                outlined=True,
-            )

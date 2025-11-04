@@ -4,4 +4,4 @@ from traitlets import Int
 
 class AppModel(Model):
 
-    current_step = Int().tag(sync=True)
+    current_step = Int(allow_none=True).tag(sync=True)

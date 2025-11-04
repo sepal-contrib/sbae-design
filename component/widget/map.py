@@ -1,6 +1,10 @@
+import logging
+
 import ipyleaflet
 from sepal_ui.mapping import SepalMap
 from sepal_ui.sepalwidgets.vue_app import ThemeToggle
+
+logger = logging.getLogger("sbae.map")
 
 
 class SbaeMap:
@@ -14,30 +18,24 @@ class SbaeMap:
         self.classification_layer = None
         self.sample_points_layer = None
 
-    def add_classification_layer(self, layer_data):
-        """Add classification map layer."""
-        if self.classification_layer:
-            self.map.remove_layer(self.classification_layer)
-
-        # TODO: Implement actual layer creation from uploaded data
-        self.classification_layer = layer_data
-        if self.classification_layer:
-            self.map.add_layer(self.classification_layer)
-
     def add_sample_points(self, points_data):
         """Add sample points layer."""
         if self.sample_points_layer:
+            logger.debug("Removing existing sample points layer.")
             self.map.remove_layer(self.sample_points_layer)
 
         if not points_data.empty:
             # Create markers for sample points
             markers = []
+            logger.debug(f"Adding {len(points_data)} sample points to the map.")
             for _, point in points_data.iterrows():
                 marker = ipyleaflet.Marker(
                     location=(point["latitude"], point["longitude"]),
                     title=f"Class: {point.get('map_code', 'Unknown')}",
                 )
                 markers.append(marker)
+
+            logger.debug("Creating marker cluster for sample points.")
 
             # Create marker cluster
             self.sample_points_layer = ipyleaflet.MarkerCluster(markers=markers)

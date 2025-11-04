@@ -11,18 +11,6 @@
     @click="handleClick"
     :hover="true"
   >
-    <!-- Step number badge in top-left corner -->
-    <v-badge
-      :content="number"
-      color="white"
-      class="step-badge"
-      overlap
-      offset-x="10"
-      offset-y="15"
-      style="position: absolute; top: 12px; left: 12px; z-index: 2"
-    >
-    </v-badge>
-
     <v-card-text
       class="d-flex flex-column justify-center align-center fill-height"
     >
@@ -36,7 +24,7 @@
         "
       >
         <v-icon
-          color="secondary"
+          :color="iconColor"
           class="step-icon"
           style="
             font-size: 4rem !important;
@@ -68,6 +56,11 @@
 <script>
 export default {
   name: "StepCard",
+  computed: {
+    iconColor() {
+      return this.$vuetify.theme.dark ? "white" : "secondary";
+    },
+  },
   methods: {
     handleClick() {
       // Call the click event (event_click from Python becomes "click" method)

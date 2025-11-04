@@ -14,7 +14,7 @@ def StepCard(
     title: str,
     icon: str,
     elevation: int = 3,
-    height: str = "280px",
+    height: str = "100px",
     event_click: Optional[Callable[[int], None]] = None,
 ):
     """A Vue-based card component for displaying workflow steps with large icons.

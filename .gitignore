@@ -8,6 +8,7 @@ __pycache__/
 *.so
 logging_config.toml
 *instructions.md*
+guides/
 
 # Distribution / packaging
 .Python
