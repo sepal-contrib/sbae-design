@@ -84,6 +84,28 @@ def UploadTile(sbae_map: SbaeMap):
         and app_state.file_path.value is not None
     )
 
+    def prepare_raster_worker(file_path):
+        """Worker function for raster tiling in separate thread."""
+
+        def worker():
+            logger.debug("Preparing raster for tiling: %s", file_path)
+            prep = prepare_for_tiles(file_path, warp_to_3857=True)
+            logger.debug("Raster prepared for tiling. Optimized path: %s", prep["path"])
+            return prep
+
+        return worker
+
+    # Thread for raster preparation
+    raster_prep_result = solara.use_thread(
+        (
+            prepare_raster_worker(app_state.file_path.value)
+            if (has_file and is_raster_file(app_state.file_path.value or ""))
+            else lambda: None
+        ),
+        dependencies=[app_state.file_path.value],
+        intrusive_cancel=False,
+    )
+
     def add_to_map():
         if has_file:
             file_path = app_state.file_path.value
@@ -95,16 +117,18 @@ def UploadTile(sbae_map: SbaeMap):
             )
 
             if is_raster_file(file_path):
-                logger.debug("Preparing raster for tiling: %s", file_path)
-                prep = prepare_for_tiles(file_path, warp_to_3857=True)
-                optimized_path = prep["path"]
-                logger.debug(
-                    "Raster prepared for tiling. Optimized path: %s", optimized_path
-                )
-                sbae_map.map.add_raster(
-                    optimized_path, layer_name="Classification Map", key="clas"
-                )
+                # Check if raster preparation is complete
+                if (
+                    raster_prep_result.state == solara.ResultState.FINISHED
+                    and raster_prep_result.value
+                ):
+                    optimized_path = raster_prep_result.value["path"]
+                    sbae_map.map.add_raster(
+                        optimized_path, layer_name="Classification Map", key="clas"
+                    )
+                # If still running or error, don't add to map yet
             else:
+                # Vector files don't need preparation
                 sbae_map.map.add_raster(
                     file_path, layer_name="Classification Map", key="clas"
                 )
@@ -115,16 +139,33 @@ def UploadTile(sbae_map: SbaeMap):
 
         return cleanup
 
-    solara.use_effect(add_to_map, [has_file, app_state.file_path.value])
+    solara.use_effect(
+        add_to_map, [has_file, app_state.file_path.value, raster_prep_result.state]
+    )
 
     with solara.Column():
         FileUploadSection(is_loading=is_loading)
 
         if has_file:
             CurrentFileDisplay()
-            solara.Success(
-                "✅ File uploaded successfully! You can now proceed to edit class names."
-            )
+
+            # Show raster preparation status
+            if is_raster_file(app_state.file_path.value or ""):
+                if raster_prep_result.state == solara.ResultState.RUNNING:
+                    solara.Info(
+                        "⏳ Optimizing raster for display... This may take a few moments for large files."
+                    )
+                    solara.ProgressLinear(value=True)
+                elif raster_prep_result.state == solara.ResultState.ERROR:
+                    solara.Error(f"Error optimizing raster: {raster_prep_result.error}")
+                elif raster_prep_result.state == solara.ResultState.FINISHED:
+                    solara.Success(
+                        "✅ File uploaded and optimized successfully! You can now proceed to edit class names."
+                    )
+            else:
+                solara.Success(
+                    "✅ File uploaded successfully! You can now proceed to edit class names."
+                )
 
 
 @solara.component
@@ -195,6 +236,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
     selected_file_path = solara.use_reactive(None)
     selected_file_info_preview = solara.use_reactive(None)
     is_valid_file = solara.use_reactive(False)
+    should_compute_areas = solara.use_reactive(False)
 
     def reset_all_state():
         """Reset all application state including map."""
@@ -208,6 +250,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         selected_file_path.value = None
         selected_file_info_preview.value = None
         is_valid_file.value = False
+        should_compute_areas.value = False
 
     def handle_file_selection_from_input(file_path):
         """Handle file selection from FileInputComponent (returns path directly)."""
@@ -245,35 +288,88 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
             selected_file_info_preview.value = None
             is_valid_file.value = False
 
-    def confirm_file_upload():
-        """Process the selected file and update app state."""
-        if is_loading.value or not selected_file_path.value or not is_valid_file.value:
-            return
+    def compute_areas_worker():
+        """Worker function for area computation in separate thread."""
+        if not selected_file_path.value or not should_compute_areas.value:
+            logger.debug(
+                "Skipping area computation: selected_file_path=%s, should_compute=%s",
+                selected_file_path.value,
+                should_compute_areas.value,
+            )
+            return None
+        logger.debug("Computing areas for file: %s", selected_file_path.value)
+        area_data = compute_file_areas(selected_file_path.value)
+        class_codes = area_data["map_code"].tolist()
+        color_palette = get_color_palette(selected_file_path.value, class_codes)
+        logger.debug("Area computation complete. Classes: %s", len(class_codes))
+        return {"area_data": area_data, "color_palette": color_palette}
 
-        is_loading.value = True
-        app_state.error_messages.value = []
-        app_state.processing_status.value = "Processing uploaded file..."
+    # Use thread for area computation
+    area_result = solara.use_thread(
+        compute_areas_worker,
+        dependencies=[selected_file_path.value, should_compute_areas.value],
+        intrusive_cancel=False,
+    )
 
-        try:
-            area_data = compute_file_areas(selected_file_path.value)
-
-            # Extract color palette from file
-            class_codes = area_data["map_code"].tolist()
-            color_palette = get_color_palette(selected_file_path.value, class_codes)
-
-            app_state.uploaded_file_info.value = selected_file_info_preview.value
-            app_state.file_path.value = selected_file_path.value
-            app_state.area_data.value = area_data.copy()
-            app_state.original_area_data.value = area_data.copy()
-            app_state.class_colors.value = color_palette
-            app_state.current_step.value = max(app_state.current_step.value, 2)
-            app_state.file_error.value = None
-
-        except Exception as e:
-            app_state.file_error.value = str(e)
-        finally:
+    # Handle area computation result
+    def handle_area_result():
+        logger.debug(
+            "Area result state: %s, should_compute: %s",
+            area_result.state,
+            should_compute_areas.value,
+        )
+        if area_result.state == solara.ResultState.RUNNING:
+            is_loading.value = True
+            app_state.processing_status.value = "Computing class areas..."
+        elif area_result.state == solara.ResultState.ERROR:
+            logger.error("Area computation error: %s", area_result.error)
+            app_state.file_error.value = str(area_result.error)
             app_state.processing_status.value = ""
             is_loading.value = False
+            should_compute_areas.value = False
+        elif (
+            area_result.state == solara.ResultState.FINISHED
+            and area_result.value
+            and should_compute_areas.value
+        ):
+            logger.debug("Area computation finished successfully")
+            result = area_result.value
+            app_state.uploaded_file_info.value = selected_file_info_preview.value
+            app_state.file_path.value = selected_file_path.value
+            app_state.area_data.value = result["area_data"].copy()
+            app_state.original_area_data.value = result["area_data"].copy()
+            app_state.class_colors.value = result["color_palette"]
+            app_state.current_step.value = max(app_state.current_step.value, 2)
+            app_state.file_error.value = None
+            app_state.processing_status.value = ""
+            is_loading.value = False
+            should_compute_areas.value = False
+        elif area_result.state == solara.ResultState.FINISHED and not area_result.value:
+            logger.debug("Area computation finished but returned None")
+            is_loading.value = False
+
+    solara.use_effect(handle_area_result, [area_result.state])
+
+    def confirm_file_upload():
+        """Trigger area computation for the selected file."""
+        logger.debug(
+            "confirm_file_upload called: is_loading=%s, selected_file=%s, is_valid=%s",
+            is_loading.value,
+            selected_file_path.value,
+            is_valid_file.value,
+        )
+        if is_loading.value or not selected_file_path.value or not is_valid_file.value:
+            return
+        is_loading.value = True
+        should_compute_areas.value = True
+        logger.debug("Triggered area computation")
+
+    # Check if currently processing
+    is_processing = (
+        area_result.state == solara.ResultState.RUNNING
+        or area_result.state == solara.ResultState.STARTING
+        or is_loading.value
+    )
 
     with solara.Card():
         FileUploadInstructions()
@@ -291,8 +387,8 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
                 on_click=confirm_file_upload,
                 color="primary",
                 block=True,
-                loading=is_loading.value,
-                disabled=not is_valid_file.value,
+                loading=is_processing,
+                disabled=not is_valid_file.value or is_processing,
             )
 
         with solara.Row(justify="center", classes=["mt-4"]):

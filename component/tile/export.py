@@ -29,9 +29,6 @@ def ExportTile():
 
 def export_section() -> None:
     """Export options component - self-contained with its own logic."""
-    show_csv_download, set_show_csv_download = solara.use_state(False)
-    show_geojson_download, set_show_geojson_download = solara.use_state(False)
-
     with solara.Card("Export Sample Points"):
         solara.Markdown(
             """
@@ -46,35 +43,30 @@ def export_section() -> None:
             solara.Info("Generate sample points first to enable export.")
             return
 
+        csv_data = app_state.export_csv()
+        geojson_data = app_state.export_geojson()
+
         with solara.Columns([6, 6]):
-            solara.Button(
-                "Download CSV",
-                on_click=lambda: set_show_csv_download(True),
-                color="primary",
-                outlined=True,
-            )
-
-            solara.Button(
-                "Download GeoJSON",
-                on_click=lambda: set_show_geojson_download(True),
-                color="success",
-                outlined=True,
-            )
-
-        if show_csv_download:
-            csv_data = app_state.export_csv()
-            solara.FileDownload(
+            with solara.FileDownload(
                 data=csv_data.encode(),
                 filename="sample_points.csv",
                 mime_type="text/csv",
-            )
-            set_show_csv_download(False)
+            ):
+                solara.Button(
+                    "Download CSV",
+                    icon_name="mdi-cloud-download-outline",
+                    color="primary",
+                    outlined=True,
+                )
 
-        if show_geojson_download:
-            geojson_data = app_state.export_geojson()
-            solara.FileDownload(
+            with solara.FileDownload(
                 data=geojson_data.encode(),
                 filename="sample_points.geojson",
                 mime_type="application/geo+json",
-            )
-            set_show_geojson_download(False)
+            ):
+                solara.Button(
+                    "Download GeoJSON",
+                    icon_name="mdi-cloud-download-outline",
+                    color="success",
+                    outlined=True,
+                )

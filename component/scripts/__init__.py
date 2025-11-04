@@ -3,16 +3,14 @@
 Contains calculation and processing functions for the SBAE application.
 """
 
+from .calc_utils import (
+    get_z_score,
+)
 from .calculations import (
-    allocate_samples_equal,
-    allocate_samples_neyman,
-    allocate_samples_proportional,
     apply_minimum_constraints,
-    calculate_allocation_summary,
     calculate_overall_accuracy_sample_size,
     calculate_sample_design,
     calculate_target_class_sample_size,
-    get_z_score,
     validate_parameters,
 )
 from .geospatial import (
@@ -30,6 +28,12 @@ from .geospatial import (
     is_raster_file,
     is_vector_file,
     save_uploaded_file,
+)
+from .stratified import (
+    allocate_samples_equal,
+    allocate_samples_neyman,
+    allocate_samples_proportional,
+    calculate_allocation_summary,
 )
 
 __all__ = [

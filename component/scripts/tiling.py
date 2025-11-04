@@ -138,6 +138,7 @@ def _translate_to_cog(src: str, dst: str, resampling: str, block=512):
 def _warp_to_epsg(src: str, dst: str, epsg: int, resampling: str, block=512):
     cmd = [
         "gdalwarp",
+        "-overwrite",
         "-t_srs",
         f"EPSG:{epsg}",
         "-r",
@@ -160,7 +161,7 @@ def _warp_to_epsg(src: str, dst: str, epsg: int, resampling: str, block=512):
         src,
         dst,
     ]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
 def prepare_for_tiles(

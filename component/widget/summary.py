@@ -7,7 +7,7 @@ from ipecharts.option.series import Bar, Line, Pie
 from solara import v
 
 from component.model import app_state
-from component.scripts.calculations import calculate_per_class_moe_for_allocation
+from component.scripts.stratified import calculate_per_class_moe_for_allocation
 from component.tile.class_editor import class_editor_table
 from component.widget.echarts import EChartsWidget
 

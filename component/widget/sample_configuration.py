@@ -3,12 +3,9 @@ import logging
 import solara
 
 from component.model import app_state
-from component.scripts.calculations import (
-    calculate_current_moe,
-    calculate_overall_accuracy_sample_size,
-    calculate_precision_curve,
-    calculate_sample_design,
-)
+from component.scripts.calculations import calculate_sample_design
+from component.scripts.precision import calculate_current_moe, calculate_precision_curve
+from component.scripts.simple_random import calculate_overall_accuracy_sample_size
 
 logger = logging.getLogger("sbae.sample_configuration")
 
@@ -65,7 +62,6 @@ def SampleConfiguration(sbae_map=None):
             return
 
         try:
-
             # Check if parameters have changed
             params_changed = (
                 prev_target_error.value != app_state.target_error.value
