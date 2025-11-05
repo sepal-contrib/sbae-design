@@ -11,8 +11,8 @@ logger = logging.getLogger("sbae.point_generation")
 @solara.component
 def PointGeneration(sbae_map):
     """Point generation component for the right panel."""
-    use_custom_seed = solara.use_reactive(False)
-    custom_seed = solara.use_reactive(42)
+    use_custom_seed = solara.use_reactive(True)
+    custom_seed = solara.use_reactive(33)
     should_generate = solara.use_reactive(False)
 
     # Get current parameters for dependencies
