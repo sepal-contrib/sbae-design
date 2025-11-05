@@ -11,6 +11,7 @@ import pandas as pd
 
 from component.scripts.simple_random import calculate_overall_accuracy_sample_size
 from component.scripts.stratified import (
+    allocate_samples_balanced,
     allocate_samples_equal,
     allocate_samples_neyman,
     apply_adjusted_allocation,
@@ -67,9 +68,9 @@ def calculate_sample_design(
         allowable_error: Allowable error (0-1)
         confidence_level: Confidence level (0-1)
         min_samples_per_class: Minimum samples per class
-        allocation_method: "Proportional", "Neyman", or "Equal"
+        allocation_method: "Proportional", "Neyman", "Equal", or "Balanced"
         total_samples_override: Fixed total for simple/systematic sampling (no per-class allocation)
-        expected_accuracies: Expected accuracies per class (for Neyman and stratified calculation)
+        expected_accuracies: Expected accuracies per class (required for Neyman, optional for others)
         target_class: Target class code (for precision objective)
         target_class_error: Target class allowable error
 
@@ -170,6 +171,12 @@ def calculate_sample_design(
 
     elif allocation_method == "Equal":
         allocation_dict = allocate_samples_equal(area_df, n_total)
+        final_allocation = apply_minimum_constraints(
+            allocation_dict, min_samples_per_class
+        )
+
+    elif allocation_method == "Balanced":
+        allocation_dict = allocate_samples_balanced(area_df, n_total)
         final_allocation = apply_minimum_constraints(
             allocation_dict, min_samples_per_class
         )

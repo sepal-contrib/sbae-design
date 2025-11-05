@@ -60,14 +60,17 @@ def allocate_samples_proportional(
 def allocate_samples_neyman(
     area_df: pd.DataFrame, expected_accuracies: Dict[int, float], total_samples: int
 ) -> Dict[int, float]:
-    """Allocate samples using Neyman allocation.
+    """Allocate samples using Neyman (optimal) allocation.
+
+    Neyman allocation minimizes the variance of the stratified estimator by
+    allocating more samples to strata with higher variability and larger size.
 
     Formula: n_j = N x (W_j x S_j) / Σ(W_k x S_k)
-    Where: W_j = area proportion, S_j = standard deviation
+    Where: W_j = area proportion, S_j = standard deviation = √(p_j x (1 - p_j))
 
     Args:
         area_df: DataFrame with map_code and map_area columns
-        expected_accuracies: Dictionary of expected accuracies per class
+        expected_accuracies: Dictionary of expected accuracies per class (0-1)
         total_samples: Total number of samples to allocate
 
     Returns:
@@ -95,6 +98,50 @@ def allocate_samples_neyman(
     return {k: total_samples * v for k, v in allocation_ratios.items()}
 
 
+def allocate_samples_balanced(
+    area_df: pd.DataFrame, total_samples: int
+) -> Dict[int, float]:
+    """Allocate samples using balanced allocation (hybrid of equal and proportional).
+
+    Balanced allocation is a compromise between equal allocation (good for rare classes)
+    and proportional allocation (efficient for common classes). It averages the two:
+
+    Formula: n_j = (n_equal + n_proportional) / 2
+    Where:
+        - n_equal = N / number_of_classes
+        - n_proportional = N x (Area_j / Total_Area)
+
+    This method is particularly useful when:
+    - You want to ensure sufficient samples in rare classes (like equal allocation)
+    - But also want to weight more towards larger classes (like proportional)
+
+    Args:
+        area_df: DataFrame with map_code and map_area columns
+        total_samples: Total number of samples to allocate
+
+    Returns:
+        Dictionary with balanced sample allocation per class
+
+    References:
+        - sampling-theory/04 - Relative efficiency.ipynb
+    """
+    # Get equal allocation
+    equal_alloc = allocate_samples_equal(area_df, total_samples)
+
+    # Get proportional allocation
+    proportional_alloc = allocate_samples_proportional(area_df, total_samples)
+
+    # Average the two
+    balanced_alloc = {}
+    for _, row in area_df.iterrows():
+        code = int(row["map_code"])
+        n_equal = equal_alloc[code]
+        n_prop = proportional_alloc.loc[row.name]
+        balanced_alloc[code] = (n_equal + n_prop) / 2
+
+    return balanced_alloc
+
+
 def calculate_stratified_sample_size(
     area_df: pd.DataFrame,
     expected_accuracies: Dict[int, float],
@@ -102,21 +149,26 @@ def calculate_stratified_sample_size(
 ) -> int:
     """Calculate sample size for stratified random sampling.
 
-    Formula from methodology Step 6:
-    n = (Σ(W_h x S_h) / S(Ô))²
+    Based on the methodology from sampling-theory/03 - Stratified Random Sampling.ipynb.
+    This formula accounts for stratum-specific variability and can achieve better
+    precision than simple random sampling for the same sample size.
+
+    Formula (from methodology Step 6):
+        n = (Σ(W_h x S_h) / S(Ô))²
 
     Where:
-    - W_h = stratum weight (proportion of area)
-    - S_h = standard deviation = √(EUA_h x (1 - EUA_h))
-    - S(Ô) = target standard error of overall accuracy
+        - W_h = stratum weight (proportion of area) = Area_h / Total_Area
+        - S_h = standard deviation = √(EUA_h x (1 - EUA_h))
+        - S(Ô) = target standard error of overall accuracy
+        - Σ sums over all strata h
 
     Args:
         area_df: DataFrame with map_code and map_area columns
-        expected_accuracies: Dictionary of expected user's accuracies per class
+        expected_accuracies: Dictionary of expected user's accuracies per class (0-1)
         target_standard_error: Target standard error (e.g., 0.01 for 1%)
 
     Returns:
-        Required total sample size
+        Required total sample size (rounded up)
 
     Raises:
         ValueError: If parameters are invalid

@@ -44,7 +44,7 @@ class AppState:
         self.expected_accuracy = solara.reactive(85.0)
         # Sampling mode: 'stratified' (default), 'simple' (user-specified n), 'systematic'
         self.sampling_method = solara.reactive("stratified")
-        # Allocation method for stratified sampling: 'proportional', 'equal', 'neyman'
+        # Allocation method for stratified sampling: 'proportional', 'equal', 'neyman', 'balanced'
         self.stratified_allocation_method = solara.reactive("proportional")
         # When sampling_method == 'simple' this value is used as total sample size
         self.simple_total_samples = solara.reactive(100)
@@ -176,7 +176,7 @@ class AppState:
             expected_accuracy: Expected overall accuracy percentage (50-99, optional)
             sampling_method: 'stratified', 'simple', or 'systematic' (optional)
             simple_total_samples: Total samples for simple/systematic sampling (optional)
-            stratified_allocation_method: 'proportional', 'equal', or 'neyman' for stratified (optional)
+            stratified_allocation_method: 'proportional', 'equal', 'neyman', or 'balanced' for stratified (optional)
 
         Raises:
             ValueError: If parameters are out of valid range
@@ -222,7 +222,12 @@ class AppState:
             self.simple_total_samples.value = simple_total_samples
 
         if stratified_allocation_method is not None:
-            if stratified_allocation_method not in ("proportional", "equal", "neyman"):
+            if stratified_allocation_method not in (
+                "proportional",
+                "equal",
+                "neyman",
+                "balanced",
+            ):
                 raise ValueError(
                     "stratified_allocation_method must be one of: proportional, equal, neyman"
                 )

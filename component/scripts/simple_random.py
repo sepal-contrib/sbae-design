@@ -8,18 +8,23 @@ def calculate_overall_accuracy_sample_size(
 ) -> int:
     """Calculate sample size for overall accuracy objective (Simple Random Sampling).
 
-    Formula: N = (Z² x OA x (1 - OA)) / E²
+    Based on Cochran's formula for estimating a population proportion.
+    See sampling-theory/02 - Sampling Intuition.ipynb for theoretical background.
 
-    Note: This is for simple random sampling. For stratified sampling,
-    use calculate_stratified_sample_size() instead.
+    Formula: n = (Z² x p x (1 - p)) / e²
+
+    Where:
+        - Z = z-score for the desired confidence level
+        - p = expected proportion (target overall accuracy)
+        - e = allowable absolute error (margin of error)
 
     Args:
-        target_oa: Target overall accuracy (0-1)
-        allowable_error: Allowable error (0-1)
+        target_oa: Target overall accuracy (0-1), serves as expected proportion
+        allowable_error: Allowable absolute error (0-1), NOT relative error
         confidence_level: Confidence level (0-1)
 
     Returns:
-        Required sample size
+        Required sample size (rounded up)
 
     Raises:
         ValueError: If allowable_error is zero or negative

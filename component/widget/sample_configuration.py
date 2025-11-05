@@ -392,6 +392,6 @@ def SampleConfiguration(sbae_map=None):
             solara.Select(
                 label="Allocation Method",
                 value=app_state.stratified_allocation_method.value,
-                values=["proportional", "equal", "neyman"],
+                values=["proportional", "equal", "neyman", "balanced"],
                 on_value=update_allocation_method,
             )

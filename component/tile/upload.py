@@ -204,12 +204,21 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
             class_codes = area_data["map_code"].tolist()
             color_palette = get_color_palette(sample_file_path, class_codes)
 
+            # Initialize EUA values for all classes (default to 'high' mode)
+            eua_dict = {}
+            eua_modes_dict = {}
+            for code in class_codes:
+                eua_dict[code] = app_state.high_eua.value  # Default to high EUA
+                eua_modes_dict[code] = "high"  # Default mode
+
             # Update state directly
             app_state.uploaded_file_info.value = file_info
             app_state.file_path.value = sample_file_path
             app_state.area_data.value = area_data.copy()
             app_state.original_area_data.value = area_data.copy()
             app_state.class_colors.value = color_palette
+            app_state.expected_user_accuracies.value = eua_dict
+            app_state.eua_modes.value = eua_modes_dict
             app_state.current_step.value = max(app_state.current_step.value, 2)
 
             logger.debug("Sample map loaded successfully. Area data: %s", area_data)
@@ -334,11 +343,22 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         ):
             logger.debug("Area computation finished successfully")
             result = area_result.value
+
+            # Initialize EUA values for all classes (default to 'high' mode)
+            class_codes = result["area_data"]["map_code"].tolist()
+            eua_dict = {}
+            eua_modes_dict = {}
+            for code in class_codes:
+                eua_dict[code] = app_state.high_eua.value  # Default to high EUA
+                eua_modes_dict[code] = "high"  # Default mode
+
             app_state.uploaded_file_info.value = selected_file_info_preview.value
             app_state.file_path.value = selected_file_path.value
             app_state.area_data.value = result["area_data"].copy()
             app_state.original_area_data.value = result["area_data"].copy()
             app_state.class_colors.value = result["color_palette"]
+            app_state.expected_user_accuracies.value = eua_dict
+            app_state.eua_modes.value = eua_modes_dict
             app_state.current_step.value = max(app_state.current_step.value, 2)
             app_state.file_error.value = None
             app_state.processing_status.value = ""
