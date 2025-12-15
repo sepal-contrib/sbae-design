@@ -17,9 +17,12 @@ from shapely.geometry import Point
 
 
 def is_raster_file(file_path: str) -> bool:
-    """Check if file is a supported raster format."""
-    raster_extensions = [".tif", ".tiff", ".img", ".hdr"]
-    return Path(file_path).suffix.lower() in raster_extensions
+    """Check if file is a supported raster format by attempting to open with rasterio."""
+    try:
+        with rasterio.open(file_path) as _:
+            return True
+    except Exception:
+        return False
 
 
 def is_vector_file(file_path: str) -> bool:

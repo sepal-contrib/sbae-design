@@ -421,9 +421,8 @@ def FileUploadInstructions():
     """Instructions for file upload formats."""
     solara.Markdown(
         """
-    Upload your land cover classification map in one of these formats:
-    - **Raster**: GeoTIFF (.tif), ERDAS Imagine (.img)
-    - **Vector**: Shapefile (.shp), GeoJSON (.geojson), GeoPackage (.gpkg)
+    Upload your land cover classification map as a raster file.
+    Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio.
     """
     )
 
