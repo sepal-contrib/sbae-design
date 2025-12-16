@@ -38,7 +38,7 @@ def SampleCalculationTile(theme_toggle=None):
             and app_state.sample_results.value
         ):
             sampling_method = app_state.sample_results.value.get(
-                "allocation_method", "stratified"
+                "sampling_method", "stratified"
             )
 
             # Allocation table and per-class charts only relevant for stratified
@@ -103,21 +103,25 @@ def sample_size_calculator() -> None:
             # Create properly formatted results dictionary
             total_samples = sum(allocation_dict.values()) if allocation_dict else 0
 
-            # Calculate precision curve data
-            precision_curve_df = calculate_precision_curve(
-                target_oa=expected_oa,
-                confidence_level=confidence_level,
-                min_sample_size=30,
-                max_sample_size=max(1000, int(total_samples * 2)),
-                num_points=50,
-            )
+            # Only calculate precision curve for simple/systematic sampling
+            # For stratified, the curve is not theoretically valid
+            precision_curve_df = None
+            current_moe = None
+            if sampling_method in ("simple", "systematic"):
+                precision_curve_df = calculate_precision_curve(
+                    target_oa=expected_oa,
+                    confidence_level=confidence_level,
+                    min_sample_size=30,
+                    max_sample_size=max(1000, int(total_samples * 2)),
+                    num_points=50,
+                )
 
-            # Calculate current MOE for the calculated sample size
-            current_moe = calculate_current_moe(
-                current_sample_size=total_samples,
-                target_oa=expected_oa,
-                confidence_level=confidence_level,
-            )
+                # Calculate current MOE for the calculated sample size
+                current_moe = calculate_current_moe(
+                    current_sample_size=total_samples,
+                    target_oa=expected_oa,
+                    confidence_level=confidence_level,
+                )
 
             # Create samples per class list with class names
             samples_per_class = []
@@ -142,13 +146,20 @@ def sample_size_calculator() -> None:
                 "target_error": app_state.target_error.value,
                 "confidence_level": app_state.confidence_level.value,
                 "total_samples": total_samples,
+                "sampling_method": sampling_method,
                 "allocation_method": (
-                    sampling_method if sampling_method else "proportional"
+                    allocation_method if sampling_method == "stratified" else None
                 ),
                 "samples_per_class": samples_per_class,
                 "allocation_dict": allocation_dict,
-                "precision_curve": precision_curve_df.to_dict("records"),
-                "current_moe_percent": current_moe * 100,
+                "precision_curve": (
+                    precision_curve_df.to_dict("records")
+                    if precision_curve_df is not None
+                    else None
+                ),
+                "current_moe_percent": (
+                    current_moe * 100 if current_moe is not None else None
+                ),
                 "current_moe_decimal": current_moe,
             }
 
@@ -239,7 +250,7 @@ def sample_size_calculator() -> None:
 
         if app_state.sample_results.value:
             sample_results = app_state.sample_results.value
-            sampling_method = sample_results.get("allocation_method", "stratified")
+            sampling_method = sample_results.get("sampling_method", "stratified")
 
             with rv.Alert(type="info", text=True):
                 # Different summaries based on sampling method

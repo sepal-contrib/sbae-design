@@ -118,20 +118,24 @@ def SampleConfiguration(sbae_map=None):
                 else 0
             )
 
-            precision_curve_df = calculate_precision_curve(
-                target_oa=expected_oa,
-                confidence_level=confidence_level,
-                min_sample_size=30,
-                max_sample_size=max(1000, int(total_samples * 2)),
-                num_points=50,
-            )
+            # Only calculate precision curve for simple/systematic sampling
+            precision_curve_df = None
+            current_moe = None
+            if sampling_method in ("simple", "systematic"):
+                precision_curve_df = calculate_precision_curve(
+                    target_oa=expected_oa,
+                    confidence_level=confidence_level,
+                    min_sample_size=30,
+                    max_sample_size=max(1000, int(total_samples * 2)),
+                    num_points=50,
+                )
 
-            # Calculate current MOE for the calculated sample size
-            current_moe = calculate_current_moe(
-                current_sample_size=total_samples,
-                target_oa=expected_oa,
-                confidence_level=confidence_level,
-            )
+                # Calculate current MOE for the calculated sample size
+                current_moe = calculate_current_moe(
+                    current_sample_size=total_samples,
+                    target_oa=expected_oa,
+                    confidence_level=confidence_level,
+                )
 
             samples_per_class = []
             # For stratified sampling, build per-class allocation
@@ -159,8 +163,14 @@ def SampleConfiguration(sbae_map=None):
                 "allocation_method": allocation_method,
                 "samples_per_class": samples_per_class,
                 "allocation_dict": allocation_dict,
-                "precision_curve": precision_curve_df.to_dict("records"),
-                "current_moe_percent": current_moe * 100,
+                "precision_curve": (
+                    precision_curve_df.to_dict("records")
+                    if precision_curve_df is not None
+                    else None
+                ),
+                "current_moe_percent": (
+                    current_moe * 100 if current_moe is not None else None
+                ),
                 "current_moe_decimal": current_moe,
                 "sampling_method": sampling_method,
             }
@@ -352,6 +362,17 @@ def SampleConfiguration(sbae_map=None):
                         on_value=update_confidence_level,
                     )
 
+            with solara.Row(gap="8px", style="margin-bottom: 8px;"):
+                with solara.Column(style="flex: 1;"):
+                    solara.SliderFloat(
+                        "Expected Overall Accuracy (%)",
+                        value=app_state.expected_accuracy.value,
+                        min=50.0,
+                        max=99.0,
+                        step=1.0,
+                        on_value=update_expected_accuracy,
+                    )
+
         elif sampling_method == "systematic":
             with solara.Row(gap="8px", style="margin-bottom: 8px;"):
                 with solara.Column(style="flex: 1;"):
@@ -367,6 +388,17 @@ def SampleConfiguration(sbae_map=None):
                         value=app_state.confidence_level.value,
                         values=[90.0, 95.0, 99.0],
                         on_value=update_confidence_level,
+                    )
+
+            with solara.Row(gap="8px", style="margin-bottom: 8px;"):
+                with solara.Column(style="flex: 1;"):
+                    solara.SliderFloat(
+                        "Expected Overall Accuracy (%)",
+                        value=app_state.expected_accuracy.value,
+                        min=50.0,
+                        max=99.0,
+                        step=1.0,
+                        on_value=update_expected_accuracy,
                     )
 
         elif sampling_method == "stratified":

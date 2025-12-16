@@ -38,9 +38,9 @@ class AppState:
         self.eua_modes = solara.reactive({})  # {class_code: 'high'/'low'/'custom'}
 
         # Sample calculation parameters
-        self.target_error = solara.reactive(5.0)
+        self.target_error = solara.reactive(1.0)
         self.confidence_level = solara.reactive(95.0)
-        self.min_samples_per_class = solara.reactive(100)
+        self.min_samples_per_class = solara.reactive(30)
         self.expected_accuracy = solara.reactive(85.0)
         # Sampling mode: 'stratified' (default), 'simple' (user-specified n), 'systematic'
         self.sampling_method = solara.reactive("stratified")
@@ -52,7 +52,6 @@ class AppState:
         # Sample results
         self.sample_results = solara.reactive(None)
         self.samples_per_class = solara.reactive({})
-        self.allocation_method = solara.reactive("proportional")
 
         # Generated points
         self.sample_points = solara.reactive(pd.DataFrame())
@@ -246,7 +245,6 @@ class AppState:
             samples_dict[class_info["map_code"]] = class_info["samples"]
         self.samples_per_class.value = samples_dict
 
-        self.allocation_method.value = results.get("allocation_method", "proportional")
         self.current_step.value = max(self.current_step.value, 4)
 
     def update_manual_allocation(self, map_code: int, samples: int):
@@ -268,16 +266,23 @@ class AppState:
             results["total_samples"] = total_samples
             results["allocation_method"] = "manual"
 
-            # Recalculate current MOE with new total
-            confidence_level = results.get("confidence_level", 95.0) / 100.0
-            expected_oa = self.expected_accuracy.value / 100.0
-            current_moe = calculate_current_moe(
-                current_sample_size=total_samples,
-                target_oa=expected_oa,
-                confidence_level=confidence_level,
-            )
-            results["current_moe_percent"] = current_moe * 100
-            results["current_moe_decimal"] = current_moe
+            # Only recalculate MOE for simple/systematic sampling
+            # For stratified, MOE calculation requires per-class variances
+            sampling_method = results.get("sampling_method", "stratified")
+            if sampling_method in ("simple", "systematic"):
+                confidence_level = results.get("confidence_level", 95.0) / 100.0
+                expected_oa = self.expected_accuracy.value / 100.0
+                current_moe = calculate_current_moe(
+                    current_sample_size=total_samples,
+                    target_oa=expected_oa,
+                    confidence_level=confidence_level,
+                )
+                results["current_moe_percent"] = current_moe * 100
+                results["current_moe_decimal"] = current_moe
+            else:
+                # For stratified, set MOE to None (not calculable with single OA value)
+                results["current_moe_percent"] = None
+                results["current_moe_decimal"] = None
 
             # Update allocation_dict with new values
             allocation_dict = results.get("allocation_dict", {}).copy()
@@ -285,7 +290,6 @@ class AppState:
             results["allocation_dict"] = allocation_dict
 
             self.sample_results.value = results
-            self.allocation_method.value = "manual"
 
     def set_sample_points(self, points_df: pd.DataFrame):
         """Set generated sample points."""
@@ -322,6 +326,22 @@ class AppState:
                 self.area_data.value["map_edited_class"],
             )
         )
+
+    @property
+    def allocation_method(self) -> str:
+        """Get the current allocation method."""
+        if self.sample_results.value:
+            # For stratified sampling, get the actual allocation method used
+            sampling_method = self.sample_results.value.get(
+                "sampling_method", "stratified"
+            )
+            if sampling_method == "stratified":
+                return self.sample_results.value.get(
+                    "allocation_method", self.stratified_allocation_method.value
+                ).lower()
+            else:
+                return sampling_method
+        return self.stratified_allocation_method.value
 
     def get_allocation_data(self) -> List[Dict]:
         """Get allocation data for display."""

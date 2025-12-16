@@ -34,13 +34,13 @@ def Summary(theme_toggle=None):
 
         # Only show per-class precision for stratified sampling
         if sampling_method == "stratified":
-            area_proportion_pie_chart(theme_toggle=theme_toggle)
-
             per_class_precision_graph(
                 show_editor_dialog=show_editor_dialog,
                 set_show_editor_dialog=set_show_editor_dialog,
                 theme_toggle=theme_toggle,
             )
+
+            area_proportion_pie_chart(theme_toggle=theme_toggle)
 
     with v.Dialog(
         v_model=show_editor_dialog, on_v_model=set_show_editor_dialog, max_width=900
