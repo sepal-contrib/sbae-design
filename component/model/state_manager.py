@@ -27,6 +27,12 @@ class AppState:
         # Area data
         self.area_data = solara.reactive(pd.DataFrame())
         self.original_area_data = solara.reactive(pd.DataFrame())
+        # AOI data for simple/systematic sampling (contains gdf and area)
+        self.aoi_data = solara.reactive(None)
+        # Computed GeoDataFrame from AOI feature_collection
+        self.aoi_gdf = solara.reactive(None)
+        # AOI computation status
+        self.aoi_computing = solara.reactive(False)
         # Color palette extracted from raster or default
         self.class_colors = solara.reactive({})
         # Expected User's Accuracy per class (EUA)
@@ -378,36 +384,42 @@ class AppState:
 
     def is_ready_for_calculation(self) -> bool:
         """Check if ready for sample size calculation."""
-        return (
-            self.area_data.value is not None
-            and not self.area_data.value.empty
-            and self.target_error.value > 0
-            and self.confidence_level.value > 0
-        )
+        # For stratified sampling, need area_data
+        if self.sampling_method.value == "stratified":
+            return (
+                self.area_data.value is not None
+                and not self.area_data.value.empty
+                and self.target_error.value > 0
+                and self.confidence_level.value > 0
+            )
+        # For simple/systematic sampling, need AOI
+        elif self.sampling_method.value in ("simple", "systematic"):
+            return (
+                self.aoi_gdf.value is not None
+                and self.confidence_level.value > 0
+                and self.simple_total_samples.value > 0
+            )
+        return False
 
     def is_ready_for_point_generation(self) -> bool:
         """Check if ready for point generation."""
-        # For stratified sampling, need samples_per_class
-        # For simple/systematic, just need sample_results with total_samples
         if self.sample_results.value:
             sampling_method = self.sample_results.value.get(
                 "sampling_method", "stratified"
             )
             if sampling_method in ("simple", "systematic"):
-                # For non-stratified methods, just need total_samples and file_path
+                # For non-stratified methods, need total_samples and AOI
                 return (
-                    self.is_ready_for_calculation()
-                    and self.sample_results.value.get("total_samples", 0) > 0
+                    self.sample_results.value.get("total_samples", 0) > 0
+                    and self.aoi_gdf.value is not None
+                )
+            else:
+                # For stratified sampling, need samples_per_class and file_path
+                return (
+                    bool(self.samples_per_class.value)
                     and self.file_path.value is not None
                 )
-
-        # For stratified sampling, need samples_per_class
-        return (
-            self.is_ready_for_calculation()
-            and self.sample_results.value is not None
-            and bool(self.samples_per_class.value)
-            and self.file_path.value is not None
-        )
+        return False
 
     def export_csv(self) -> str:
         """Export sample points to CSV format."""

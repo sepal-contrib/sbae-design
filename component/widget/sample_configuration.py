@@ -6,6 +6,7 @@ from component.model import app_state
 from component.scripts.calculations import calculate_sample_design
 from component.scripts.precision import calculate_current_moe, calculate_precision_curve
 from component.scripts.simple_random import calculate_overall_accuracy_sample_size
+from component.widget.aoi_upload_selector import AoiUploadSelector
 
 logger = logging.getLogger("sbae.sample_configuration")
 
@@ -13,20 +14,37 @@ logger = logging.getLogger("sbae.sample_configuration")
 @solara.component
 def SampleConfiguration(sbae_map=None):
     """Sample configuration widget for the right panel."""
-    # Track previous parameters to detect changes
     prev_target_error = solara.use_reactive(app_state.target_error.value)
     prev_confidence_level = solara.use_reactive(app_state.confidence_level.value)
     prev_sampling_method = solara.use_reactive(app_state.sampling_method.value)
 
     def reset_sample_results():
-        """Reset sample results when sampling method changes."""
-        logger.debug("Resetting sample results due to sampling method change")
+        """Reset sample results and clean up layers when sampling method changes."""
         if prev_sampling_method.value != app_state.sampling_method.value:
             app_state.set_sample_results(None)
             app_state.set_sample_points(None)
-            if sbae_map and sbae_map.sample_points_layer:
-                sbae_map.map.remove_layer(sbae_map.sample_points_layer)
-                sbae_map.sample_points_layer = None
+
+            # Clean up map layers
+            if sbae_map:
+                if sbae_map.sample_points_layer:
+                    sbae_map.map.remove_layer(sbae_map.sample_points_layer)
+                    sbae_map.sample_points_layer = None
+                if sbae_map.classification_layer:
+                    sbae_map.map.remove_layer(sbae_map.classification_layer)
+                    sbae_map.classification_layer = None
+
+            # Clear stratified-specific data when switching to simple/systematic
+            if app_state.sampling_method.value in ("simple", "systematic"):
+                app_state.uploaded_file_info.value = None
+                app_state.file_path.value = None
+                app_state.area_data.value = None
+                app_state.original_area_data.value = None
+
+            # Clear AOI data when switching to stratified
+            if app_state.sampling_method.value == "stratified":
+                app_state.aoi_data.value = None
+                app_state.aoi_gdf.value = None
+
             prev_sampling_method.value = app_state.sampling_method.value
 
     solara.use_effect(reset_sample_results, [app_state.sampling_method.value])
@@ -72,7 +90,7 @@ def SampleConfiguration(sbae_map=None):
             if params_changed:
                 app_state.set_sample_points(None)
                 if sbae_map and sbae_map.sample_points_layer:
-                    sbae_map.map.remove_layer(sbae_map.sample_points_layer)
+                    sbae_map.remove_layer(sbae_map.sample_points_layer)
                     sbae_map.sample_points_layer = None
 
             # Update previous values
@@ -181,18 +199,40 @@ def SampleConfiguration(sbae_map=None):
             app_state.add_error(f"Error calculating samples: {str(e)}")
 
     area_data = app_state.area_data.value
+    sampling_method = app_state.sampling_method.value
+
+    def update_sampling_method(value):
+        if value is not None:
+            try:
+                app_state.set_sampling_parameters(
+                    app_state.target_error.value,
+                    app_state.confidence_level.value,
+                    app_state.min_samples_per_class.value,
+                    app_state.expected_accuracy.value,
+                    value,
+                    app_state.simple_total_samples.value,
+                )
+            except (ValueError, TypeError) as e:
+                app_state.add_error(f"Invalid sampling method: {str(e)}")
 
     with solara.Column():
-        if area_data is None or area_data.empty:
-            if area_data is None:
-                logger.debug("Area data is None")
-            else:
-                logger.debug("Area data is empty")
-                logger.debug(area_data)
-            solara.Info("Upload a classification map first.")
-            return
+        solara.Select(
+            label="Sampling Method",
+            value=sampling_method,
+            values=["stratified", "simple", "systematic"],
+            on_value=update_sampling_method,
+        )
 
-        sampling_method = app_state.sampling_method.value
+        AoiUploadSelector(sbae_map)
+
+        is_data_ready = False
+        if sampling_method == "stratified":
+            is_data_ready = area_data is not None and not area_data.empty
+        elif sampling_method in ("simple", "systematic"):
+            is_data_ready = app_state.aoi_gdf.value is not None
+
+        if not is_data_ready:
+            return
 
         def update_target_error(value):
             if value is not None and value != "":
@@ -337,13 +377,6 @@ def SampleConfiguration(sbae_map=None):
 
         elif sampling_method == "simple":
             app_state.simple_total_samples.value
-
-        solara.Select(
-            label="Sampling Method",
-            value=app_state.sampling_method.value,
-            values=["stratified", "simple", "systematic"],
-            on_value=update_sampling_method,
-        )
 
         if sampling_method == "simple":
             with solara.Row(gap="8px", style="margin-bottom: 8px;"):

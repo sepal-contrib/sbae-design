@@ -27,7 +27,6 @@ def CurrentFileDisplay():
 
     def clear_file():
         """Clear the current file and reset related state."""
-        logger.debug("Clearing current file selection")
         app_state.uploaded_file_info.value = None
         app_state.file_path.value = None
         app_state.area_data.value = None
@@ -88,9 +87,7 @@ def UploadTile(sbae_map: SbaeMap):
         """Worker function for raster tiling in separate thread."""
 
         def worker():
-            logger.debug("Preparing raster for tiling: %s", file_path)
             prep = prepare_for_tiles(file_path, warp_to_3857=True)
-            logger.debug("Raster prepared for tiling. Optimized path: %s", prep["path"])
             return prep
 
         return worker
@@ -107,48 +104,43 @@ def UploadTile(sbae_map: SbaeMap):
     )
 
     def add_to_map():
-        if has_file:
-            file_path = app_state.file_path.value
-            uploaded_file_info = app_state.uploaded_file_info.value
-            logger.debug(
-                "Adding uploaded classification layer to map. File path: %s, Info: %s",
-                file_path,
-                uploaded_file_info,
-            )
+        sampling_method = app_state.sampling_method.value
+        should_show_layer = has_file and sampling_method == "stratified"
 
-            if is_raster_file(file_path):
-                # Check if raster preparation is complete
+        if should_show_layer:
+            file_path = app_state.file_path.value
+            is_raster = is_raster_file(file_path)
+
+            if is_raster:
                 if (
                     raster_prep_result.state == solara.ResultState.FINISHED
                     and raster_prep_result.value
                 ):
                     optimized_path = raster_prep_result.value["path"]
-                    sbae_map.map.add_raster(
+                    sbae_map.add_raster(
                         optimized_path, layer_name="Classification Map", key="clas"
                     )
-                # If still running or error, don't add to map yet
             else:
-                # Vector files don't need preparation
-                sbae_map.map.add_raster(
+                sbae_map.add_raster(
                     file_path, layer_name="Classification Map", key="clas"
                 )
-
-        def cleanup():
-            # Remove the layer if component unmounts or file changes
-            sbae_map.map.remove_layer("clas", none_ok=True)
-
-        return cleanup
+        else:
+            sbae_map.remove_layer("clas", none_ok=True)
 
     solara.use_effect(
-        add_to_map, [has_file, app_state.file_path.value, raster_prep_result.state]
+        add_to_map,
+        [
+            has_file,
+            app_state.file_path.value,
+            raster_prep_result.state,
+            app_state.sampling_method.value,
+        ],
     )
 
     with solara.Column():
         FileUploadSection(is_loading=is_loading)
 
         if has_file:
-            CurrentFileDisplay()
-
             # Show raster preparation status
             if is_raster_file(app_state.file_path.value or ""):
                 if raster_prep_result.state == solara.ResultState.RUNNING:
@@ -174,12 +166,9 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
 
     def load_sample_map():
         """Load the sample map for testing."""
-        logger.debug("Loading sample map for testing.")
         sample_file_path = (
             Path(__file__).parent.parent.parent / "tests/data" / "aa_test_congo.tif"
         )
-
-        logger.debug("Sample file path: %s", sample_file_path)
 
         if is_loading.value:  # Prevent multiple simultaneous loads
             return
@@ -220,8 +209,6 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
             app_state.expected_user_accuracies.value = eua_dict
             app_state.eua_modes.value = eua_modes_dict
             app_state.current_step.value = max(app_state.current_step.value, 2)
-
-            logger.debug("Sample map loaded successfully. Area data: %s", area_data)
 
         except Exception as e:
             app_state.error_messages.value = [f"Error loading sample map: {str(e)}"]
@@ -300,17 +287,10 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
     def compute_areas_worker():
         """Worker function for area computation in separate thread."""
         if not selected_file_path.value or not should_compute_areas.value:
-            logger.debug(
-                "Skipping area computation: selected_file_path=%s, should_compute=%s",
-                selected_file_path.value,
-                should_compute_areas.value,
-            )
             return None
-        logger.debug("Computing areas for file: %s", selected_file_path.value)
         area_data = compute_file_areas(selected_file_path.value)
         class_codes = area_data["map_code"].tolist()
         color_palette = get_color_palette(selected_file_path.value, class_codes)
-        logger.debug("Area computation complete. Classes: %s", len(class_codes))
         return {"area_data": area_data, "color_palette": color_palette}
 
     # Use thread for area computation
@@ -322,16 +302,10 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
 
     # Handle area computation result
     def handle_area_result():
-        logger.debug(
-            "Area result state: %s, should_compute: %s",
-            area_result.state,
-            should_compute_areas.value,
-        )
         if area_result.state == solara.ResultState.RUNNING:
             is_loading.value = True
             app_state.processing_status.value = "Computing class areas..."
         elif area_result.state == solara.ResultState.ERROR:
-            logger.error("Area computation error: %s", area_result.error)
             app_state.file_error.value = str(area_result.error)
             app_state.processing_status.value = ""
             is_loading.value = False
@@ -341,7 +315,6 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
             and area_result.value
             and should_compute_areas.value
         ):
-            logger.debug("Area computation finished successfully")
             result = area_result.value
 
             # Initialize EUA values for all classes (default to 'high' mode)
@@ -365,24 +338,16 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
             is_loading.value = False
             should_compute_areas.value = False
         elif area_result.state == solara.ResultState.FINISHED and not area_result.value:
-            logger.debug("Area computation finished but returned None")
             is_loading.value = False
 
     solara.use_effect(handle_area_result, [area_result.state])
 
     def confirm_file_upload():
         """Trigger area computation for the selected file."""
-        logger.debug(
-            "confirm_file_upload called: is_loading=%s, selected_file=%s, is_valid=%s",
-            is_loading.value,
-            selected_file_path.value,
-            is_valid_file.value,
-        )
         if is_loading.value or not selected_file_path.value or not is_valid_file.value:
             return
         is_loading.value = True
         should_compute_areas.value = True
-        logger.debug("Triggered area computation")
 
     # Check if currently processing
     is_processing = (

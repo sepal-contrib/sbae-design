@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, Optional
 
 import pandas as pd
@@ -11,23 +12,24 @@ from component.scripts.stratified import calculate_per_class_moe_for_allocation
 from component.tile.class_editor import class_editor_table
 from component.widget.echarts import EChartsWidget
 
+logger = logging.getLogger("sbae.summary")
+
 
 @solara.component
 def Summary(theme_toggle=None):
     """Right panel content with progress and summary."""
     show_editor_dialog, set_show_editor_dialog = solara.use_state(False)
 
-    # Subscribe to sample_results changes to ensure component re-renders
     sample_results = app_state.sample_results.value
-
-    # Get sampling method from app_state (not sample_results, as it may be None)
     sampling_method = app_state.sampling_method.value
 
     with solara.Column():
         statistics_summary(
             area_data=app_state.area_data.value,
+            aoi_gdf=app_state.aoi_gdf.value,
             sample_results=sample_results,
             sample_points=app_state.sample_points.value,
+            sampling_method=sampling_method,
         )
 
         precision_curve_graph(theme_toggle=theme_toggle)
@@ -54,18 +56,27 @@ def Summary(theme_toggle=None):
 
 def statistics_summary(
     area_data: Optional[pd.DataFrame] = None,
+    aoi_gdf=None,
     sample_results: Optional[Dict] = None,
     sample_points: Optional[pd.DataFrame] = None,
+    sampling_method: str = "stratified",
 ) -> None:
     """Display summary statistics.
 
     Args:
-        area_data: DataFrame with area information
+        area_data: DataFrame with area information (for stratified)
+        aoi_gdf: GeoDataFrame with AOI (for simple/systematic)
         sample_results: Sample calculation results
         sample_points: Generated sample points
+        sampling_method: Current sampling method
     """
     with solara.Row(gap="4px", style="flex-wrap: wrap;"):
-        if area_data is not None and not area_data.empty:
+        # Show area based on sampling method
+        if (
+            sampling_method == "stratified"
+            and area_data is not None
+            and not area_data.empty
+        ):
             total_area = area_data["map_area"].sum() / 10000
             n_classes = len(area_data)
 
@@ -81,6 +92,18 @@ def statistics_summary(
                 outlined=True,
                 children=[f"{n_classes} classes"],
             )
+        elif sampling_method in ("simple", "systematic") and aoi_gdf is not None:
+            try:
+
+                area_ha = aoi_gdf.to_crs(epsg=6933).area.sum() / 10000
+                solara.v.Chip(
+                    small=True,
+                    label=True,
+                    outlined=True,
+                    children=[f"{area_ha:,.1f} ha"],
+                )
+            except Exception as e:
+                logger.error(f"Error calculating AOI area: {e}")
 
         # Create MOE chip unconditionally so hooks count stays stable between renders.
         moe_label = (
@@ -254,8 +277,8 @@ def per_class_precision_graph(
                 "Edit class names & Allocations",
                 icon_name="mdi-pencil",
                 on_click=lambda: set_show_editor_dialog(True),
-                # color="secondary",
-                outlined=True,
+                color="primary",
+                # outlined=True,
                 block=True,
                 style="margin-bottom: 12px;",
                 small=True,

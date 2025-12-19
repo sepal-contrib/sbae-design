@@ -38,14 +38,33 @@ def PointGeneration(sbae_map):
             f"Starting point generation with method: {sampling_method}, seed: {seed}"
         )
 
-        points_df = generate_sample_points(
-            file_path=app_state.file_path.value,
-            samples_per_class=app_state.samples_per_class.value,
-            class_lookup=app_state.get_class_lookup(),
-            seed=seed,
-            sampling_method=sampling_method,
-            total_samples=total_samples,
-        )
+        # For simple/systematic sampling, use AOI boundaries if available
+        if sampling_method in ("simple", "systematic"):
+            if app_state.aoi_gdf.value is None:
+                logger.error(
+                    "AOI GeoDataFrame not available for simple/systematic sampling"
+                )
+                return None
+
+            # Use AOI for point generation
+            points_df = generate_sample_points(
+                aoi_gdf=app_state.aoi_gdf.value,
+                samples_per_class={},
+                class_lookup={},
+                seed=seed,
+                sampling_method=sampling_method,
+                total_samples=total_samples,
+            )
+        else:
+            # Stratified sampling uses classification file
+            points_df = generate_sample_points(
+                file_path=app_state.file_path.value,
+                samples_per_class=app_state.samples_per_class.value,
+                class_lookup=app_state.get_class_lookup(),
+                seed=seed,
+                sampling_method=sampling_method,
+                total_samples=total_samples,
+            )
 
         logger.debug(f"Generated {len(points_df)} sample points.")
         return points_df
@@ -93,7 +112,15 @@ def PointGeneration(sbae_map):
     def handle_generate_points():
         """Trigger point generation."""
         if not app_state.is_ready_for_point_generation():
-            app_state.add_error("Please complete sample size calculation first.")
+            sampling_method = app_state.sampling_method.value
+            if sampling_method == "stratified":
+                app_state.add_error(
+                    "Please upload a classification map and complete sample size calculation first."
+                )
+            else:
+                app_state.add_error(
+                    "Please select an Area of Interest and complete sample size calculation first."
+                )
             return
         should_generate.value = True
 

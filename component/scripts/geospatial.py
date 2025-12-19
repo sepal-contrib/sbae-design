@@ -16,6 +16,135 @@ from rasterio.transform import xy
 from shapely.geometry import Point
 
 
+def generate_simple_random_points_from_aoi(
+    aoi_gdf: gpd.GeoDataFrame,
+    total_samples: int,
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Generate simple random sample points within AOI boundaries.
+
+    Args:
+        aoi_gdf: GeoDataFrame with AOI geometry
+        total_samples: Total number of samples to generate
+        seed: Random seed for reproducibility
+
+    Returns:
+        DataFrame with sample points in EPSG:4326
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    sample_points = []
+
+    try:
+        if aoi_gdf.crs is None:
+            aoi_gdf.set_crs("EPSG:4326", inplace=True)
+            gdf_geo = aoi_gdf
+        elif not aoi_gdf.crs.is_geographic:
+            gdf_geo = aoi_gdf.to_crs("EPSG:4326")
+        else:
+            gdf_geo = aoi_gdf.copy()
+
+        bounds = gdf_geo.total_bounds
+        minx, miny, maxx, maxy = bounds
+
+        samples_generated = 0
+        max_attempts = total_samples * 100
+
+        for attempt in range(max_attempts):
+            if samples_generated >= total_samples:
+                break
+
+            x = np.random.uniform(minx, maxx)
+            y = np.random.uniform(miny, maxy)
+            point = Point(x, y)
+
+            for geom in gdf_geo.geometry:
+                if geom.contains(point):
+                    sample_points.append(
+                        {
+                            "longitude": x,
+                            "latitude": y,
+                            "map_code": 0,
+                            "map_edited_class": "Sample",
+                        }
+                    )
+                    samples_generated += 1
+                    break
+
+    except Exception as e:
+        raise ValueError(f"Error generating simple random points from AOI: {str(e)}")
+
+    return pd.DataFrame(sample_points)
+
+
+def generate_systematic_points_from_aoi(
+    aoi_gdf: gpd.GeoDataFrame,
+    total_samples: int,
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Generate systematic sample points within AOI boundaries (grid-based).
+
+    Args:
+        aoi_gdf: GeoDataFrame with AOI geometry
+        total_samples: Total number of samples to generate
+        seed: Random seed for starting point offset
+
+    Returns:
+        DataFrame with sample points in EPSG:4326
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    sample_points = []
+
+    try:
+        if aoi_gdf.crs is None:
+            aoi_gdf.set_crs("EPSG:4326", inplace=True)
+            gdf_geo = aoi_gdf
+        elif not aoi_gdf.crs.is_geographic:
+            gdf_geo = aoi_gdf.to_crs("EPSG:4326")
+        else:
+            gdf_geo = aoi_gdf.copy()
+
+        bounds = gdf_geo.total_bounds
+        minx, miny, maxx, maxy = bounds
+
+        area = (maxx - minx) * (maxy - miny)
+        grid_spacing = np.sqrt(area / total_samples)
+
+        offset_x = (
+            np.random.uniform(0, grid_spacing) if seed is not None else grid_spacing / 2
+        )
+        offset_y = (
+            np.random.uniform(0, grid_spacing) if seed is not None else grid_spacing / 2
+        )
+
+        x = minx + offset_x
+        while x < maxx:
+            y = miny + offset_y
+            while y < maxy:
+                point = Point(x, y)
+                for geom in gdf_geo.geometry:
+                    if geom.contains(point):
+                        sample_points.append(
+                            {
+                                "longitude": x,
+                                "latitude": y,
+                                "map_code": 0,
+                                "map_edited_class": "Sample",
+                            }
+                        )
+                        break
+                y += grid_spacing
+            x += grid_spacing
+
+    except Exception as e:
+        raise ValueError(f"Error generating systematic points from AOI: {str(e)}")
+
+    return pd.DataFrame(sample_points)
+
+
 def is_raster_file(file_path: str) -> bool:
     """Check if file is a supported raster format by attempting to open with rasterio."""
     try:
@@ -785,31 +914,49 @@ def generate_systematic_points_vector(
 
 
 def generate_sample_points(
-    file_path: str,
-    samples_per_class: Dict[int, int],
-    class_lookup: Dict[int, str],
+    file_path: Optional[str] = None,
+    samples_per_class: Optional[Dict[int, int]] = None,
+    class_lookup: Optional[Dict[int, str]] = None,
     seed: Optional[int] = None,
     sampling_method: str = "stratified",
     total_samples: Optional[int] = None,
+    aoi_gdf: Optional[gpd.GeoDataFrame] = None,
 ) -> pd.DataFrame:
     """Automatically detect file type and generate sample points.
 
     Args:
-        file_path: Path to classification file
+        file_path: Path to classification file (required for stratified sampling)
         samples_per_class: Dictionary of samples needed per class (empty for simple/systematic)
         class_lookup: Mapping of class codes to names
         seed: Random seed for reproducibility (None for random)
         sampling_method: "stratified", "simple", or "systematic"
         total_samples: Total samples to generate (for simple/systematic methods)
+        aoi_gdf: GeoDataFrame with AOI boundaries (for simple/systematic sampling)
 
     Returns:
         DataFrame with sample points
 
     Raises:
-        ValueError: If file format is not supported
+        ValueError: If file format is not supported or required parameters missing
     """
-    # For simple random or systematic sampling, use non-stratified methods
-    if sampling_method == "simple" and total_samples:
+    if samples_per_class is None:
+        samples_per_class = {}
+    if class_lookup is None:
+        class_lookup = {}
+
+    # For simple random or systematic sampling with AOI
+    if (
+        sampling_method in ("simple", "systematic")
+        and total_samples
+        and aoi_gdf is not None
+    ):
+        if sampling_method == "simple":
+            return generate_simple_random_points_from_aoi(aoi_gdf, total_samples, seed)
+        else:  # systematic
+            return generate_systematic_points_from_aoi(aoi_gdf, total_samples, seed)
+
+    # For simple random or systematic sampling from file
+    if sampling_method == "simple" and total_samples and file_path:
         if is_raster_file(file_path):
             return generate_simple_random_points_raster(
                 file_path, total_samples, class_lookup, seed
@@ -818,7 +965,7 @@ def generate_sample_points(
             return generate_simple_random_points_vector(
                 file_path, total_samples, class_lookup, seed
             )
-    elif sampling_method == "systematic" and total_samples:
+    elif sampling_method == "systematic" and total_samples and file_path:
         if is_raster_file(file_path):
             return generate_systematic_points_raster(
                 file_path, total_samples, class_lookup, seed
@@ -829,6 +976,9 @@ def generate_sample_points(
             )
 
     # Default to stratified sampling
+    if not file_path:
+        raise ValueError("file_path is required for stratified sampling")
+
     if is_raster_file(file_path):
         return generate_sample_points_raster(
             file_path, samples_per_class, class_lookup, seed

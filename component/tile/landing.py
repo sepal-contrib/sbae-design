@@ -18,9 +18,9 @@ def LandingTile(app_model):
 
         # Create workflow step cards
         workflow_steps = [
-            {"number": "2", "title": "Design", "icon": "mdi-pencil", "step_id": 4},
+            {"number": "1", "title": "Design", "icon": "mdi-pencil", "step_id": 4},
             {
-                "number": "3",
+                "number": "2",
                 "title": "Analyze",
                 "icon": "mdi-chart-bar",
                 "step_id": 3,

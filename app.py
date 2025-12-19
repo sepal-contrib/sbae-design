@@ -19,7 +19,6 @@ from solara.lab.components.theming import theme
 from component.model.app_model import AppModel
 from component.tile.export import Export
 from component.tile.landing import LandingTile
-from component.tile.upload import UploadTile
 from component.widget.map import SbaeMap
 from component.widget.point_generation import PointGeneration
 from component.widget.sample_configuration import SampleConfiguration
@@ -33,6 +32,9 @@ logger.debug("SBAE Map App initialized")
 logger.debug("Solara version: %s", solara.__version__)
 
 setup_solara_server()
+
+# GEE Configuration - Set to True to enable Google Earth Engine features
+USE_GEE = True
 
 
 @solara.lab.on_kernel_start
@@ -49,7 +51,7 @@ def Page():
     setup_theme_colors()
     theme_toggle = ThemeToggle()
     theme_toggle.observe(lambda e: setattr(theme, "dark", e["new"]), "dark")
-    sbae_map = SbaeMap(theme_toggle=theme_toggle)
+    sbae_map = SbaeMap(theme_toggle=theme_toggle, gee=USE_GEE)
 
     steps_data = [
         {
@@ -59,22 +61,6 @@ def Page():
             "display": "dialog",
             "content": LandingTile(app_model),
             "width": 900,
-        },
-        {
-            "id": 2,
-            "name": "1. Upload Map",
-            "icon": "mdi-upload",
-            "display": "dialog",
-            "content": UploadTile(sbae_map),
-            "width": 900,
-            "actions": [
-                {
-                    "label": "Back",
-                    "next": 1,
-                    "cancel": True,
-                },
-                {"label": "Next", "close": True},
-            ],
         },
         {
             "id": 4,
@@ -125,9 +111,9 @@ def Page():
     MapApp.element(
         app_title="SBAE - Sampling-Based Area Estimation",
         app_icon="mdi-map-marker-radius",
-        main_map=[sbae_map.get_map_widget()],  # Pass SepalMap widget directly
+        main_map=[sbae_map],
         steps_data=steps_data,
-        initial_step=1,  # Start with About dialog
+        initial_step=1,
         theme_toggle=[theme_toggle],
         dialog_width=900,
         right_panel_config=right_panel_config,
