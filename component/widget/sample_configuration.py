@@ -1,11 +1,15 @@
+"""Sample configuration widget using the new sampling architecture.
+
+This module provides the UI for configuring sampling parameters
+and delegates calculations to the sampling service.
+"""
+
 import logging
 
 import solara
 
 from component.model import app_state
-from component.scripts.calculations import calculate_sample_design
-from component.scripts.precision import calculate_current_moe, calculate_precision_curve
-from component.scripts.simple_random import calculate_overall_accuracy_sample_size
+from component.sampling import SamplingService
 from component.widget.aoi_upload_selector import AoiUploadSelector
 
 logger = logging.getLogger("sbae.sample_configuration")
@@ -14,194 +18,109 @@ logger = logging.getLogger("sbae.sample_configuration")
 @solara.component
 def SampleConfiguration(sbae_map=None):
     """Sample configuration widget for the right panel."""
-    prev_target_error = solara.use_reactive(app_state.target_error.value)
-    prev_confidence_level = solara.use_reactive(app_state.confidence_level.value)
-    prev_sampling_method = solara.use_reactive(app_state.sampling_method.value)
+    # Use use_ref to persist value across renders without re-initializing
+    prev_method_ref = solara.use_ref(app_state.sampling_method.value)
+    current_method = app_state.sampling_method.value
 
-    def reset_sample_results():
-        """Reset sample results and clean up layers when sampling method changes."""
-        if prev_sampling_method.value != app_state.sampling_method.value:
-            app_state.set_sample_results(None)
-            app_state.set_sample_points(None)
+    # Check if method changed - use_ref.current persists between renders
+    if prev_method_ref.current != current_method:
+        logger.info(
+            f">>> METHOD CHANGED from {prev_method_ref.current} to {current_method}, CLEARING ALL DATA"
+        )
 
-            # Clean up map layers
-            if sbae_map:
-                if sbae_map.sample_points_layer:
-                    sbae_map.map.remove_layer(sbae_map.sample_points_layer)
-                    sbae_map.sample_points_layer = None
-                if sbae_map.classification_layer:
-                    sbae_map.map.remove_layer(sbae_map.classification_layer)
-                    sbae_map.classification_layer = None
+        # Clear results
+        app_state.sample_results.value = None
+        app_state.sample_points.value = None
 
-            # Clear stratified-specific data when switching to simple/systematic
-            if app_state.sampling_method.value in ("simple", "systematic"):
-                app_state.uploaded_file_info.value = None
-                app_state.file_path.value = None
-                app_state.area_data.value = None
-                app_state.original_area_data.value = None
+        # Clean up map layers using layer keys
+        if sbae_map:
+            # Remove classification raster layer by key
+            sbae_map.remove_layer("clas", none_ok=True)
+            # Remove sample points layer
+            if sbae_map.sample_points_layer:
+                try:
+                    sbae_map.remove_layer(sbae_map.sample_points_layer)
+                except Exception:
+                    pass
+                sbae_map.sample_points_layer = None
 
-            # Clear AOI data when switching to stratified
-            if app_state.sampling_method.value == "stratified":
-                app_state.aoi_data.value = None
-                app_state.aoi_gdf.value = None
+        # Clear ALL method-specific data
+        app_state.uploaded_file_info.value = None
+        app_state.file_path.value = None
+        app_state.area_data.value = None
+        app_state.original_area_data.value = None
+        app_state.aoi_data.value = None
+        app_state.aoi_gdf.value = None
 
-            prev_sampling_method.value = app_state.sampling_method.value
-
-    solara.use_effect(reset_sample_results, [app_state.sampling_method.value])
+        # Update tracked method AFTER clearing
+        prev_method_ref.current = current_method
 
     def auto_calculate():
-        """Auto-calculate samples when parameters change."""
-        if app_state.is_ready_for_calculation():
-            handle_calculate_samples()
+        """Auto-calculate when ready and parameters change."""
+        if SamplingService.is_ready(app_state):
+            run_calculation()
 
-    # Auto-calculate when any parameter changes
     solara.use_effect(
         auto_calculate,
         [
             app_state.target_error.value,
+            app_state.confidence_level.value,
             app_state.min_samples_per_class.value,
+            app_state.expected_accuracy.value,
             app_state.sampling_method.value,
             app_state.stratified_allocation_method.value,
             app_state.simple_total_samples.value,
             app_state.area_data.value,
+            app_state.aoi_gdf.value,
             app_state.expected_user_accuracies.value,
             app_state.high_eua.value,
             app_state.low_eua.value,
             app_state.eua_modes.value,
-            # These are only used for simple/systematic sampling:
-            app_state.confidence_level.value,
-            app_state.expected_accuracy.value,
         ],
     )
 
-    def handle_calculate_samples():
-        """Handle sample size calculation."""
-        if not app_state.is_ready_for_calculation():
-            return
-
+    def run_calculation():
+        """Execute the sampling calculation."""
         try:
-            # Check if parameters have changed
-            params_changed = (
-                prev_target_error.value != app_state.target_error.value
-                or prev_confidence_level.value != app_state.confidence_level.value
-            )
-
-            # Clear existing sample points only if parameters changed
-            if params_changed:
-                app_state.set_sample_points(None)
-                if sbae_map and sbae_map.sample_points_layer:
-                    sbae_map.remove_layer(sbae_map.sample_points_layer)
-                    sbae_map.sample_points_layer = None
-
-            # Update previous values
-            prev_target_error.value = app_state.target_error.value
-            prev_confidence_level.value = app_state.confidence_level.value
-
-            area_data = app_state.area_data.value
-            target_error = app_state.target_error.value / 100.0
-            confidence_level = app_state.confidence_level.value / 100.0
-            min_samples = app_state.min_samples_per_class.value
-            expected_oa = app_state.expected_accuracy.value / 100.0
-            sampling_method = app_state.sampling_method.value
-            allocation_method = (
-                app_state.stratified_allocation_method.value.capitalize()
-            )
-
-            # Get per-class expected accuracies
-            expected_accuracies = app_state.expected_user_accuracies.value
-
-            # Determine total override for simple/systematic sampling
-            total_override = None
-            if sampling_method in ("simple", "systematic"):
-                total_override = int(app_state.simple_total_samples.value)
-                allocation_method = sampling_method.capitalize()
-
-            allocation_dict = calculate_sample_design(
-                area_df=area_data,
-                objective="Overall Accuracy",
-                target_oa=expected_oa,
-                allowable_error=target_error,
-                confidence_level=confidence_level,
-                min_samples_per_class=min_samples,
-                allocation_method=allocation_method,
-                total_samples_override=total_override,
-                expected_accuracies=expected_accuracies,
-            )
-
-            total_samples = (
-                sum(allocation_dict.values())
-                if allocation_dict
-                else total_override
-                if total_override
-                else 0
-            )
-
-            # Only calculate precision curve for simple/systematic sampling
-            precision_curve_df = None
-            current_moe = None
-            if sampling_method in ("simple", "systematic"):
-                precision_curve_df = calculate_precision_curve(
-                    target_oa=expected_oa,
-                    confidence_level=confidence_level,
-                    min_sample_size=30,
-                    max_sample_size=max(1000, int(total_samples * 2)),
-                    num_points=50,
-                )
-
-                # Calculate current MOE for the calculated sample size
-                current_moe = calculate_current_moe(
-                    current_sample_size=total_samples,
-                    target_oa=expected_oa,
-                    confidence_level=confidence_level,
-                )
-
-            samples_per_class = []
-            # For stratified sampling, build per-class allocation
-            if allocation_dict:
-                for class_code, sample_count in allocation_dict.items():
-                    class_row = area_data[area_data["map_code"] == class_code]
-                    class_name = (
-                        class_row["map_edited_class"].iloc[0]
-                        if not class_row.empty
-                        else f"Class {class_code}"
-                    )
-
-                    samples_per_class.append(
-                        {
-                            "map_code": class_code,
-                            "class_name": class_name,
-                            "samples": int(sample_count),
-                        }
-                    )
-
-            results = {
-                "target_error": app_state.target_error.value,
-                "confidence_level": app_state.confidence_level.value,
-                "total_samples": total_samples,
-                "allocation_method": allocation_method,
-                "samples_per_class": samples_per_class,
-                "allocation_dict": allocation_dict,
-                "precision_curve": (
-                    precision_curve_df.to_dict("records")
-                    if precision_curve_df is not None
-                    else None
-                ),
-                "current_moe_percent": (
-                    current_moe * 100 if current_moe is not None else None
-                ),
-                "current_moe_decimal": current_moe,
-                "sampling_method": sampling_method,
-            }
-
-            app_state.set_sample_results(results)
-
+            results = SamplingService.calculate_from_state(app_state)
+            if results.success:
+                app_state.set_sample_results(results.to_dict())
+            else:
+                app_state.add_error(results.error_message or "Calculation failed")
         except Exception as e:
             app_state.add_error(f"Error calculating samples: {str(e)}")
 
-    area_data = app_state.area_data.value
     sampling_method = app_state.sampling_method.value
 
-    def update_sampling_method(value):
+    with solara.Column():
+        SamplingMethodSelector()
+
+        AoiUploadSelector(sbae_map)
+
+        # Check if data source is available for current method
+        has_valid_data = False
+        if sampling_method in ("simple", "systematic"):
+            has_valid_data = app_state.aoi_gdf.value is not None
+        elif sampling_method == "stratified":
+            has_valid_data = (
+                app_state.area_data.value is not None
+                and not app_state.area_data.value.empty
+            )
+
+        if not has_valid_data:
+            return
+
+        if sampling_method in ("simple", "systematic"):
+            SimpleSystematicParameters()
+        elif sampling_method == "stratified":
+            StratifiedParameters()
+
+
+@solara.component
+def SamplingMethodSelector():
+    """Dropdown for selecting sampling method."""
+
+    def update_method(value):
         if value is not None:
             try:
                 app_state.set_sampling_parameters(
@@ -215,248 +134,150 @@ def SampleConfiguration(sbae_map=None):
             except (ValueError, TypeError) as e:
                 app_state.add_error(f"Invalid sampling method: {str(e)}")
 
-    with solara.Column():
-        solara.Select(
-            label="Sampling Method",
-            value=sampling_method,
-            values=["stratified", "simple", "systematic"],
-            on_value=update_sampling_method,
-        )
+    solara.Select(
+        label="Sampling Method",
+        value=app_state.sampling_method.value,
+        values=["stratified", "simple", "systematic"],
+        on_value=update_method,
+    )
 
-        AoiUploadSelector(sbae_map)
 
-        is_data_ready = False
-        if sampling_method == "stratified":
-            is_data_ready = area_data is not None and not area_data.empty
-        elif sampling_method in ("simple", "systematic"):
-            is_data_ready = app_state.aoi_gdf.value is not None
+@solara.component
+def SimpleSystematicParameters():
+    """Parameters for simple and systematic sampling."""
 
-        if not is_data_ready:
-            return
-
-        def update_target_error(value):
-            if value is not None and value != "":
-                try:
-                    float_value = float(value)
-                    if float_value > 0:
-                        app_state.set_sampling_parameters(
-                            float_value, app_state.confidence_level.value
-                        )
-                except (ValueError, TypeError) as e:
-                    app_state.add_error(f"Invalid target error: {str(e)}")
-
-        def update_confidence_level(value):
-            if value is not None:
-                try:
-                    float_value = float(value)
-                    if float_value > 0:
-                        app_state.set_sampling_parameters(
-                            app_state.target_error.value, float_value
-                        )
-                except (ValueError, TypeError) as e:
-                    app_state.add_error(f"Invalid confidence level: {str(e)}")
-
-        def update_min_samples(value):
-            if value is not None and value != "":
-                try:
-                    int_value = int(float(value))
-                    if int_value > 0:
-                        app_state.set_sampling_parameters(
-                            app_state.target_error.value,
-                            app_state.confidence_level.value,
-                            int_value,
-                        )
-                except (ValueError, TypeError) as e:
-                    app_state.add_error(f"Invalid minimum samples: {str(e)}")
-
-        def update_expected_accuracy(value):
-            if value is not None and value != "":
-                try:
-                    float_value = float(value)
-                    if float_value > 0:
-                        app_state.set_sampling_parameters(
-                            app_state.target_error.value,
-                            app_state.confidence_level.value,
-                            app_state.min_samples_per_class.value,
-                            float_value,
-                            app_state.sampling_method.value,
-                            app_state.simple_total_samples.value,
-                        )
-                except (ValueError, TypeError) as e:
-                    app_state.add_error(f"Invalid expected accuracy: {str(e)}")
-
-        def update_sampling_method(value):
-            if value is not None:
-                try:
-                    app_state.set_sampling_parameters(
-                        app_state.target_error.value,
-                        app_state.confidence_level.value,
-                        app_state.min_samples_per_class.value,
-                        app_state.expected_accuracy.value,
-                        value,
-                        app_state.simple_total_samples.value,
-                    )
-                except (ValueError, TypeError) as e:
-                    app_state.add_error(f"Invalid sampling method: {str(e)}")
-
-        def update_simple_total_samples(value):
-            if value is not None and value != "":
-                try:
-                    int_value = int(float(value))
-                    if int_value > 0:
-                        app_state.set_sampling_parameters(
-                            app_state.target_error.value,
-                            app_state.confidence_level.value,
-                            app_state.min_samples_per_class.value,
-                            app_state.expected_accuracy.value,
-                            app_state.sampling_method.value,
-                            int_value,
-                        )
-                except (ValueError, TypeError) as e:
-                    app_state.add_error(f"Invalid simple sample total: {str(e)}")
-
-        def update_allocation_method(value):
-            if value is not None:
-                try:
+    def update_total_samples(value):
+        if value is not None and value != "":
+            try:
+                int_value = int(float(value))
+                if int_value > 0:
                     app_state.set_sampling_parameters(
                         app_state.target_error.value,
                         app_state.confidence_level.value,
                         app_state.min_samples_per_class.value,
                         app_state.expected_accuracy.value,
                         app_state.sampling_method.value,
-                        app_state.simple_total_samples.value,
-                        value,
+                        int_value,
                     )
-                except (ValueError, TypeError) as e:
-                    app_state.add_error(f"Invalid allocation method: {str(e)}")
+            except (ValueError, TypeError) as e:
+                app_state.add_error(f"Invalid sample total: {str(e)}")
 
-        target_error = app_state.target_error.value / 100.0
-        confidence_level = app_state.confidence_level.value / 100.0
-        expected_oa = app_state.expected_accuracy.value / 100.0
-
-        if sampling_method == "stratified":
+    def update_confidence(value):
+        if value is not None:
             try:
-                if target_error <= 0:
-                    solara.Error("Target margin of error must be greater than 0%")
-                else:
-                    # Use stratified formula if we have EUA values
-                    if app_state.expected_user_accuracies.value:
-                        from component.scripts.calculations import (
-                            calculate_stratified_sample_size,
-                        )
-
-                        calculate_stratified_sample_size(
-                            area_df=area_data,
-                            expected_accuracies=app_state.expected_user_accuracies.value,
-                            target_standard_error=target_error,
-                        )
-                    else:
-                        # Fallback to simple formula
-                        calculate_overall_accuracy_sample_size(
-                            target_oa=expected_oa,
-                            allowable_error=target_error,
-                            confidence_level=confidence_level,
-                        )
-            except ValueError as e:
-                solara.Error(f"Invalid parameters: {str(e)}")
-
-            try:
-                calculate_sample_design(
-                    area_df=area_data,
-                    objective="Overall Accuracy",
-                    target_oa=expected_oa,
-                    allowable_error=target_error,
-                    confidence_level=confidence_level,
-                    min_samples_per_class=app_state.min_samples_per_class.value,
-                    allocation_method=app_state.stratified_allocation_method.value.capitalize(),
-                    expected_accuracies=app_state.expected_user_accuracies.value,
+                app_state.set_sampling_parameters(
+                    app_state.target_error.value, float(value)
                 )
-            except Exception as e:
-                {}
-                solara.Error(f"Failed to calculate allocation: {str(e)}")
+            except (ValueError, TypeError) as e:
+                app_state.add_error(f"Invalid confidence level: {str(e)}")
 
-        elif sampling_method == "simple":
-            app_state.simple_total_samples.value
+    def update_expected_accuracy(value):
+        if value is not None:
+            try:
+                app_state.set_sampling_parameters(
+                    app_state.target_error.value,
+                    app_state.confidence_level.value,
+                    app_state.min_samples_per_class.value,
+                    float(value),
+                    app_state.sampling_method.value,
+                    app_state.simple_total_samples.value,
+                )
+            except (ValueError, TypeError) as e:
+                app_state.add_error(f"Invalid expected accuracy: {str(e)}")
 
-        if sampling_method == "simple":
-            with solara.Row(gap="8px", style="margin-bottom: 8px;"):
-                with solara.Column(style="flex: 1;"):
-                    solara.v.TextField(
-                        label="Total Sample Size",
-                        v_model=app_state.simple_total_samples.value,
-                        on_v_model=update_simple_total_samples,
-                        type="number",
-                    )
-                with solara.Column(style="flex: 1;"):
-                    solara.Select(
-                        label="Confidence Level",
-                        value=app_state.confidence_level.value,
-                        values=[90.0, 95.0, 99.0],
-                        on_value=update_confidence_level,
-                    )
-
-            with solara.Row(gap="8px", style="margin-bottom: 8px;"):
-                with solara.Column(style="flex: 1;"):
-                    solara.SliderFloat(
-                        "Expected Overall Accuracy (%)",
-                        value=app_state.expected_accuracy.value,
-                        min=50.0,
-                        max=99.0,
-                        step=1.0,
-                        on_value=update_expected_accuracy,
-                    )
-
-        elif sampling_method == "systematic":
-            with solara.Row(gap="8px", style="margin-bottom: 8px;"):
-                with solara.Column(style="flex: 1;"):
-                    solara.v.TextField(
-                        label="Total Sample Size",
-                        v_model=app_state.simple_total_samples.value,
-                        on_v_model=update_simple_total_samples,
-                        type="number",
-                    )
-                with solara.Column(style="flex: 1;"):
-                    solara.Select(
-                        label="Confidence Level",
-                        value=app_state.confidence_level.value,
-                        values=[90.0, 95.0, 99.0],
-                        on_value=update_confidence_level,
-                    )
-
-            with solara.Row(gap="8px", style="margin-bottom: 8px;"):
-                with solara.Column(style="flex: 1;"):
-                    solara.SliderFloat(
-                        "Expected Overall Accuracy (%)",
-                        value=app_state.expected_accuracy.value,
-                        min=50.0,
-                        max=99.0,
-                        step=1.0,
-                        on_value=update_expected_accuracy,
-                    )
-
-        elif sampling_method == "stratified":
-            with solara.Row(gap="8px", style="margin-bottom: 8px;"):
-                with solara.Column(style="flex: 1;"):
-                    solara.v.TextField(
-                        label="Target Standard Error (%)",
-                        v_model=app_state.target_error.value,
-                        on_v_model=update_target_error,
-                        type="number",
-                        hint="Desired precision (e.g., 1% means ±1% margin of error)",
-                    )
-
-                with solara.Column(style="flex: 1;"):
-                    solara.v.TextField(
-                        label="Minimum Samples per Class",
-                        v_model=app_state.min_samples_per_class.value,
-                        on_v_model=update_min_samples,
-                        type="number",
-                        hint="Safety minimum for small/rare classes",
-                    )
-
-            solara.Select(
-                label="Allocation Method",
-                value=app_state.stratified_allocation_method.value,
-                values=["proportional", "equal", "neyman", "balanced"],
-                on_value=update_allocation_method,
+    with solara.Row(gap="8px", style="margin-bottom: 8px;"):
+        with solara.Column(style="flex: 1;"):
+            solara.v.TextField(
+                label="Total Sample Size",
+                v_model=app_state.simple_total_samples.value,
+                on_v_model=update_total_samples,
+                type="number",
             )
+        with solara.Column(style="flex: 1;"):
+            solara.Select(
+                label="Confidence Level",
+                value=app_state.confidence_level.value,
+                values=[90.0, 95.0, 99.0],
+                on_value=update_confidence,
+            )
+
+    with solara.Row(gap="8px", style="margin-bottom: 8px;"):
+        with solara.Column(style="flex: 1;"):
+            solara.SliderFloat(
+                "Expected Overall Accuracy (%)",
+                value=app_state.expected_accuracy.value,
+                min=50.0,
+                max=99.0,
+                step=1.0,
+                on_value=update_expected_accuracy,
+            )
+
+
+@solara.component
+def StratifiedParameters():
+    """Parameters for stratified sampling."""
+
+    def update_target_error(value):
+        if value is not None and value != "":
+            try:
+                float_value = float(value)
+                if float_value > 0:
+                    app_state.set_sampling_parameters(
+                        float_value, app_state.confidence_level.value
+                    )
+            except (ValueError, TypeError) as e:
+                app_state.add_error(f"Invalid target error: {str(e)}")
+
+    def update_min_samples(value):
+        if value is not None and value != "":
+            try:
+                int_value = int(float(value))
+                if int_value > 0:
+                    app_state.set_sampling_parameters(
+                        app_state.target_error.value,
+                        app_state.confidence_level.value,
+                        int_value,
+                    )
+            except (ValueError, TypeError) as e:
+                app_state.add_error(f"Invalid minimum samples: {str(e)}")
+
+    def update_allocation_method(value):
+        if value is not None:
+            try:
+                app_state.set_sampling_parameters(
+                    app_state.target_error.value,
+                    app_state.confidence_level.value,
+                    app_state.min_samples_per_class.value,
+                    app_state.expected_accuracy.value,
+                    app_state.sampling_method.value,
+                    app_state.simple_total_samples.value,
+                    value,
+                )
+            except (ValueError, TypeError) as e:
+                app_state.add_error(f"Invalid allocation method: {str(e)}")
+
+    with solara.Row(gap="8px", style="margin-bottom: 8px;"):
+        with solara.Column(style="flex: 1;"):
+            solara.v.TextField(
+                label="Target Standard Error (%)",
+                v_model=app_state.target_error.value,
+                on_v_model=update_target_error,
+                type="number",
+                hint="Desired precision (e.g., 1% means ±1% margin of error)",
+            )
+
+        with solara.Column(style="flex: 1;"):
+            solara.v.TextField(
+                label="Minimum Samples per Class",
+                v_model=app_state.min_samples_per_class.value,
+                on_v_model=update_min_samples,
+                type="number",
+                hint="Safety minimum for small/rare classes",
+            )
+
+    solara.Select(
+        label="Allocation Method",
+        value=app_state.stratified_allocation_method.value,
+        values=["proportional", "equal", "neyman", "balanced"],
+        on_value=update_allocation_method,
+    )
