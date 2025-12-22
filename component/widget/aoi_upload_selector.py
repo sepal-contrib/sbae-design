@@ -2,7 +2,7 @@ import logging
 
 import geopandas as gpd
 import solara
-from sepal_ui.solara.components.aoi import AoiView
+from sepal_ui.solara.components.aoi.aoi_view import AoiView
 
 from component.model import app_state
 from component.tile.upload import CurrentFileDisplay, UploadTile
