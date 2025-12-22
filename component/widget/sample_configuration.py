@@ -28,15 +28,9 @@ def SampleConfiguration(sbae_map=None):
             f">>> METHOD CHANGED from {prev_method_ref.current} to {current_method}, CLEARING ALL DATA"
         )
 
-        # Clear results
-        app_state.sample_results.value = None
-        app_state.sample_points.value = None
-
-        # Clean up map layers using layer keys
+        # Clean up map layers
         if sbae_map:
-            # Remove classification raster layer by key
             sbae_map.remove_layer("clas", none_ok=True)
-            # Remove sample points layer
             if sbae_map.sample_points_layer:
                 try:
                     sbae_map.remove_layer(sbae_map.sample_points_layer)
@@ -44,13 +38,8 @@ def SampleConfiguration(sbae_map=None):
                     pass
                 sbae_map.sample_points_layer = None
 
-        # Clear ALL method-specific data
-        app_state.uploaded_file_info.value = None
-        app_state.file_path.value = None
-        app_state.area_data.value = None
-        app_state.original_area_data.value = None
-        app_state.aoi_data.value = None
-        app_state.aoi_gdf.value = None
+        # Clear all sampling data (both file and AOI)
+        app_state.clear_all_sampling_data()
 
         # Update tracked method AFTER clearing
         prev_method_ref.current = current_method

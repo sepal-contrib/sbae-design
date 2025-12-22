@@ -95,7 +95,10 @@ def statistics_summary(
         elif sampling_method in ("simple", "systematic") and aoi_gdf is not None:
             try:
 
-                area_ha = aoi_gdf.to_crs(epsg=6933).area.sum() / 10000
+                gdf = aoi_gdf
+                if gdf.crs and gdf.crs.is_geographic:
+                    gdf = gdf.to_crs(gdf.estimate_utm_crs())
+                area_ha = gdf.geometry.area.sum() / 10000
                 solara.v.Chip(
                     small=True,
                     label=True,
@@ -161,6 +164,7 @@ def precision_curve_graph(theme_toggle=None) -> None:
     """Display precision curve graph showing MOE vs sample size relationship."""
     sample_results = app_state.sample_results.value
     if not sample_results:
+        logger.debug("No sample results available, skipping precision curve graph")
         return
 
     precision_curve = sample_results.get("precision_curve", [])

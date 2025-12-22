@@ -423,7 +423,7 @@ class AppState:
 
     def export_csv(self) -> str:
         """Export sample points to CSV format."""
-        if self.sample_points.value.empty:
+        if self.sample_points.value is None or self.sample_points.value.empty:
             return ""
 
         csv_content = self.sample_points.value.to_csv(index=False)
@@ -432,7 +432,7 @@ class AppState:
 
     def export_geojson(self) -> str:
         """Export sample points to GeoJSON format."""
-        if self.sample_points.value.empty:
+        if self.sample_points.value is None or self.sample_points.value.empty:
             return ""
 
         try:
@@ -471,6 +471,60 @@ class AppState:
             geojson_content = json.dumps(geojson, indent=2)
             self.last_export_geojson.value = geojson_content
             return geojson_content
+
+    def clear_file_data(self):
+        """Clear all file-related data (for stratified sampling).
+
+        This centralizes the logic for clearing uploaded file state,
+        avoiding duplication across components.
+        """
+        self.uploaded_file_info.value = None
+        self.file_path.value = None
+        self.area_data.value = None
+        self.original_area_data.value = None
+        self.file_error.value = None
+        self.error_messages.value = []
+        self.sample_results.value = None
+        self.samples_per_class.value = {}
+        self.sample_points.value = pd.DataFrame()
+        self.points_generation_status.value = None
+
+    def clear_aoi_data(self):
+        """Clear all AOI-related data (for simple/systematic sampling).
+
+        This centralizes the logic for clearing AOI state,
+        avoiding duplication across components.
+        """
+        self.aoi_data.value = None
+        self.aoi_gdf.value = None
+        self.aoi_computing.value = False
+        self.sample_results.value = None
+        self.sample_points.value = pd.DataFrame()
+        self.points_generation_status.value = None
+
+    def clear_all_sampling_data(self):
+        """Clear all sampling-related data (both file and AOI).
+
+        Use this when switching between sampling methods or doing a full reset.
+        """
+        # Clear file data (stratified)
+        self.uploaded_file_info.value = None
+        self.file_path.value = None
+        self.area_data.value = None
+        self.original_area_data.value = None
+
+        # Clear AOI data (simple/systematic)
+        self.aoi_data.value = None
+        self.aoi_gdf.value = None
+        self.aoi_computing.value = False
+
+        # Clear shared data
+        self.file_error.value = None
+        self.error_messages.value = []
+        self.sample_results.value = None
+        self.samples_per_class.value = {}
+        self.sample_points.value = pd.DataFrame()
+        self.points_generation_status.value = None
 
 
 app_state = AppState()

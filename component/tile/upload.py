@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-import pandas as pd
 import solara
 from sepal_ui.sepalwidgets.file_input import FileInputComponent
 from solara.alias import rv
@@ -22,21 +21,25 @@ logger = logging.getLogger("sbae.upload")
 
 
 @solara.component
-def CurrentFileDisplay():
+def CurrentFileDisplay(sbae_map: SbaeMap = None):
     """Display the currently selected file with option to clear it."""
 
     def clear_file():
         """Clear the current file and reset related state."""
-        app_state.uploaded_file_info.value = None
-        app_state.file_path.value = None
-        app_state.area_data.value = None
-        app_state.original_area_data.value = None
-        app_state.file_error.value = None
-        app_state.error_messages.value = []
-        app_state.sample_results.value = None
-        app_state.samples_per_class.value = {}
-        app_state.sample_points.value = pd.DataFrame()
-        app_state.points_generation_status.value = None
+        # Remove map layers first
+        if sbae_map:
+            sbae_map.remove_layer("clas", none_ok=True)
+            if sbae_map.sample_points_layer:
+                try:
+                    sbae_map.remove_layer(sbae_map.sample_points_layer)
+                except Exception:
+                    pass
+                sbae_map.sample_points_layer = None
+
+        # Clear all file-related state
+        app_state.clear_file_data()
+
+        # Reset workflow step
         if app_state.current_step.value > 1:
             app_state.current_step.value = 1
 
@@ -236,12 +239,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
 
     def reset_all_state():
         """Reset all application state including map."""
-        app_state.uploaded_file_info.value = None
-        app_state.file_path.value = None
-        app_state.area_data.value = None
-        app_state.original_area_data.value = None
-        app_state.file_error.value = None
-        app_state.error_messages.value = []
+        app_state.clear_file_data()
         app_state.processing_status.value = ""
         selected_file_path.value = None
         selected_file_info_preview.value = None

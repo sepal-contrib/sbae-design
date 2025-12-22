@@ -147,18 +147,9 @@ def PointGeneration(sbae_map):
                 allocation_changed = True
 
     sample_results = app_state.sample_results.value
-    file_ready = app_state.file_path.value is not None
 
-    # Check if allocation is ready based on sampling method
-    allocation_ready = False
-    if sample_results:
-        sampling_method = sample_results.get("sampling_method", "stratified")
-        if sampling_method in ("simple", "systematic"):
-            # For non-stratified methods, just need total_samples
-            allocation_ready = sample_results.get("total_samples", 0) > 0
-        else:
-            # For stratified sampling, need samples_per_class
-            allocation_ready = bool(app_state.samples_per_class.value)
+    # Check if ready for point generation
+    ready_for_generation = app_state.is_ready_for_point_generation()
 
     with solara.Column():
         if sample_results is None:
@@ -212,8 +203,9 @@ def PointGeneration(sbae_map):
                 solara.Warning(
                     "⚠️ Sample allocation has changed! The points shown on the map don't match your current allocation. Please regenerate points."
                 )
-            if not allocation_ready:
-                solara.Info("Sample allocation is missing. Recalculate sample size.")
-
-            if not file_ready:
-                solara.Info("Upload a classification map before generating points.")
+            elif not ready_for_generation:
+                sampling_method = sample_results.get("sampling_method", "stratified")
+                if sampling_method in ("simple", "systematic"):
+                    solara.Info("Select an Area of Interest before generating points.")
+                else:
+                    solara.Info("Upload a classification map before generating points.")

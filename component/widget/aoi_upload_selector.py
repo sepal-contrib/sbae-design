@@ -24,9 +24,9 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
     async def compute_gee_features_worker():
         """Worker function to compute GEE FeatureCollection in background."""
         feature_collection = (
-            app_state.aoi_data.value.get("feature_collection")
+            app_state.aoi_data.value.feature_collection
             if app_state.aoi_data.value
-            and "feature_collection" in app_state.aoi_data.value
+            and app_state.aoi_data.value.feature_collection is not None
             else None
         )
 
@@ -105,14 +105,10 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             if app_state.aoi_computing.value:
                 solara.Info("⏳ Computing AOI boundaries...")
 
-            elif app_state.aoi_gdf.value is not None:
-                area_ha = app_state.aoi_gdf.value.to_crs(epsg=6933).area.sum() / 10000
-                solara.Success(f"✓ AOI ready: {area_ha:.2f} ha")
-
         elif sampling_method == "stratified":
 
             if has_uploaded_file:
-                CurrentFileDisplay()
+                CurrentFileDisplay(sbae_map)
             else:
                 solara.Markdown(
                     "For stratified sampling, you need to upload a classification map."
