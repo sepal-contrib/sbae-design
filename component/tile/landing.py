@@ -12,9 +12,8 @@ def LandingTile(app_model):
         app_model.current_step = step_number
 
     with solara.Column():
-        # Centered title
         with solara.Column(style={"text-align": "center", "margin-bottom": "30px"}):
-            solara.Markdown("# 🌍 Sampling-Based Area Estimation")
+            solara.HTML(tag="h1", unsafe_innerHTML="🌍 Sampling-Based Area Estimation")
 
         # Create workflow step cards
         workflow_steps = [

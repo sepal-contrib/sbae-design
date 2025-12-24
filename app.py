@@ -19,6 +19,7 @@ from solara.lab.components.theming import theme
 from component.model.app_model import AppModel
 from component.tile.export import Export
 from component.tile.landing import LandingTile
+from component.tile.upload import RasterMapWatcher
 from component.widget.map import SbaeMap
 from component.widget.point_generation import PointGeneration
 from component.widget.sample_configuration import SampleConfiguration
@@ -52,6 +53,8 @@ def Page():
     theme_toggle = ThemeToggle()
     theme_toggle.observe(lambda e: setattr(theme, "dark", e["new"]), "dark")
     sbae_map = SbaeMap(theme_toggle=theme_toggle, gee=USE_GEE)
+
+    RasterMapWatcher(sbae_map)
 
     steps_data = [
         {

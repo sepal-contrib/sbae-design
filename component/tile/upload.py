@@ -21,6 +21,35 @@ logger = logging.getLogger("sbae.upload")
 
 
 @solara.component
+def RasterMapWatcher(sbae_map: SbaeMap):
+    """Watches for optimized raster and adds it to map. Must stay mounted."""
+
+    def add_optimized_raster_to_map():
+        optimized_path = app_state.optimized_raster_path.value
+        status = app_state.raster_optimization_status.value
+        sampling_method = app_state.sampling_method.value
+
+        if (
+            optimized_path
+            and status == "adding_to_map"
+            and sampling_method == "stratified"
+        ):
+            sbae_map.add_raster(
+                optimized_path, layer_name="Classification Map", key="clas"
+            )
+            app_state.raster_optimization_status.value = "finished"
+
+    solara.use_effect(
+        add_optimized_raster_to_map,
+        [
+            app_state.optimized_raster_path.value,
+            app_state.raster_optimization_status.value,
+            app_state.sampling_method.value,
+        ],
+    )
+
+
+@solara.component
 def CurrentFileDisplay(sbae_map: SbaeMap = None):
     """Display the currently selected file with option to clear it."""
 
@@ -49,8 +78,11 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
     file_info = app_state.uploaded_file_info.value
     file_path = app_state.file_path.value
     file_name = Path(file_path).name
+    optimization_status = app_state.raster_optimization_status.value
+    is_loading = optimization_status in ("running", "adding_to_map")
 
     with solara.Card(classes=["mb-4"]):
+
         with solara.Row(justify="space-between", style={"align-items": "center"}):
             with solara.Column(gap="0px"):
                 solara.HTML(
@@ -74,6 +106,11 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
                 text=True,
                 icon=True,
             )
+        (
+            solara.v.ProgressLinear(indeterminate=is_loading, classes=["my-2"])
+            if is_loading
+            else None
+        )
 
 
 @solara.component
@@ -88,25 +125,51 @@ def UploadTile(sbae_map: SbaeMap):
 
     def prepare_raster_worker(file_path):
         """Worker function for raster tiling in separate thread."""
+        import time
 
         def worker():
-            prep = prepare_for_tiles(file_path, warp_to_3857=True)
-            return prep
+            original_file_path = file_path
+            app_state.raster_optimization_status.value = "running"
+            app_state.raster_optimization_error.value = None
+            app_state.optimized_raster_path.value = None
+            try:
+                time.sleep(5)  # TODO: Remove - testing delay
+                prep = prepare_for_tiles(file_path, warp_to_3857=True)
+
+                # Check if file was cleared/changed during processing
+                if app_state.file_path.value != original_file_path:
+                    logger.debug("File changed during optimization, discarding result")
+                    return None
+
+                app_state.optimized_raster_path.value = prep["path"]
+                app_state.raster_optimization_status.value = "adding_to_map"
+                return prep
+            except Exception as e:
+                # Only set error if file is still the same
+                if app_state.file_path.value == original_file_path:
+                    app_state.raster_optimization_status.value = "error"
+                    app_state.raster_optimization_error.value = str(e)
+                raise
 
         return worker
 
-    # Thread for raster preparation
+    # Thread for raster preparation - only starts if no optimized path exists
     raster_prep_result = solara.use_thread(
         (
             prepare_raster_worker(app_state.file_path.value)
-            if (has_file and is_raster_file(app_state.file_path.value or ""))
+            if (
+                has_file
+                and is_raster_file(app_state.file_path.value or "")
+                and not app_state.optimized_raster_path.value
+            )
             else lambda: None
         ),
         dependencies=[app_state.file_path.value],
         intrusive_cancel=False,
     )
 
-    def add_to_map():
+    def handle_non_raster_and_layer_removal():
+        """Handle non-raster files and layer removal when needed."""
         sampling_method = app_state.sampling_method.value
         should_show_layer = has_file and sampling_method == "stratified"
 
@@ -114,16 +177,8 @@ def UploadTile(sbae_map: SbaeMap):
             file_path = app_state.file_path.value
             is_raster = is_raster_file(file_path)
 
-            if is_raster:
-                if (
-                    raster_prep_result.state == solara.ResultState.FINISHED
-                    and raster_prep_result.value
-                ):
-                    optimized_path = raster_prep_result.value["path"]
-                    sbae_map.add_raster(
-                        optimized_path, layer_name="Classification Map", key="clas"
-                    )
-            else:
+            if not is_raster:
+                app_state.raster_optimization_status.value = "idle"
                 sbae_map.add_raster(
                     file_path, layer_name="Classification Map", key="clas"
                 )
@@ -131,11 +186,10 @@ def UploadTile(sbae_map: SbaeMap):
             sbae_map.remove_layer("clas", none_ok=True)
 
     solara.use_effect(
-        add_to_map,
+        handle_non_raster_and_layer_removal,
         [
             has_file,
             app_state.file_path.value,
-            raster_prep_result.state,
             app_state.sampling_method.value,
         ],
     )
@@ -158,9 +212,7 @@ def UploadTile(sbae_map: SbaeMap):
                         "✅ File uploaded and optimized successfully! You can now proceed to edit class names."
                     )
             else:
-                solara.Success(
-                    "✅ File uploaded successfully! You can now proceed to edit class names."
-                )
+                solara.Success("✅ File uploaded successfully!")
 
 
 @solara.component
@@ -382,11 +434,9 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
 @solara.component
 def FileUploadInstructions():
     """Instructions for file upload formats."""
-    solara.Markdown(
-        """
-    Upload your land cover classification map as a raster file.
-    Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio.
-    """
+    solara.Text(
+        "Upload your land cover classification map as a raster file. "
+        "Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio."
     )
 
 
@@ -394,19 +444,20 @@ def FileUploadInstructions():
 def ErrorAlert(error_message: str):
     """Error alert component."""
     with rv.Alert(type="error", text=True):
-        solara.Markdown(f"**Error:** {error_message}")
+        with solara.Row(gap="4px", style="align-items: center;"):
+            solara.Text("Error:", style="font-weight: bold;")
+            solara.Text(error_message)
 
 
 @solara.component
 def FilePreview(file_info: Dict[str, Any]):
     """Preview component showing file information before confirmation."""
     with rv.Alert(type="info", text=True):
-        solara.Markdown(
-            f"""
-        **File selected:**
-        - Type: {file_info.get("file_type", "unknown").title()}
-        - Size: {file_info.get("size_mb", 0):.1f} MB
-        - Features: {file_info.get("feature_count", 0):,}
-        - CRS: {file_info.get("crs", "Not specified")}
-        """
-        )
+        with solara.Column(gap="4px"):
+            solara.Text(
+                "File selected:", style="font-weight: bold; margin-bottom: 4px;"
+            )
+            solara.Text(f"Type: {file_info.get('file_type', 'unknown').title()}")
+            solara.Text(f"Size: {file_info.get('size_mb', 0):.1f} MB")
+            solara.Text(f"Features: {file_info.get('feature_count', 0):,}")
+            solara.Text(f"CRS: {file_info.get('crs', 'Not specified')}")

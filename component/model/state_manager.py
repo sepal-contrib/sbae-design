@@ -70,6 +70,10 @@ class AppState:
         self.current_step = solara.reactive(1)
         self.processing_status = solara.reactive("")
         self.error_messages = solara.reactive([])
+        # Raster optimization status: 'idle', 'running', 'adding_to_map', 'finished', 'error'
+        self.raster_optimization_status = solara.reactive("idle")
+        self.raster_optimization_error = solara.reactive(None)
+        self.optimized_raster_path = solara.reactive(None)
 
         # Export state
         self.last_export_csv = solara.reactive("")
@@ -488,6 +492,9 @@ class AppState:
         self.samples_per_class.value = {}
         self.sample_points.value = pd.DataFrame()
         self.points_generation_status.value = None
+        self.raster_optimization_status.value = "idle"
+        self.raster_optimization_error.value = None
+        self.optimized_raster_path.value = None
 
     def clear_aoi_data(self):
         """Clear all AOI-related data (for simple/systematic sampling).

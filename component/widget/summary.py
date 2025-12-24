@@ -108,35 +108,18 @@ def statistics_summary(
             except Exception as e:
                 logger.error(f"Error calculating AOI area: {e}")
 
-        # Create MOE chip unconditionally so hooks count stays stable between renders.
-        moe_label = (
-            f"MOE: {sample_results.get('target_error', 'N/A')}%"
-            if sample_results
-            else "MOE: N/A"
-        )
-        moe_chip = solara.v.Chip(
-            small=True,
-            label=True,
-            outlined=True,
-            children=[moe_label],
-        )
-
-        def set_v_on():
-            # Only attempt to enable tooltip behavior when we actually have results.
-            if not sample_results:
-                return
-            try:
-                widget = solara.get_widget(moe_chip)
-                widget.v_on = "tooltip.on"
-            except Exception:
-                # If the widget isn't available yet, ignore and let effect run later.
-                pass
-
-        # Call the effect unconditionally to avoid conditional hook usage; its body
-        # will early-return when there's no sample_results.
-        solara.use_effect(set_v_on, [moe_chip])
+        # Create chip reference for use_effect (must be outside conditional for hook stability)
+        moe_chip_ref = solara.use_reactive(None)
 
         if sample_results:
+            moe_chip = solara.v.Chip(
+                small=True,
+                label=True,
+                outlined=True,
+                children=[f"MOE: {sample_results.get('target_error', 'N/A')}%"],
+            )
+            moe_chip_ref.value = moe_chip
+
             with solara.v.Tooltip(
                 bottom=True,
                 max_width=300,
@@ -158,6 +141,22 @@ def statistics_summary(
                 outlined=True,
                 children=[f"n={sample_results.get('total_samples', 'N/A')}"],
             )
+
+        def set_v_on():
+            if moe_chip_ref.value is None:
+                return
+            try:
+                widget = solara.get_widget(moe_chip_ref.value)
+                widget.v_on = "tooltip.on"
+            except Exception:
+                pass
+
+        solara.use_effect(set_v_on, [moe_chip_ref.value])
+
+    if not sample_results:
+        solara.Info(
+            "Set your AOI or upload a classification map to start calculating sample sizes and margin of error."
+        )
 
 
 def precision_curve_graph(theme_toggle=None) -> None:

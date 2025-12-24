@@ -15,7 +15,9 @@ def error_display(error_message: str, error_type: str = "error") -> None:
         error_type: Type of error (error, warning, info)
     """
     with rv.Alert(type=error_type, text=True):
-        solara.Markdown(f"**{error_type.title()}:** {error_message}")
+        with solara.Row(gap="4px", style="align-items: center;"):
+            solara.Text(f"{error_type.title()}:", style="font-weight: bold;")
+            solara.Text(error_message)
 
 
 def info_panel(title: str, content: str, collapsible: bool = True) -> None:
