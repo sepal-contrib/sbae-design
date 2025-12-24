@@ -34,7 +34,7 @@ logger.debug("Solara version: %s", solara.__version__)
 setup_solara_server()
 
 # GEE Configuration - Set to True to enable Google Earth Engine features
-USE_GEE = True
+USE_GEE = False
 
 
 @solara.lab.on_kernel_start

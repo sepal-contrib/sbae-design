@@ -1,6 +1,5 @@
 import logging
 
-import geopandas as gpd
 import solara
 from sepal_ui.solara.components.aoi.aoi_view import AoiView
 
@@ -21,52 +20,38 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
         and app_state.file_path.value is not None
     )
 
-    async def compute_gee_features_worker():
-        """Worker function to compute GEE FeatureCollection in background."""
-        feature_collection = (
-            app_state.aoi_data.value.feature_collection
-            if app_state.aoi_data.value
-            and app_state.aoi_data.value.feature_collection is not None
-            else None
-        )
-
-        if not feature_collection:
+    async def compute_aoi_gdf_worker():
+        """Worker function to compute GeoDataFrame from AoiResult in background."""
+        if not app_state.aoi_data.value:
             return None
 
-        if not sbae_map or not hasattr(sbae_map, "gee_interface"):
-            logger.warning("No gee_interface available")
-            return None
-
-        logger.debug("Starting GEE FeatureCollection computation")
+        logger.debug("Starting AOI GeoDataFrame computation")
         app_state.aoi_computing.value = True
         try:
-            info = await sbae_map.gee_interface.get_info_async(feature_collection)
-            features = info.get("features", [])
-            logger.debug(f"Computed {len(features)} features from GEE")
-            return features
+            gdf = await app_state.aoi_data.value.get_gdf_async()
+            logger.debug(
+                f"Computed GeoDataFrame with {len(gdf) if gdf is not None else 0} features"
+            )
+            return gdf
         except Exception as e:
-            logger.error(f"Error computing GEE features: {e}")
+            logger.error(f"Error computing AOI GeoDataFrame: {e}")
             return None
         finally:
             app_state.aoi_computing.value = False
 
-    gee_result = solara.lab.use_task(
-        compute_gee_features_worker,
+    aoi_result = solara.lab.use_task(
+        compute_aoi_gdf_worker,
         dependencies=[app_state.aoi_data.value],
     )
 
-    def process_gee_result():
-        """Process GEE computation result and create GeoDataFrame."""
-        if gee_result.value is not None and gee_result.value:
-            try:
-                gdf = gpd.GeoDataFrame.from_features(gee_result.value, crs="EPSG:4326")
-                app_state.aoi_gdf.value = gdf
-                logger.debug(f"Created GeoDataFrame with {len(gdf)} features")
-            except Exception as e:
-                logger.error(f"Error creating GeoDataFrame: {e}")
-                app_state.aoi_gdf.value = None
+    def process_aoi_result():
+        """Process AOI computation result."""
+        if aoi_result.value is not None:
+            app_state.aoi_gdf.value = aoi_result.value
+        else:
+            app_state.aoi_gdf.value = None
 
-    solara.use_effect(process_gee_result, [gee_result.value])
+    solara.use_effect(process_aoi_result, [aoi_result.value])
 
     def cleanup_on_unmount():
         """Cleanup when component unmounts."""
@@ -98,7 +83,7 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             AoiView(
                 value=app_state.aoi_data,
                 methods="ALL",
-                gee=True,
+                gee=False,
                 map_=sbae_map,
             )
 
