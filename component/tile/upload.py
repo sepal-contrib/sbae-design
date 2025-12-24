@@ -125,7 +125,6 @@ def UploadTile(sbae_map: SbaeMap):
 
     def prepare_raster_worker(file_path):
         """Worker function for raster tiling in separate thread."""
-        import time
 
         def worker():
             original_file_path = file_path
@@ -133,7 +132,6 @@ def UploadTile(sbae_map: SbaeMap):
             app_state.raster_optimization_error.value = None
             app_state.optimized_raster_path.value = None
             try:
-                time.sleep(5)  # TODO: Remove - testing delay
                 prep = prepare_for_tiles(file_path, warp_to_3857=True)
 
                 # Check if file was cleared/changed during processing
