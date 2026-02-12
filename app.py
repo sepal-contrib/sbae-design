@@ -4,6 +4,17 @@ A Solara web application using the MapApp layout with a map background,
 left drawer for workflow steps, and right panel for tools and exports.
 """
 
+# ruff: noqa: E402
+# PROJ_DATA must be set before importing rasterio/pyproj to avoid CRS errors
+# when system PROJ_DATA points to an incompatible proj.db (e.g., in SEPAL)
+import os
+import sys
+
+env_prefix = sys.prefix
+proj_data = os.path.join(env_prefix, "share", "proj")
+if os.path.exists(proj_data):
+    os.environ["PROJ_DATA"] = proj_data
+
 import logging
 
 import solara
