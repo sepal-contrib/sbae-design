@@ -12,10 +12,9 @@ dependencies:
   - scipy>=1.10.0
   - xarray>=2023.1.0
   - h5netcdf>=1.2.0
-  - gdal
   - pip
-  - rasterio==1.4.3
-  - pyproj==3.7.2
+  - rasterio
+  - pyproj
   - pip:
       - sepal_ui==3.1.0
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
