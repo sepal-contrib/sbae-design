@@ -155,7 +155,7 @@ def statistics_summary(
 
     if not sample_results:
         solara.Info(
-            "Set your AOI or upload a classification map to start calculating sample sizes and margin of error."
+            "Define an area of interest, or load a classification map for stratified sampling, to compute the sample design."
         )
 
 
