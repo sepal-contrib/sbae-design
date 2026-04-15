@@ -29,7 +29,6 @@ from solara.lab.components.theming import theme
 
 from component.model.app_model import AppModel
 from component.tile.export import Export
-from component.tile.landing import LandingTile
 from component.tile.upload import RasterMapWatcher
 from component.widget.map import SbaeMap
 from component.widget.point_generation import PointGeneration
@@ -68,14 +67,6 @@ def Page():
     RasterMapWatcher(sbae_map)
 
     steps_data = [
-        {
-            "id": 1,
-            "name": "Getting Started",
-            "icon": "mdi-rocket",
-            "display": "dialog",
-            "content": LandingTile(app_model),
-            "width": 900,
-        },
         {
             "id": 4,
             "name": "Sample design",
@@ -127,7 +118,7 @@ def Page():
         app_icon="mdi-map-marker-radius",
         main_map=[sbae_map],
         steps_data=steps_data,
-        initial_step=1,
+        initial_step=4,
         theme_toggle=[theme_toggle],
         dialog_width=900,
         right_panel_config=right_panel_config,
