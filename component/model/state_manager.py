@@ -70,6 +70,7 @@ class AppState:
         self.current_step = solara.reactive(1)
         self.processing_status = solara.reactive("")
         self.error_messages = solara.reactive([])
+        self.sample_design_workflow = solara.reactive("aa_design")
         # Raster optimization status: 'idle', 'running', 'adding_to_map', 'finished', 'error'
         self.raster_optimization_status = solara.reactive("idle")
         self.raster_optimization_error = solara.reactive(None)
@@ -78,6 +79,17 @@ class AppState:
         # Export state
         self.last_export_csv = solara.reactive("")
         self.last_export_geojson = solara.reactive("")
+
+        # --- Analysis (accuracy assessment) ---
+        self.analysis_reference_df = solara.reactive(pd.DataFrame())
+        self.analysis_area_source = solara.reactive("design")  # "design" | "upload"
+        self.analysis_area_df = solara.reactive(pd.DataFrame())
+        self.analysis_column_mapping = solara.reactive({})
+        self.analysis_filter = solara.reactive(None)
+        self.analysis_confidence_level = solara.reactive(95.0)
+        self.analysis_area_unit = solara.reactive("ha")  # "ha" | "m2"
+        self.analysis_results = solara.reactive(None)
+        self.analysis_status = solara.reactive("")
 
     def update_class_name(self, map_code: int, new_name: str):
         """Update class name in area data."""
@@ -170,11 +182,11 @@ class AppState:
         self,
         target_error: float,
         confidence_level: float,
-        min_samples_per_class: int = None,
-        expected_accuracy: float = None,
-        sampling_method: str = None,
-        simple_total_samples: int = None,
-        stratified_allocation_method: str = None,
+        min_samples_per_class: int | None = None,
+        expected_accuracy: float | None = None,
+        sampling_method: str | None = None,
+        simple_total_samples: int | None = None,
+        stratified_allocation_method: str | None = None,
     ):
         """Update sampling parameters.
 
@@ -320,6 +332,14 @@ class AppState:
     def clear_errors(self):
         """Clear all error messages."""
         self.error_messages.value = []
+
+    def set_sample_design_workflow(self, workflow: str):
+        """Select the sample design workflow shown in the configuration panel."""
+        if workflow not in ("aa_design", "advanced"):
+            raise ValueError(
+                "sample_design_workflow must be one of: aa_design, advanced"
+            )
+        self.sample_design_workflow.value = workflow
 
     def set_processing_status(self, status: str):
         """Set current processing status."""
@@ -532,6 +552,56 @@ class AppState:
         self.samples_per_class.value = {}
         self.sample_points.value = pd.DataFrame()
         self.points_generation_status.value = None
+
+        # Clear analysis data
+        self.clear_analysis_data()
+
+    def set_analysis_results(self, results: Dict):
+        """Store analysis results (AnalysisResults.to_dict())."""
+        self.analysis_results.value = results
+
+    def clear_analysis_data(self):
+        """Reset all analysis inputs and outputs."""
+        self.analysis_reference_df.value = pd.DataFrame()
+        self.analysis_area_source.value = "design"
+        self.analysis_area_df.value = pd.DataFrame()
+        self.analysis_column_mapping.value = {}
+        self.analysis_filter.value = None
+        self.analysis_confidence_level.value = 95.0
+        self.analysis_area_unit.value = "ha"
+        self.analysis_results.value = None
+        self.analysis_status.value = ""
+
+    def export_confusion_matrix_csv(self) -> str:
+        """Confusion matrix as CSV (class codes as row/col headers)."""
+        results = self.analysis_results.value
+        if not results or not results.get("confusion_matrix"):
+            return ""
+        cm = results["confusion_matrix"]
+        df = pd.DataFrame(cm["data"], index=cm["index"], columns=cm["columns"])
+        df.index.name = "map\\ref"
+        return df.to_csv()
+
+    def export_area_estimates_csv(self) -> str:
+        """Per-class area estimates + SRS comparator as CSV."""
+        results = self.analysis_results.value
+        if not results or not results.get("class_estimates"):
+            return ""
+        return pd.DataFrame(results["class_estimates"]).to_csv(index=False)
+
+    def export_accuracy_csv(self) -> str:
+        """Per-class accuracy table as CSV."""
+        results = self.analysis_results.value
+        if not results or not results.get("accuracy_rows"):
+            return ""
+        return pd.DataFrame(results["accuracy_rows"]).to_csv(index=False)
+
+    def export_reference_csv(self) -> str:
+        """The uploaded reference/validation table as CSV (input echo)."""
+        df = self.analysis_reference_df.value
+        if df is None or df.empty:
+            return ""
+        return df.to_csv(index=False)
 
 
 app_state = AppState()
