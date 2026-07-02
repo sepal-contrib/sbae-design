@@ -247,23 +247,44 @@ def compute_area_from_raster(file_path: str) -> pd.DataFrame:
     """
     try:
         with rasterio.open(file_path) as raster:
-            data = raster.read(1)
-            transform = raster.transform
-
             # Calculate pixel area
+            transform = raster.transform
             pixel_area = abs(transform.a * transform.e)
 
-            # Count pixels per class (excluding nodata)
-            nodata_value = raster.nodata if raster.nodata is not None else -9999
-            valid_data = data[data != nodata_value]
+            nodata_value = raster.nodata
+            dtype = np.dtype(raster.dtypes[0])
+            # bincount is O(n) and avoids sorting the whole band, but only
+            # works for non-negative integers. Fall back to per-block unique
+            # for float/signed class maps.
+            use_bincount = np.issubdtype(dtype, np.integer) or np.issubdtype(
+                dtype, np.unsignedinteger
+            )
 
-            if len(valid_data) == 0:
+            # Stream the raster block by block so we never materialize the
+            # full band in memory (a single Hansen tile is ~3.5 GB read whole).
+            counts: Dict[float, int] = {}
+            for _, window in raster.block_windows(1):
+                block = raster.read(1, window=window).ravel()
+
+                if use_bincount and block.size and block.min() >= 0:
+                    hist = np.bincount(block)
+                    for code in np.nonzero(hist)[0]:
+                        counts[int(code)] = counts.get(int(code), 0) + int(hist[code])
+                else:
+                    values, block_counts = np.unique(block, return_counts=True)
+                    for value, count in zip(values, block_counts):
+                        key = value.item()
+                        counts[key] = counts.get(key, 0) + int(count)
+
+            # Drop nodata (only if the raster actually declares one)
+            if nodata_value is not None:
+                counts.pop(nodata_value, None)
+
+            if not counts:
                 raise ValueError("No valid data found in raster")
 
-            unique_values, counts = np.unique(valid_data, return_counts=True)
-
-            # Calculate areas
-            areas = counts * pixel_area
+            unique_values = sorted(counts)
+            areas = np.array([counts[code] for code in unique_values]) * pixel_area
 
             return pd.DataFrame(
                 {

@@ -34,8 +34,11 @@ def RasterMapWatcher(sbae_map: SbaeMap):
             and status == "adding_to_map"
             and sampling_method == "stratified"
         ):
-            sbae_map.add_raster(
-                optimized_path, layer_name="Classification Map", key="clas"
+            sbae_map.add_class_raster(
+                optimized_path,
+                app_state.class_colors.value,
+                layer_name="Classification Map",
+                key="clas",
             )
             app_state.raster_optimization_status.value = "finished"
 
@@ -45,6 +48,7 @@ def RasterMapWatcher(sbae_map: SbaeMap):
             app_state.optimized_raster_path.value,
             app_state.raster_optimization_status.value,
             app_state.sampling_method.value,
+            app_state.class_colors.value,
         ],
     )
 
@@ -264,7 +268,7 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
             app_state.current_step.value = max(app_state.current_step.value, 2)
 
         except Exception as e:
-            app_state.error_messages.value = [f"Error loading sample map: {str(e)}"]
+            app_state.error_messages.value = [f"Error loading sample map: {e!s}"]
         finally:
             app_state.processing_status.value = ""
             is_loading.value = False

@@ -95,10 +95,6 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             if has_uploaded_file:
                 CurrentFileDisplay(sbae_map)
             else:
-                solara.Text(
-                    "For stratified sampling, you need to upload a classification map."
-                )
-
                 with solara.Row(justify="center", style={"margin-top": "16px"}):
                     solara.Button(
                         label="Upload Map",

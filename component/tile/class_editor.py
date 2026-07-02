@@ -4,21 +4,17 @@ from component.model import app_state
 
 
 @solara.component
-def class_editor_table():
+def class_editor_table(show_sample_controls=True):
     """Editable table for class names, expected accuracies, and sample allocations."""
     area_data = app_state.area_data.value
     sample_results = app_state.sample_results.value
     eua_dict = app_state.expected_user_accuracies.value
     eua_modes = app_state.eua_modes.value
     class_colors = app_state.class_colors.value
-    allocation_method = app_state.stratified_allocation_method.value
 
     if area_data is None or area_data.empty:
         solara.Warning("No area data available.")
         return
-
-    # Only show EUA controls for Neyman allocation
-    show_eua_controls = allocation_method == "neyman"
 
     samples_dict = {}
 
@@ -43,36 +39,35 @@ def class_editor_table():
 
     with solara.Column():
 
-        if show_eua_controls:
-            with solara.Card(
-                subtitle="Global EUA Settings",
-                style="margin-bottom: 16px; padding: 16px;",
-            ):
-                with solara.Row(gap="16px"):
-                    with solara.Column(style="flex: 1;"):
-                        solara.v.TextField(
-                            label="High EUA (%)",
-                            v_model=app_state.high_eua.value * 100,
-                            on_v_model=update_high_eua,
-                            type="number",
-                            min=30,
-                            max=100,
-                            step=1,
-                            hint="For stable, easily identifiable classes (e.g., 85-95%)",
-                            style="width: 100%;",
-                        )
-                    with solara.Column(style="flex: 1;"):
-                        solara.v.TextField(
-                            label="Low EUA (%)",
-                            v_model=app_state.low_eua.value * 100,
-                            on_v_model=update_low_eua,
-                            type="number",
-                            min=30,
-                            max=100,
-                            step=1,
-                            hint="For difficult classes, change detection, rare classes (e.g., 65-75%)",
-                            style="width: 100%;",
-                        )
+        with solara.Card(
+            subtitle="Expected User's Accuracy (EUA)",
+            style="margin-bottom: 16px; padding: 16px;",
+        ):
+            with solara.Row(gap="16px"):
+                with solara.Column(style="flex: 1;"):
+                    solara.v.TextField(
+                        label="High EUA (%)",
+                        v_model=app_state.high_eua.value * 100,
+                        on_v_model=update_high_eua,
+                        type="number",
+                        min=30,
+                        max=100,
+                        step=1,
+                        hint="For stable, easily identifiable classes (e.g., 85-95%)",
+                        style="width: 100%;",
+                    )
+                with solara.Column(style="flex: 1;"):
+                    solara.v.TextField(
+                        label="Low EUA (%)",
+                        v_model=app_state.low_eua.value * 100,
+                        on_v_model=update_low_eua,
+                        type="number",
+                        min=30,
+                        max=100,
+                        step=1,
+                        hint="For difficult classes, change detection, rare classes (e.g., 65-75%)",
+                        style="width: 100%;",
+                    )
 
         # Class table
         for idx, row in area_data.iterrows():
@@ -148,59 +143,54 @@ def class_editor_table():
                             style="min-width: 120px;",
                         )
 
-                    if show_eua_controls:
-                        with solara.Column(style="flex: 0 0 200px; margin: 0 8px;"):
-                            with solara.Row(gap="4px"):
-                                solara.Button(
-                                    "High",
-                                    on_click=make_set_mode_callback(map_code, "high"),
-                                    color="success" if current_mode == "high" else None,
-                                    outlined=current_mode != "high",
-                                    small=True,
-                                    style="min-width: 60px;",
-                                )
-                                solara.Button(
-                                    "Low",
-                                    on_click=make_set_mode_callback(map_code, "low"),
-                                    color="warning" if current_mode == "low" else None,
-                                    outlined=current_mode != "low",
-                                    small=True,
-                                    style="min-width: 60px;",
-                                )
-                                solara.Button(
-                                    "Custom",
-                                    on_click=make_set_mode_callback(map_code, "custom"),
-                                    color=(
-                                        "primary" if current_mode == "custom" else None
-                                    ),
-                                    outlined=current_mode != "custom",
-                                    small=True,
-                                    style="min-width: 60px;",
-                                )
+                    with solara.Column(style="flex: 0 0 200px; margin: 0 8px;"):
+                        with solara.Row(gap="4px"):
+                            solara.Button(
+                                "High",
+                                on_click=make_set_mode_callback(map_code, "high"),
+                                color="success" if current_mode == "high" else None,
+                                outlined=current_mode != "high",
+                                small=True,
+                                style="min-width: 60px;",
+                            )
+                            solara.Button(
+                                "Low",
+                                on_click=make_set_mode_callback(map_code, "low"),
+                                color="warning" if current_mode == "low" else None,
+                                outlined=current_mode != "low",
+                                small=True,
+                                style="min-width: 60px;",
+                            )
+                            solara.Button(
+                                "Custom",
+                                on_click=make_set_mode_callback(map_code, "custom"),
+                                color=("primary" if current_mode == "custom" else None),
+                                outlined=current_mode != "custom",
+                                small=True,
+                                style="min-width: 60px;",
+                            )
 
-                        if current_mode == "custom":
-                            with solara.Column(style="flex: 0 0 100px; margin: 0 8px;"):
-                                solara.v.TextField(
-                                    label="EUA (%)",
-                                    v_model=eua_value,
-                                    on_v_model=make_update_custom_eua_callback(
-                                        map_code
-                                    ),
-                                    type="number",
-                                    min=30,
-                                    max=100,
-                                    step=1,
-                                    dense=True,
-                                    style="width: 100%;",
-                                )
-                        else:
-                            with solara.Column(
-                                style="flex: 0 0 100px; margin: 0 8px; text-align: center;"
-                            ):
-                                solara.Text(
-                                    f"{eua_value:.0f}%",
-                                    style="color: #666; font-size: 0.9em; line-height: 2.5;",
-                                )
+                    if current_mode == "custom":
+                        with solara.Column(style="flex: 0 0 100px; margin: 0 8px;"):
+                            solara.v.TextField(
+                                label="EUA (%)",
+                                v_model=eua_value,
+                                on_v_model=make_update_custom_eua_callback(map_code),
+                                type="number",
+                                min=30,
+                                max=100,
+                                step=1,
+                                dense=True,
+                                style="width: 100%;",
+                            )
+                    else:
+                        with solara.Column(
+                            style="flex: 0 0 100px; margin: 0 8px; text-align: center;"
+                        ):
+                            solara.Text(
+                                f"{eua_value:.0f}%",
+                                style="color: #666; font-size: 0.9em; line-height: 2.5;",
+                            )
 
                     with solara.Column(
                         style="flex: 0 0 150px; text-align: right;", gap="4px"
@@ -218,8 +208,8 @@ def class_editor_table():
                                 """,
                         )
 
-                    if samples_dict:
-                        with solara.Column(style="flex: 0 0 100px;"):
+                    if samples_dict and show_sample_controls:
+                        with solara.Column(style="flex: 0 0 110px;"):
                             solara.v.TextField(
                                 label="Samples",
                                 v_model=samples,
