@@ -33,6 +33,13 @@ Features
   - Includes standard map controls (zoom, scale, layers, fullscreen).
 
 - **Output Generation:** Saves the generated sample points as CSV and GeoJSON files.
+- **Analysis (accuracy assessment):** After designing a stratified sample and collecting reference data, the
+  **Analysis** tab computes an error matrix, bias-adjusted area estimates with
+  confidence intervals (Olofsson et al. 2014), and user's/producer's/overall
+  accuracy. It reuses the classification areas from the design step as strata, or
+  accepts a separate area CSV. Confidence levels of 90/95/99% are supported.
+  Collect Earth Online ingestion and accuracy standard errors are planned for a
+  later release.
 - **SEPAL-UI Integration:** Built using ``sepal-ui`` for a seamless experience within the SEPAL environment.
 
 Prerequisites
