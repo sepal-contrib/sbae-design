@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.transform import xy
+from rasterio.windows import Window
 from shapely.geometry import Point
 
 
@@ -73,7 +74,7 @@ def generate_simple_random_points_from_aoi(
                     break
 
     except Exception as e:
-        raise ValueError(f"Error generating simple random points from AOI: {str(e)}")
+        raise ValueError(f"Error generating simple random points from AOI: {e!s}")
 
     return pd.DataFrame(sample_points)
 
@@ -140,7 +141,7 @@ def generate_systematic_points_from_aoi(
             x += grid_spacing
 
     except Exception as e:
-        raise ValueError(f"Error generating systematic points from AOI: {str(e)}")
+        raise ValueError(f"Error generating systematic points from AOI: {e!s}")
 
     return pd.DataFrame(sample_points)
 
@@ -297,7 +298,7 @@ def compute_area_from_raster(file_path: str) -> pd.DataFrame:
             )
 
     except Exception as e:
-        raise ValueError(f"Error processing raster file: {str(e)}")
+        raise ValueError(f"Error processing raster file: {e!s}")
 
 
 def compute_area_from_vector(file_path: str) -> pd.DataFrame:
@@ -360,7 +361,7 @@ def compute_area_from_vector(file_path: str) -> pd.DataFrame:
         )
 
     except Exception as e:
-        raise ValueError(f"Error processing vector file: {str(e)}")
+        raise ValueError(f"Error processing vector file: {e!s}")
 
 
 def compute_file_areas(file_path: str) -> pd.DataFrame:
@@ -406,6 +407,185 @@ def save_uploaded_file(file_info, temp_dir: Optional[str] = None) -> str:
     return file_path
 
 
+def _choose_ordinals(n_avail: int, k: int):
+    """``k`` distinct sorted random ordinals in ``[0, n_avail)``.
+
+    For huge populations we must not use ``np.random.choice(n, k,
+    replace=False)`` — it permutes an array of size ``n`` (tens of GB for a
+    Hansen tile). Since ``k`` is tiny relative to ``n``, rejection sampling of
+    random integers gives distinct ordinals with negligible retries and O(k)
+    memory.
+    """
+    k = min(int(k), int(n_avail))
+    if k <= 0:
+        return np.array([], dtype=np.int64)
+    if n_avail <= 1_000_000:
+        return np.sort(np.random.choice(n_avail, size=k, replace=False)).astype(
+            np.int64
+        )
+    ords = np.unique(np.random.randint(0, n_avail, size=k))
+    while ords.size < k:
+        extra = np.random.randint(0, n_avail, size=k - ords.size)
+        ords = np.unique(np.concatenate([ords, extra]))
+    return ords[:k].astype(np.int64)
+
+
+def _empty_pixels():
+    z = np.array([], dtype=np.int64)
+    return z, z, z
+
+
+def _iter_row_chunks(raster, target_pixels: int = 16_000_000):
+    """Yield full-width row-chunk windows sized to ~target_pixels each.
+
+    Reading in chunks (instead of one internal strip at a time) keeps the work
+    numpy-bound rather than Python-bound: a striped tile has ~60k 1-row strips,
+    which is far too many Python iterations, while chunk memory stays bounded
+    (~target_pixels bytes for a Byte raster).
+    """
+    width = raster.width
+    height = raster.height
+    chunk_rows = max(1, target_pixels // max(1, width))
+    for row_off in range(0, height, chunk_rows):
+        rows = min(chunk_rows, height - row_off)
+        yield Window(0, row_off, width, rows)
+
+
+def _sample_pixels_per_class(raster, targets: Dict[int, int]):
+    """Uniform random pixel coords per class, read block-by-block.
+
+    Never materializes the full band, so it is safe on very large rasters
+    (a full Hansen tile is ~3.5 GB read whole, and ``np.where(data == code)``
+    on the dominant class would allocate tens of GB of indices).
+
+    Returns ``{class_code: (rows, cols)}`` with ``min(n, available)`` entries.
+    """
+    caps = {int(c): int(n) for c, n in targets.items() if n and int(n) > 0}
+    if not caps:
+        return {}
+    codes = list(caps)
+
+    # Pass 1: count pixels per class (bool-sum only; no index materialization).
+    counts = {c: 0 for c in codes}
+    for window in _iter_row_chunks(raster):
+        block = raster.read(1, window=window)
+        for c in codes:
+            counts[c] += int((block == c).sum())
+
+    # Pick target ordinals per class within [0, N_c).
+    ordinals = {c: _choose_ordinals(counts[c], caps[c]) for c in codes}
+
+    # Pass 2: walk chunks, advance a running per-class counter, and pull only
+    # the targeted pixels. np.where runs only on chunks that hold a target.
+    seen = {c: 0 for c in codes}
+    ptr = {c: 0 for c in codes}
+    out_rows = {c: [] for c in codes}
+    out_cols = {c: [] for c in codes}
+
+    for window in _iter_row_chunks(raster):
+        block = raster.read(1, window=window)
+        for c in codes:
+            ords = ordinals[c]
+            if ptr[c] >= ords.size:
+                continue
+            mask = block == c
+            cc = int(mask.sum())
+            if cc == 0:
+                continue
+            lo = seen[c]
+            hi = lo + cc
+            p = ptr[c]
+            local = []
+            while p < ords.size and ords[p] < hi:
+                local.append(ords[p] - lo)  # index among class-c pixels here
+                p += 1
+            if local:
+                br, bc = np.where(mask)  # row-major order == global scan order
+                take = np.asarray(local, dtype=np.int64)
+                out_rows[c].extend((br[take] + window.row_off).tolist())
+                out_cols[c].extend((bc[take] + window.col_off).tolist())
+            ptr[c] = p
+            seen[c] = hi
+
+    return {
+        c: (
+            np.asarray(out_rows[c], dtype=np.int64),
+            np.asarray(out_cols[c], dtype=np.int64),
+        )
+        for c in codes
+    }
+
+
+def _sample_pixels_valid(raster, cap: int, nodata):
+    """Uniform random sample of ``cap`` valid pixels, read block-by-block.
+
+    Returns ``(rows, cols, values)`` with ``min(cap, available)`` entries.
+    """
+
+    def _valid_mask(block):
+        return block != nodata if nodata is not None else np.full(block.shape, True)
+
+    # Pass 1: count valid pixels.
+    total_valid = 0
+    for window in _iter_row_chunks(raster):
+        block = raster.read(1, window=window)
+        total_valid += int(_valid_mask(block).sum())
+
+    ordinals = _choose_ordinals(total_valid, cap)
+    if ordinals.size == 0:
+        return _empty_pixels()
+
+    # Pass 2: locate the targeted valid pixels (and their class values).
+    seen = 0
+    ptr = 0
+    out_rows: list = []
+    out_cols: list = []
+    out_vals: list = []
+    for window in _iter_row_chunks(raster):
+        if ptr >= ordinals.size:
+            break
+        block = raster.read(1, window=window)
+        mask = _valid_mask(block)
+        cc = int(mask.sum())
+        if cc == 0:
+            continue
+        lo = seen
+        hi = lo + cc
+        p = ptr
+        local = []
+        while p < ordinals.size and ordinals[p] < hi:
+            local.append(ordinals[p] - lo)
+            p += 1
+        if local:
+            br, bc = np.where(mask)
+            take = np.asarray(local, dtype=np.int64)
+            out_rows.extend((br[take] + window.row_off).tolist())
+            out_cols.extend((bc[take] + window.col_off).tolist())
+            out_vals.extend(block[br[take], bc[take]].astype(np.int64).tolist())
+        ptr = p
+        seen = hi
+
+    return (
+        np.asarray(out_rows, dtype=np.int64),
+        np.asarray(out_cols, dtype=np.int64),
+        np.asarray(out_vals, dtype=np.int64),
+    )
+
+
+def _pixels_to_lonlat(transform, crs, rows, cols):
+    """Vectorized pixel-center (row, col) -> (lon, lat) in EPSG:4326."""
+    xs, ys = xy(transform, np.asarray(rows), np.asarray(cols), offset="center")
+    xs = np.asarray(xs, dtype=float)
+    ys = np.asarray(ys, dtype=float)
+    if crs and not crs.is_geographic:
+        from pyproj import Transformer
+
+        transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+        lon, lat = transformer.transform(xs, ys)
+        return np.asarray(lon, dtype=float), np.asarray(lat, dtype=float)
+    return xs, ys
+
+
 def generate_sample_points_raster(
     file_path: str,
     samples_per_class: Dict[int, int],
@@ -431,58 +611,31 @@ def generate_sample_points_raster(
 
     try:
         with rasterio.open(file_path) as raster:
-            data = raster.read(1)
             transform = raster.transform
             crs = raster.crs
 
-            for class_code, n_samples in samples_per_class.items():
-                if n_samples <= 0:
-                    continue
+            sampled = _sample_pixels_per_class(raster, samples_per_class)
 
-                rows, cols = np.where(data == class_code)
-
-                if len(rows) == 0:
+            for class_code, (rows, cols) in sampled.items():
+                if rows.size == 0:
                     print(f"Warning: No pixels found for class {class_code}")
                     continue
 
-                n_available = len(rows)
-                n_to_sample = min(n_samples, n_available)
+                lon, lat = _pixels_to_lonlat(transform, crs, rows, cols)
+                class_name = class_lookup.get(class_code, f"Class {class_code}")
 
-                if n_to_sample > 0:
-                    sampled_indices = np.random.choice(
-                        n_available, n_to_sample, replace=False
+                for lo, la in zip(lon, lat):
+                    sample_points.append(
+                        {
+                            "longitude": float(lo),
+                            "latitude": float(la),
+                            "map_code": class_code,
+                            "map_edited_class": class_name,
+                        }
                     )
-                    sampled_rows = rows[sampled_indices]
-                    sampled_cols = cols[sampled_indices]
-
-                    for row, col in zip(sampled_rows, sampled_cols):
-                        x, y = xy(transform, row + 0.5, col + 0.5)
-
-                        if crs and not crs.is_geographic:
-                            point_gdf = gpd.GeoDataFrame(
-                                geometry=[Point(x, y)], crs=crs
-                            )
-                            point_gdf = point_gdf.to_crs("EPSG:4326")
-                            lon, lat = (
-                                point_gdf.geometry.iloc[0].x,
-                                point_gdf.geometry.iloc[0].y,
-                            )
-                        else:
-                            lon, lat = x, y
-
-                        sample_points.append(
-                            {
-                                "longitude": lon,
-                                "latitude": lat,
-                                "map_code": class_code,
-                                "map_edited_class": class_lookup.get(
-                                    class_code, f"Class {class_code}"
-                                ),
-                            }
-                        )
 
     except Exception as e:
-        raise ValueError(f"Error generating points from raster: {str(e)}")
+        raise ValueError(f"Error generating points from raster: {e!s}")
 
     return pd.DataFrame(sample_points)
 
@@ -586,7 +739,7 @@ def generate_sample_points_vector(
                 )
 
     except Exception as e:
-        raise ValueError(f"Error generating points from vector: {str(e)}")
+        raise ValueError(f"Error generating points from vector: {e!s}")
 
     return pd.DataFrame(sample_points)
 
@@ -615,45 +768,24 @@ def generate_simple_random_points_raster(
 
     try:
         with rasterio.open(file_path) as raster:
-            data = raster.read(1)
             transform = raster.transform
             crs = raster.crs
 
-            valid_mask = (
-                data != raster.nodata
-                if raster.nodata is not None
-                else np.ones_like(data, dtype=bool)
+            rows, cols, vals = _sample_pixels_valid(
+                raster, total_samples, raster.nodata
             )
-            rows, cols = np.where(valid_mask)
 
-            if len(rows) == 0:
+            if rows.size == 0:
                 raise ValueError("No valid pixels found in raster")
 
-            n_available = len(rows)
-            n_to_sample = min(total_samples, n_available)
+            lon, lat = _pixels_to_lonlat(transform, crs, rows, cols)
 
-            sampled_indices = np.random.choice(n_available, n_to_sample, replace=False)
-            sampled_rows = rows[sampled_indices]
-            sampled_cols = cols[sampled_indices]
-
-            for row, col in zip(sampled_rows, sampled_cols):
-                x, y = xy(transform, row + 0.5, col + 0.5)
-                class_code = int(data[row, col])
-
-                if crs and not crs.is_geographic:
-                    point_gdf = gpd.GeoDataFrame(geometry=[Point(x, y)], crs=crs)
-                    point_gdf = point_gdf.to_crs("EPSG:4326")
-                    lon, lat = (
-                        point_gdf.geometry.iloc[0].x,
-                        point_gdf.geometry.iloc[0].y,
-                    )
-                else:
-                    lon, lat = x, y
-
+            for lo, la, class_code in zip(lon, lat, vals):
+                class_code = int(class_code)
                 sample_points.append(
                     {
-                        "longitude": lon,
-                        "latitude": lat,
+                        "longitude": float(lo),
+                        "latitude": float(la),
                         "map_code": class_code,
                         "map_edited_class": class_lookup.get(
                             class_code, f"Class {class_code}"
@@ -662,7 +794,7 @@ def generate_simple_random_points_raster(
                 )
 
     except Exception as e:
-        raise ValueError(f"Error generating simple random points from raster: {str(e)}")
+        raise ValueError(f"Error generating simple random points from raster: {e!s}")
 
     return pd.DataFrame(sample_points)
 
@@ -691,10 +823,10 @@ def generate_systematic_points_raster(
 
     try:
         with rasterio.open(file_path) as raster:
-            data = raster.read(1)
             transform = raster.transform
             crs = raster.crs
-            height, width = data.shape
+            nodata = raster.nodata
+            height, width = raster.height, raster.width
 
             total_pixels = height * width
             grid_interval = int(np.sqrt(total_pixels / total_samples))
@@ -712,31 +844,47 @@ def generate_systematic_points_raster(
                 else grid_interval // 2
             )
 
+            grid_cols = np.arange(offset_col, width, grid_interval)
+            sel_rows: list = []
+            sel_cols: list = []
+            sel_vals: list = []
+
+            # Read only the sampled rows (one strip at a time) instead of the
+            # whole band, so this stays cheap on very large rasters.
             for row in range(offset_row, height, grid_interval):
-                for col in range(offset_col, width, grid_interval):
-                    if len(sample_points) >= total_samples:
-                        break
+                if len(sel_rows) >= total_samples:
+                    break
 
-                    if raster.nodata is not None and data[row, col] == raster.nodata:
-                        continue
+                line = raster.read(1, window=Window(0, row, width, 1))[0]
+                vals = line[grid_cols]
 
-                    x, y = xy(transform, row + 0.5, col + 0.5)
-                    class_code = int(data[row, col])
+                if nodata is not None:
+                    keep = vals != nodata
+                    cols_here = grid_cols[keep]
+                    vals_here = vals[keep]
+                else:
+                    cols_here = grid_cols
+                    vals_here = vals
 
-                    if crs and not crs.is_geographic:
-                        point_gdf = gpd.GeoDataFrame(geometry=[Point(x, y)], crs=crs)
-                        point_gdf = point_gdf.to_crs("EPSG:4326")
-                        lon, lat = (
-                            point_gdf.geometry.iloc[0].x,
-                            point_gdf.geometry.iloc[0].y,
-                        )
-                    else:
-                        lon, lat = x, y
+                remaining = total_samples - len(sel_rows)
+                if cols_here.size > remaining:
+                    cols_here = cols_here[:remaining]
+                    vals_here = vals_here[:remaining]
 
+                sel_rows.extend([row] * cols_here.size)
+                sel_cols.extend(cols_here.tolist())
+                sel_vals.extend(vals_here.tolist())
+
+            if sel_rows:
+                lon, lat = _pixels_to_lonlat(
+                    transform, crs, np.array(sel_rows), np.array(sel_cols)
+                )
+                for lo, la, class_code in zip(lon, lat, sel_vals):
+                    class_code = int(class_code)
                     sample_points.append(
                         {
-                            "longitude": lon,
-                            "latitude": lat,
+                            "longitude": float(lo),
+                            "latitude": float(la),
                             "map_code": class_code,
                             "map_edited_class": class_lookup.get(
                                 class_code, f"Class {class_code}"
@@ -744,11 +892,8 @@ def generate_systematic_points_raster(
                         }
                     )
 
-                if len(sample_points) >= total_samples:
-                    break
-
     except Exception as e:
-        raise ValueError(f"Error generating systematic points from raster: {str(e)}")
+        raise ValueError(f"Error generating systematic points from raster: {e!s}")
 
     return pd.DataFrame(sample_points)
 
@@ -833,7 +978,7 @@ def generate_simple_random_points_vector(
                     break
 
     except Exception as e:
-        raise ValueError(f"Error generating simple random points from vector: {str(e)}")
+        raise ValueError(f"Error generating simple random points from vector: {e!s}")
 
     return pd.DataFrame(sample_points)
 
@@ -929,7 +1074,7 @@ def generate_systematic_points_vector(
                 break
 
     except Exception as e:
-        raise ValueError(f"Error generating systematic points from vector: {str(e)}")
+        raise ValueError(f"Error generating systematic points from vector: {e!s}")
 
     return pd.DataFrame(sample_points)
 
