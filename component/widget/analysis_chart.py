@@ -3,6 +3,7 @@
 import solara
 from ipecharts.option import Grid, Option, Title, Tooltip, XAxis, YAxis
 from ipecharts.option.series import Bar, Custom
+from ipecharts.tools import encode_js_fn
 
 from component.model import app_state
 from component.scripts.accuracy import convert_area
@@ -33,22 +34,21 @@ def AreaEstimateChart(results: dict, unit: str, theme_toggle=None):
     error_series = Custom(
         name="CI",
         data=err_data,
-        renderItem={
-            "__raw__": (
-                "function (params, api) {"
-                "  var cat = api.value(0);"
-                "  var lo = api.coord([api.value(1), cat]);"
-                "  var hi = api.coord([api.value(2), cat]);"
-                "  var h = 6;"
-                "  var style = {stroke: '#333', lineWidth: 1.5};"
-                "  return {type:'group', children:["
-                "    {type:'line', shape:{x1:lo[0],y1:lo[1],x2:hi[0],y2:hi[1]}, style:style},"
-                "    {type:'line', shape:{x1:lo[0],y1:lo[1]-h,x2:lo[0],y2:lo[1]+h}, style:style},"
-                "    {type:'line', shape:{x1:hi[0],y1:hi[1]-h,x2:hi[0],y2:hi[1]+h}, style:style}"
-                "  ]};"
-                "}"
-            )
-        },
+        renderItem=encode_js_fn(
+            ["params", "api"],
+            (
+                "var cat = api.value(0);"
+                "var lo = api.coord([api.value(1), cat]);"
+                "var hi = api.coord([api.value(2), cat]);"
+                "var h = 6;"
+                "var style = {stroke: '#333', lineWidth: 1.5};"
+                "return {type:'group', children:["
+                "  {type:'line', shape:{x1:lo[0],y1:lo[1],x2:hi[0],y2:hi[1]}, style:style},"
+                "  {type:'line', shape:{x1:lo[0],y1:lo[1]-h,x2:lo[0],y2:lo[1]+h}, style:style},"
+                "  {type:'line', shape:{x1:hi[0],y1:hi[1]-h,x2:hi[0],y2:hi[1]+h}, style:style}"
+                "]};"
+            ),
+        ),
         encode={"x": [1, 2], "y": 0},
     )
 
