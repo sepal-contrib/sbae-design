@@ -78,10 +78,12 @@ def AnalysisPanel():
             if results.success:
                 app_state.set_analysis_results(results.to_dict())
                 if set(results.map_legend) != set(results.ref_legend):
-                    app_state.add_error(
+                    note = (
                         "Note: map and reference legends differ; classes present in "
                         "only one are shown with zero-filled values."
                     )
+                    if note not in app_state.error_messages.value:
+                        app_state.add_error(note)
             else:
                 app_state.set_analysis_results(None)
                 app_state.add_error(results.error_message or "Analysis failed")

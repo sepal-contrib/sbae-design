@@ -85,7 +85,9 @@ def test_srs_uses_reference_column_sums():
     assert np.isclose(out.loc[1, "srs_weight"], 0.55)
     assert np.isclose(out.loc[2, "srs_weight"], 0.45)
     assert np.isclose(out.loc[1, "srs_area_estimate"], 55.0)
-    assert np.isclose(out.loc[1, "srs_standard_error"], np.sqrt(0.45 * 0.55 / 100.0))
+    assert np.isclose(
+        out.loc[1, "srs_standard_error"], np.sqrt(0.45 * 0.55 / 100.0) * 100.0
+    )
 
 
 def test_srs_weights_sum_to_one_with_plot_sizes():

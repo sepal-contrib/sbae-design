@@ -70,7 +70,9 @@ def srs_estimates(matrix_area: pd.DataFrame, A_total: float, z: float) -> pd.Dat
     """Simple-random comparator per reference class.
 
     p_j = (sum_i n_ij) / (sum_ij n_ij)  [reference-class column sum / total sample area]
-    SE  = sqrt(p_j (1 - p_j) / N),  N = total sample area (== sample count when area=1).
+    SE(p_j) = sqrt(p_j (1 - p_j) / N),  N = total sample area (== sample count when area=1).
+    SE and CI are reported in AREA units (SE_area = SE(p_j) * A_total), matching the
+    stratified `standard_error`/`confidence_interval` columns.
     """
     col_sums = matrix_area.sum(axis=0)  # per reference class j
     N = float(matrix_area.values.sum())
@@ -78,11 +80,12 @@ def srs_estimates(matrix_area: pd.DataFrame, A_total: float, z: float) -> pd.Dat
     with np.errstate(invalid="ignore", divide="ignore"):
         weight = col_sums / denom
     se_prop = np.sqrt((1.0 - weight) * weight / denom)
+    se_area = se_prop * A_total
     return pd.DataFrame(
         {
             "srs_weight": weight,
             "srs_area_estimate": weight * A_total,
-            "srs_standard_error": se_prop,
-            "srs_confidence_interval": se_prop * z * A_total,
+            "srs_standard_error": se_area,
+            "srs_confidence_interval": se_area * z,
         }
     )

@@ -3,6 +3,8 @@
 import logging
 from typing import List
 
+import pandas as pd
+
 from component.analysis.base import AnalysisStrategy
 from component.analysis.types import (
     AccuracyRow,
@@ -86,6 +88,22 @@ class StratifiedEstimationStrategy(AnalysisStrategy):
             map_legend, ref_legend = legends(ref)
             matrix = confusion_matrix_area(ref, map_legend, ref_legend)
             w, a_total = stratum_weights(area)
+
+            # Defensive guard (spec section 6, bug #1): if aligning weights to the
+            # map legend produces NaNs, fail loudly instead of letting pij_matrix's
+            # fillna(0) silently zero-weight a whole stratum. In practice
+            # validate_inputs() already rejects reference map classes missing from
+            # the area file, so this should be unreachable via the UI; it's kept
+            # as a last-resort check in case callers invoke analyze() directly.
+            w_aligned = w.reindex(map_legend)
+            if w_aligned.isna().any():
+                missing = [c for c in map_legend if bool(pd.isna(w_aligned.get(c)))]
+                return AnalysisResults.error(
+                    self.method,
+                    f"No matching area for map class(es) {missing}; check that reference "
+                    "and area class codes have the same type.",
+                )
+
             pij = pij_matrix(matrix, w)
 
             est = stratified_area_estimates(pij, matrix, a_total, z)  # index=ref_legend
