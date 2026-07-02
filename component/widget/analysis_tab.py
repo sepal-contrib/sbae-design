@@ -1,6 +1,7 @@
 """Accuracy-assessment analysis UI: upload -> mapping -> compute -> results."""
 
 import logging
+from pathlib import Path
 
 import pandas as pd
 import solara
@@ -11,6 +12,46 @@ from component.model import app_state
 from component.widget.analysis_results import AnalysisResultsView  # Task 9/10
 
 logger = logging.getLogger("sbae.analysis.ui")
+
+# Bundled example dataset (collected reference + strata for the aa_test_congo map).
+_EXAMPLE_DIR = (
+    Path(__file__).parent.parent.parent / "tests" / "data" / "analysis_example"
+)
+_EXAMPLE_REFERENCE_CSV = _EXAMPLE_DIR / "reference_example.csv"
+_EXAMPLE_AREA_CSV = _EXAMPLE_DIR / "area_example.csv"
+_EXAMPLE_COLUMN_MAPPING = {
+    "map": "map_code",
+    "ref": "ref_code",
+    "x": "location_x",
+    "y": "location_y",
+    "area_class": "map_code",
+    "area_value": "map_area",
+}
+
+
+def load_example_analysis_data(state) -> None:
+    """Load the bundled example reference + strata into the analysis state.
+
+    Self-contained: uses the "upload" area source so it never overwrites the
+    design tab's ``area_data``. The panel's auto-recalc effect then runs the
+    analysis and renders the worked example.
+    """
+    if not _EXAMPLE_REFERENCE_CSV.exists() or not _EXAMPLE_AREA_CSV.exists():
+        state.add_error(f"Example analysis data not found in {_EXAMPLE_DIR}")
+        return
+    try:
+        ref_df = pd.read_csv(_EXAMPLE_REFERENCE_CSV)
+        area_df = pd.read_csv(_EXAMPLE_AREA_CSV)
+    except Exception as e:  # pragma: no cover - defensive
+        state.add_error(f"Could not load example analysis data: {e!s}")
+        return
+    state.analysis_reference_df.value = ref_df
+    state.analysis_area_df.value = area_df
+    state.analysis_area_source.value = "upload"
+    state.analysis_column_mapping.value = dict(_EXAMPLE_COLUMN_MAPPING)
+    state.analysis_confidence_level.value = 95.0
+    state.analysis_status.value = ""
+
 
 _ROLE_HINTS = {
     "map": ("map", "predicted", "class_map", "mapclass", "map_code", "pred"),
@@ -32,6 +73,18 @@ def guess_column_mapping(columns: list) -> dict:
                 mapping[role] = match
                 break
     return mapping
+
+
+@solara.component
+def ExampleDataButton():
+    """One-click loader for the bundled example analysis dataset."""
+    solara.Button(
+        "Use example data",
+        on_click=lambda: load_example_analysis_data(app_state),
+        color="default",
+        text=True,
+        small=True,
+    )
 
 
 @solara.component
@@ -113,6 +166,9 @@ def AnalysisPanel():
             FileInputComponent(extensions=[".csv"], on_value=lambda p: ref_path.set(p))
             if app_state.analysis_status.value:
                 solara.Info(app_state.analysis_status.value)
+            with solara.Row(justify="center", classes=["mt-2"]):
+                solara.Text("or")
+                ExampleDataButton()
 
         ref_df = app_state.analysis_reference_df.value
         if ref_df is not None and not ref_df.empty:
