@@ -94,27 +94,40 @@ def confusion_matrix_area(
     )
 
 
+def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+    """Element-wise divide, coercing division by zero (0/0 or x/0) to 0.0."""
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return (numerator / denominator.replace({0.0: np.nan})).fillna(0.0)
+
+
 def accuracies_from_matrices(
     matrix_area: pd.DataFrame, pij: pd.DataFrame
 ) -> pd.DataFrame:
     """Producer's, User's, Weighted-Producer's accuracy per class (0..1).
 
-    0/0 (class absent from a margin) -> 0.0, never NaN.
+    Uses FULL row/column margins so reference-only or map-only classes are not
+    dropped: User's accuracy denominator is the full row sum over ALL reference
+    classes; Producer's is the full column sum over ALL map classes. 0/0 -> 0.0.
     """
-    classes = list(matrix_area.index)
-    m = matrix_area.reindex(index=classes, columns=classes, fill_value=0.0)
-    diag = pd.Series(np.diag(m.values), index=classes)
-    col_sums = m.sum(axis=0)
-    row_sums = m.sum(axis=1)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        producers = (diag / col_sums.replace({0.0: np.nan})).fillna(0.0)
-        users = (diag / row_sums.replace({0.0: np.nan})).fillna(0.0)
+    all_classes = sorted(set(matrix_area.index) | set(matrix_area.columns))
 
-    pij_sq = pij.reindex(index=classes, columns=classes, fill_value=0.0)
-    diag_w = pd.Series(np.diag(pij_sq.values), index=classes)
-    col_sums_w = pij_sq.sum(axis=0)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        weighted_prod = (diag_w / col_sums_w.replace({0.0: np.nan})).fillna(0.0)
+    def _diag(m: pd.DataFrame) -> pd.Series:
+        return pd.Series(
+            {
+                c: float(m.loc[c, c]) if (c in m.index and c in m.columns) else 0.0
+                for c in all_classes
+            }
+        )
+
+    row_sums = matrix_area.sum(axis=1).reindex(all_classes).fillna(0.0)
+    col_sums = matrix_area.sum(axis=0).reindex(all_classes).fillna(0.0)
+    diag = _diag(matrix_area)
+    users = _safe_divide(diag, row_sums)
+    producers = _safe_divide(diag, col_sums)
+
+    col_sums_w = pij.sum(axis=0).reindex(all_classes).fillna(0.0)
+    diag_w = _diag(pij)
+    weighted_prod = _safe_divide(diag_w, col_sums_w)
 
     return pd.DataFrame(
         {

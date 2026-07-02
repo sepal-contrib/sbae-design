@@ -97,6 +97,17 @@ def test_producers_accuracy_zero_not_nan_for_absent_reference_class():
     assert acc.loc[2, "weighted_producers_accuracy"] == 0.0
 
 
+def test_accuracies_keep_reference_only_class():
+    # reference class 3 has no map row; its area must still count in UA denominators
+    m = pd.DataFrame(
+        [[40.0, 5.0, 5.0], [10.0, 35.0, 5.0]], index=[1, 2], columns=[1, 2, 3]
+    )
+    pij = m.div(m.sum(axis=1), axis=0) * 0.5  # any consistent proportion matrix
+    acc = accuracies_from_matrices(m, pij)
+    assert np.isclose(acc.loc[1, "users_accuracy"], 0.8)   # 40/50, not 40/45
+    assert np.isclose(acc.loc[2, "users_accuracy"], 0.7)   # 35/50, not 35/45
+
+
 def test_overall_accuracy_is_diagonal_sum():
     pij = pd.DataFrame([[0.54, 0.06], [0.08, 0.32]], index=[1, 2], columns=[1, 2])
     assert np.isclose(overall_accuracy(pij), 0.86)
