@@ -40,8 +40,8 @@ def stratified_area_estimates(
     SE(p_j) = sqrt( sum_i w_i^2 * [f_ij (1 - f_ij) / (n_i - 1)] ),
       f_ij = n_ij / n_i. (row fraction); n_i. is the row area-sum (== count when area=1).
     """
-    p_hat = pij.sum(axis=0)          # column sum over map classes i -> per ref class j
-    w = pij.sum(axis=1)              # equals stratum weight W_i
+    p_hat = pij.sum(axis=0)  # column sum over map classes i -> per ref class j
+    w = pij.sum(axis=1)  # equals stratum weight W_i
     row_sums = matrix_area.sum(axis=1)
     with np.errstate(invalid="ignore", divide="ignore"):
         row_frac = matrix_area.div(row_sums.replace({0.0: np.nan}), axis=0).fillna(0.0)
@@ -72,7 +72,7 @@ def srs_estimates(matrix_area: pd.DataFrame, A_total: float, z: float) -> pd.Dat
     p_j = (sum_i n_ij) / (sum_ij n_ij)  [reference-class column sum / total sample area]
     SE  = sqrt(p_j (1 - p_j) / N),  N = total sample area (== sample count when area=1).
     """
-    col_sums = matrix_area.sum(axis=0)      # per reference class j
+    col_sums = matrix_area.sum(axis=0)  # per reference class j
     N = float(matrix_area.values.sum())
     denom = N if N else 1.0
     with np.errstate(invalid="ignore", divide="ignore"):

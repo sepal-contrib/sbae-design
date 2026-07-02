@@ -1,8 +1,7 @@
-"""Pure functions for accuracy-assessment analysis: standardization, confusion
-matrix, and accuracy metrics (Olofsson et al. 2014).
+"""Accuracy-assessment analysis: standardization, confusion matrix, accuracies.
 
-Vendored and de-bugged from openforis/accuracy-assessment backend
-(io.py, compute.py, accuracy.py). Areas carry the input's native unit.
+Olofsson et al. 2014. Vendored and de-bugged from openforis/accuracy-assessment
+backend (io.py, compute.py, accuracy.py). Areas carry the input's native unit.
 """
 
 from __future__ import annotations

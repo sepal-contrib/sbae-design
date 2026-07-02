@@ -27,12 +27,12 @@ class AnalysisInputs:
     """Validated, standardized inputs for an analysis run."""
 
     method: AnalysisMethod
-    reference_df: pd.DataFrame            # standardized: map_code, ref_code, area [, x, y, ...]
-    area_data: pd.DataFrame               # standardized: map_code, map_area
-    confidence_level: float               # percentage, e.g. 95.0
-    column_mapping: Dict[str, str]        # role -> source column (kept for export/labels)
-    filter_spec: Optional[Dict] = None    # {"column", "include_values"}
-    area_unit: str = "ha"                 # display unit; math stays native
+    reference_df: pd.DataFrame  # standardized: map_code, ref_code, area [, x, y, ...]
+    area_data: pd.DataFrame  # standardized: map_code, map_area
+    confidence_level: float  # percentage, e.g. 95.0
+    column_mapping: Dict[str, str]  # role -> source column (kept for export/labels)
+    filter_spec: Optional[Dict] = None  # {"column", "include_values"}
+    area_unit: str = "ha"  # display unit; math stays native
     class_names: Optional[Dict[int, str]] = None  # map_code -> human label
 
     @property
@@ -46,7 +46,7 @@ class ClassEstimate:
     class_name: str
     number_samples: float
     map_pixel_count: float
-    area_estimate: float                  # error-adjusted stratified (Olofsson Eq. 8)
+    area_estimate: float  # error-adjusted stratified (Olofsson Eq. 8)
     standard_error: float
     confidence_interval: float
     srs_area_estimate: float
@@ -72,7 +72,7 @@ class AnalysisResults:
     class_estimates: List[ClassEstimate] = field(default_factory=list)
     accuracy_rows: List[AccuracyRow] = field(default_factory=list)
     overall_accuracy: float = 0.0
-    total_area: float = 0.0               # A_total, native unit
+    total_area: float = 0.0  # A_total, native unit
     area_unit: str = "ha"
     confidence_level: float = 0.0
     z: float = 0.0
