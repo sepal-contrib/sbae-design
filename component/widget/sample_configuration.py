@@ -207,12 +207,10 @@ def DesignTab(sbae_map=None):
 
 @solara.component
 def AnalysisTab():
-    """Placeholder for the accuracy-assessment analysis (ported later)."""
-    with solara.Column(style="padding: 16px 4px;"):
-        solara.Markdown(
-            "### Accuracy assessment\n\n"
-            "_Coming soon._ The accuracy-assessment analysis will be ported here."
-        )
+    """Accuracy-assessment analysis (area estimation + accuracies)."""
+    from component.widget.analysis_tab import AnalysisPanel
+
+    AnalysisPanel()
 
 
 @solara.component
