@@ -66,9 +66,9 @@ def AreaEstimateChart(results: dict, unit: str, theme_toggle=None):
         tooltip=Tooltip(trigger="axis", axisPointer={"type": "shadow"}),
         grid=Grid(left="22%", right="8%", top="14%", bottom="12%"),
     )
-    with solara.Card("Area chart"):
-        EChartsWidget.element(
-            option=option,
-            style={"height": "420px", "width": "100%"},
-            theme_toggle=theme_toggle,
-        )
+    # Card-less: the chart carries its own title, and the right panel avoids cards.
+    EChartsWidget.element(
+        option=option,
+        style={"height": "420px", "width": "100%"},
+        theme_toggle=theme_toggle,
+    )

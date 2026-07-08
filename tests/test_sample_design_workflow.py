@@ -12,6 +12,8 @@ from component.tile.class_editor import class_editor_table
 from component.widget.sample_configuration import (
     AA_DESIGN_INTRO,
     AccuracyDesignControls,
+    DesignOutputs,
+    DesignTab,
     SampleDesignWorkflowSelector,
     apply_sample_design_workflow,
 )
@@ -121,3 +123,44 @@ def test_allocation_preview_shows_only_samples():
     assert "Prop.:" not in texts
     assert "Adjusted:" not in texts
     rc.find(v.TextField, label="Samples").assert_single()
+
+
+def test_design_outputs_render_summary_generate_export_blocks():
+    """DesignOutputs relocates the Summary/Generate/Export blocks into the Design tab.
+
+    Each block keeps its labeled header, so the three titles must render even
+    with no map and no computed results (empty-state).
+    """
+    app_state.area_data.value = None
+    app_state.sample_results.value = None
+    app_state.sample_points.value = None
+
+    _, rc = solara.render(DesignOutputs(), handle_error=False)
+
+    header_texts = {
+        str(child) for w in rc.find(v.Html).widgets for child in (w.children or [])
+    }
+    assert "Summary" in header_texts
+    assert "Generate Points" in header_texts
+    assert "Export Results" in header_texts
+
+
+def test_design_tab_includes_design_outputs_even_without_data():
+    """Design outputs render inside the Design tab, visible even without data.
+
+    They live in the tab (not as separate right-panel sections), so they no
+    longer appear on the Analysis tab.
+    """
+    app_state.area_data.value = None
+    app_state.aoi_gdf.value = None
+    app_state.sample_results.value = None
+    app_state.sample_points.value = None
+
+    _, rc = solara.render(DesignTab(), handle_error=False)
+
+    header_texts = {
+        str(child) for w in rc.find(v.Html).widgets for child in (w.children or [])
+    }
+    assert "Summary" in header_texts
+    assert "Generate Points" in header_texts
+    assert "Export Results" in header_texts

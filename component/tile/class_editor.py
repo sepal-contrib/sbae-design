@@ -189,7 +189,8 @@ def class_editor_table(show_sample_controls=True):
                         ):
                             solara.Text(
                                 f"{eua_value:.0f}%",
-                                style="color: #666; font-size: 0.9em; line-height: 2.5;",
+                                classes=["text--secondary"],
+                                style="font-size: 0.9em; line-height: 2.5;",
                             )
 
                     with solara.Column(
@@ -197,7 +198,8 @@ def class_editor_table(show_sample_controls=True):
                     ):
                         solara.Text(
                             f"{area_ha:,.2f} ha ({area_pct:.1f}%)",
-                            style="color: #666; font-size: 0.9em;",
+                            classes=["text--secondary"],
+                            style="font-size: 0.9em;",
                         )
                         solara.HTML(
                             tag="div",

@@ -90,6 +90,10 @@ class AppState:
         self.analysis_area_unit = solara.reactive("ha")  # "ha" | "m2"
         self.analysis_results = solara.reactive(None)
         self.analysis_status = solara.reactive("")
+        # Display names for the loaded analysis tables (mirrors uploaded_file_info
+        # for the design tab): shown by CurrentTableDisplay once a CSV is loaded.
+        self.analysis_reference_name = solara.reactive("")
+        self.analysis_area_name = solara.reactive("")
 
     def update_class_name(self, map_code: int, new_name: str):
         """Update class name in area data."""
@@ -571,6 +575,8 @@ class AppState:
         self.analysis_area_unit.value = "ha"
         self.analysis_results.value = None
         self.analysis_status.value = ""
+        self.analysis_reference_name.value = ""
+        self.analysis_area_name.value = ""
 
     def export_confusion_matrix_csv(self) -> str:
         """Confusion matrix as CSV (class codes as row/col headers)."""

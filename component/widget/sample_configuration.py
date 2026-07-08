@@ -12,7 +12,11 @@ import solara.lab
 from component.model import app_state
 from component.sampling import SamplingService
 from component.tile.class_editor import class_editor_table
+from component.tile.export import Export
 from component.widget.aoi_upload_selector import AoiUploadSelector
+from component.widget.custom_widgets import Section
+from component.widget.point_generation import PointGeneration
+from component.widget.summary import Summary
 
 logger = logging.getLogger("sbae.sample_configuration")
 
@@ -68,7 +72,7 @@ def apply_sample_design_workflow(state, workflow: str):
 
 
 @solara.component
-def SampleConfiguration(sbae_map=None):
+def SampleConfiguration(sbae_map=None, theme_toggle=None):
     """Sample configuration widget for the right panel."""
     # Use use_ref to persist value across renders without re-initializing
     prev_method_ref = solara.use_ref(app_state.sampling_method.value)
@@ -140,7 +144,7 @@ def SampleConfiguration(sbae_map=None):
             solara.lab.Tab("Analysis")
 
         if active_tab.value == 0:
-            DesignTab(sbae_map)
+            DesignTab(sbae_map, theme_toggle=theme_toggle)
         else:
             AnalysisTab()
 
@@ -176,7 +180,7 @@ def MethodologyHelpButton(
 
 
 @solara.component
-def DesignTab(sbae_map=None):
+def DesignTab(sbae_map=None, theme_toggle=None):
     """Olofsson accuracy-assessment sample design."""
     with solara.Row(style="align-items: center; gap: 4px;"):
         with solara.Column(style="flex: 1;"):
@@ -196,13 +200,42 @@ def DesignTab(sbae_map=None):
             and not app_state.area_data.value.empty
         )
 
-    if not has_valid_data:
-        return
+    if has_valid_data:
+        if sampling_method in ("simple", "systematic"):
+            SimpleSystematicParameters()
+        elif sampling_method == "stratified":
+            AccuracyDesignControls()
 
-    if sampling_method in ("simple", "systematic"):
-        SimpleSystematicParameters()
-    elif sampling_method == "stratified":
-        AccuracyDesignControls()
+    # Design outputs (summary / generate points / export) live inside the
+    # Design tab so they no longer leak onto the Analysis tab.
+    DesignOutputs(sbae_map, theme_toggle=theme_toggle)
+
+
+@solara.component
+def DesignOutputs(sbae_map=None, theme_toggle=None):
+    """Design-phase outputs, relocated from standalone right-panel sections.
+
+    Renders the sample-design summary, point generation and export blocks using
+    the shared theme-aware ``Section`` header (matching pysepal's right-panel
+    section look). Kept standalone so it scopes cleanly to the Design tab (and
+    renders without a map).
+    """
+    Section("Summary", "mdi-progress-check")
+    Summary(theme_toggle=theme_toggle)
+
+    Section(
+        "Generate Points",
+        "mdi-map-marker-multiple",
+        "Generate sample points based on calculated sample sizes.",
+    )
+    PointGeneration(sbae_map)
+
+    Section(
+        "Export Results",
+        "mdi-download",
+        "Download the generated sample points (CSV / GeoJSON).",
+    )
+    Export()
 
 
 @solara.component

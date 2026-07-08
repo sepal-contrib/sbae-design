@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 import solara
 from sepal_ui.sepalwidgets.file_input import FileInputComponent
+from sepal_ui.solara.notifications import use_notifications
 from solara.alias import rv
 
 from component.model import app_state
@@ -86,7 +87,6 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
     is_loading = optimization_status in ("running", "adding_to_map")
 
     with solara.Card(classes=["mb-4"]):
-
         with solara.Row(justify="space-between", style={"align-items": "center"}):
             with solara.Column(gap="0px"):
                 solara.HTML(
@@ -99,7 +99,8 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
                 solara.HTML(
                     tag="div",
                     unsafe_innerHTML=f"Type: {file_type} | Size: {size_mb:.1f} MB",
-                    style="font-size: 12px; color: #666; margin-top: 4px;",
+                    classes=["text--secondary"],
+                    style="font-size: 12px; margin-top: 4px;",
                 )
 
             solara.Button(
@@ -172,6 +173,8 @@ def UploadTile(sbae_map: SbaeMap):
 
     def handle_non_raster_and_layer_removal():
         """Handle non-raster files and layer removal when needed."""
+        if sbae_map is None:
+            return
         sampling_method = app_state.sampling_method.value
         should_show_layer = has_file and sampling_method == "stratified"
 
@@ -196,25 +199,42 @@ def UploadTile(sbae_map: SbaeMap):
         ],
     )
 
+    notifications = use_notifications()
+
+    def announce_upload_state():
+        """Toast the terminal upload/optimization state (progress stays inline)."""
+        if not has_file:
+            return
+        if is_raster_file(app_state.file_path.value or ""):
+            if raster_prep_result.state == solara.ResultState.ERROR:
+                logger.error("Raster optimization failed: %s", raster_prep_result.error)
+                notifications.error(
+                    f"Error optimizing raster: {raster_prep_result.error}"
+                )
+            elif raster_prep_result.state == solara.ResultState.FINISHED:
+                notifications.success(
+                    "File uploaded and optimized — you can now edit class names."
+                )
+        else:
+            notifications.success("File uploaded successfully.")
+
+    solara.use_effect(announce_upload_state, [has_file, raster_prep_result.state])
+
     with solara.Column():
         FileUploadSection(is_loading=is_loading)
 
-        if has_file:
-            # Show raster preparation status
-            if is_raster_file(app_state.file_path.value or ""):
-                if raster_prep_result.state == solara.ResultState.RUNNING:
-                    solara.Info(
-                        "⏳ Optimizing raster for display... This may take a few moments for large files."
-                    )
-                    solara.ProgressLinear(value=True)
-                elif raster_prep_result.state == solara.ResultState.ERROR:
-                    solara.Error(f"Error optimizing raster: {raster_prep_result.error}")
-                elif raster_prep_result.state == solara.ResultState.FINISHED:
-                    solara.Success(
-                        "✅ File uploaded and optimized successfully! You can now proceed to edit class names."
-                    )
-            else:
-                solara.Success("✅ File uploaded successfully!")
+        # In-modal progress for raster optimization stays inline (a toast would
+        # auto-dismiss mid-operation); the success/error toast fires on finish.
+        if (
+            has_file
+            and is_raster_file(app_state.file_path.value or "")
+            and raster_prep_result.state == solara.ResultState.RUNNING
+        ):
+            solara.Text(
+                "⏳ Optimizing raster for display… this may take a moment for large files.",
+                style="font-size: 13px; opacity: 0.8;",
+            )
+            solara.ProgressLinear(value=True)
 
 
 @solara.component
@@ -408,12 +428,20 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         or is_loading.value
     )
 
-    with solara.Card():
+    notifications = use_notifications()
+
+    def announce_file_error():
+        if app_state.file_error.value:
+            logger.warning("File selection error: %s", app_state.file_error.value)
+            notifications.error(app_state.file_error.value)
+
+    solara.use_effect(announce_file_error, [app_state.file_error.value])
+
+    # No card wrapper here: this section renders inside the upload dialog's
+    # CardText, so a card of its own would nest cards. See UploadDialogCard.
+    with solara.Column(gap="8px"):
         FileUploadInstructions()
         FileInputComponent(on_value=handle_file_selection_from_input)
-
-        if app_state.file_error.value:
-            ErrorAlert(app_state.file_error.value)
 
         if selected_file_info_preview.value and not app_state.uploaded_file_info.value:
             FilePreview(selected_file_info_preview.value)
@@ -440,15 +468,6 @@ def FileUploadInstructions():
         "Upload your land cover classification map as a raster file. "
         "Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio."
     )
-
-
-@solara.component
-def ErrorAlert(error_message: str):
-    """Error alert component."""
-    with rv.Alert(type="error", text=True):
-        with solara.Row(gap="4px", style="align-items: center;"):
-            solara.Text("Error:", style="font-weight: bold;")
-            solara.Text(error_message)
 
 
 @solara.component

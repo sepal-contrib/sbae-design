@@ -110,17 +110,24 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
         with solara.v.Dialog(
             v_model=show_upload_modal.value,
             on_v_model=show_upload_modal.set,
-            max_width="900px",
-            persistent=False,
+            max_width=900,
+            eager=True,
         ):
-            with solara.Card(margin=0):
+            UploadDialogCard(sbae_map, on_close=close_upload_modal)
 
-                with solara.Column():
-                    UploadTile(sbae_map)
 
-                with solara.CardActions():
-                    solara.Button(
-                        label="Close",
-                        on_click=close_upload_modal,
-                        text=True,
-                    )
+@solara.component
+def UploadDialogCard(sbae_map: SbaeMap = None, on_close=None):
+    """Card body for the upload modal.
+
+    Matches the "Edit classes" dialog styling: a single titled card (no nested
+    cards) with the content in a scrollable ``CardText`` and the Close button
+    right-aligned in the actions row.
+    """
+    with solara.v.Card():
+        solara.v.CardTitle(children=["Upload classification map"])
+        with solara.v.CardText(style="max-height: 70vh; overflow-y: auto;"):
+            UploadTile(sbae_map)
+        with solara.v.CardActions():
+            solara.v.Spacer()
+            solara.Button("Close", text=True, on_click=on_close)
