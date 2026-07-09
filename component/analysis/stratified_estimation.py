@@ -16,7 +16,7 @@ from component.analysis.types import (
 from component.scripts.accuracy import (
     accuracies_from_matrices,
     apply_filter,
-    confusion_matrix_area,
+    confusion_matrix_counts,
     legends,
     overall_accuracy,
 )
@@ -72,6 +72,16 @@ class StratifiedEstimationStrategy(AnalysisStrategy):
                 "Map classes present in the reference file but missing from the "
                 f"area file: {missing}"
             )
+        # An area stratum with no reference samples cannot have its class
+        # composition estimated; its weight would be silently dropped from the
+        # column sums, making the class proportions sum below 1 (Olofsson Eq. 8).
+        # Fail explicitly instead of reporting a misleading success.
+        area_without_ref = sorted(area_classes - ref_map_classes)
+        if area_without_ref:
+            errors.append(
+                "Map class(es) in the area file have no reference samples, so their "
+                f"stratum weight cannot be estimated: {area_without_ref}"
+            )
         return errors
 
     def analyze(self, inputs: AnalysisInputs) -> AnalysisResults:
@@ -86,7 +96,7 @@ class StratifiedEstimationStrategy(AnalysisStrategy):
             z = get_z_score(inputs.confidence_level_decimal)
 
             map_legend, ref_legend = legends(ref)
-            matrix = confusion_matrix_area(ref, map_legend, ref_legend)
+            matrix = confusion_matrix_counts(ref, map_legend, ref_legend)
             w, a_total = stratum_weights(area)
 
             # Defensive guard (spec section 6, bug #1): if aligning weights to the

@@ -14,6 +14,20 @@ def _hex_to_rgb(hex_color: str) -> tuple:
     return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
 
 
+def _build_class_colormap(class_colors: dict) -> dict:
+    """Build a discrete {pixel_value: (r, g, b, a)} LUT for a categorical raster.
+
+    Every class present in ``class_colors`` is rendered opaque, including code 0
+    and codes above 255 -- area calculation treats those as valid, sampleable
+    classes, so they must be visible on the map. Values not in ``class_colors``
+    render transparent (background).
+    """
+    colormap = {i: (0, 0, 0, 0) for i in range(256)}
+    for code, hex_color in class_colors.items():
+        colormap[int(code)] = (*_hex_to_rgb(hex_color), 255)
+    return colormap
+
+
 class SbaeMap(SepalMap):
     """SBAE Map class extending SepalMap for map visualization and interactions."""
 
@@ -37,8 +51,8 @@ class SbaeMap(SepalMap):
         Unlike ``add_raster`` (which applies a continuous inferno colormap
         stretched across the value range and renders sparse/low-value class
         maps as black), this builds a discrete lookup table so each class
-        value gets its own color. Class ``0`` is always rendered transparent
-        (background), and any value not in ``class_colors`` is transparent too.
+        value gets its own color. Any value not in ``class_colors`` is rendered
+        transparent (background); classes 0 and > 255 are colored like any other.
 
         Args:
             path: path to the (optimized) raster file.
@@ -55,18 +69,16 @@ class SbaeMap(SepalMap):
                 path,
             )
             return self.add_raster(
-                path, layer_name=layer_name, key=key, opacity=opacity,
+                path,
+                layer_name=layer_name,
+                key=key,
+                opacity=opacity,
                 fit_bounds=fit_bounds,
             )
 
-        # Discrete LUT: transparent everywhere unless it's a known class.
-        # Class 0 is intentionally left transparent (background).
-        colormap = {i: (0, 0, 0, 0) for i in range(256)}
-        for code, hex_color in class_colors.items():
-            code = int(code)
-            if code == 0 or not (0 <= code <= 255):
-                continue
-            colormap[code] = (*_hex_to_rgb(hex_color), 255)
+        # Discrete LUT: transparent everywhere unless it's a known class. Every
+        # class in class_colors is colored, including code 0 and codes > 255.
+        colormap = _build_class_colormap(class_colors)
 
         # localtileserver won't accept a raw {value: rgba} dict as `colormap`;
         # it must be registered server-side first, which yields a "custom:<hash>"

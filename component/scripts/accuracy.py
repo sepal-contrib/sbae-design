@@ -73,10 +73,15 @@ def legends(df_ref: pd.DataFrame) -> Tuple[list, list]:
     return map_legend, ref_legend
 
 
-def confusion_matrix_area(
+def confusion_matrix_counts(
     df_ref: pd.DataFrame, map_legend: Sequence, ref_legend: Sequence
 ) -> pd.DataFrame:
-    """Summed per-sample areas; rows = map classes, cols = reference classes.
+    """Sample COUNTS n_ij; rows = map classes, cols = reference classes.
+
+    Cells are the number of reference samples (not summed plot areas): the
+    Olofsson estimator, its variance denominator ``n_i - 1`` and the reported
+    sample counts must all be true sample counts. A per-sample plot-area column
+    does not weight the estimator (that would produce invalid SE/CI/counts).
 
     Reindexed on BOTH full legends (fill 0) so reference-only classes are kept.
     """
@@ -84,11 +89,10 @@ def confusion_matrix_area(
         df_ref.pivot_table(
             index="map_code",
             columns="ref_code",
-            values="area",
-            aggfunc="sum",
-            fill_value=0.0,
+            aggfunc="size",
+            fill_value=0,
         )
-        .reindex(index=list(map_legend), columns=list(ref_legend), fill_value=0.0)
+        .reindex(index=list(map_legend), columns=list(ref_legend), fill_value=0)
         .astype(float)
     )
 

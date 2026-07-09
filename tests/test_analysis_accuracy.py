@@ -6,7 +6,7 @@ import pandas as pd
 from component.scripts.accuracy import (
     accuracies_from_matrices,
     apply_filter,
-    confusion_matrix_area,
+    confusion_matrix_counts,
     convert_area,
     legends,
     overall_accuracy,
@@ -66,19 +66,17 @@ def test_legends_sorted_unique():
     assert ref_legend == [1, 2]
 
 
-def test_confusion_matrix_area_counts():
+def test_confusion_matrix_counts_counts():
     std = standardize_reference(_ref_2x2(), {"map": "mapclass", "ref": "refclass"})
-    m = confusion_matrix_area(std, [1, 2], [1, 2])
+    m = confusion_matrix_counts(std, [1, 2], [1, 2])
     assert m.loc[1, 1] == 45 and m.loc[1, 2] == 5
     assert m.loc[2, 1] == 10 and m.loc[2, 2] == 40
 
 
 def test_accuracies_match_hand_computation():
     std = standardize_reference(_ref_2x2(), {"map": "mapclass", "ref": "refclass"})
-    m = confusion_matrix_area(std, [1, 2], [1, 2])
-    pij = pd.DataFrame(
-        [[0.54, 0.06], [0.08, 0.32]], index=[1, 2], columns=[1, 2]
-    )
+    m = confusion_matrix_counts(std, [1, 2], [1, 2])
+    pij = pd.DataFrame([[0.54, 0.06], [0.08, 0.32]], index=[1, 2], columns=[1, 2])
     acc = accuracies_from_matrices(m, pij)
     assert np.isclose(acc.loc[1, "users_accuracy"], 0.9)
     assert np.isclose(acc.loc[2, "users_accuracy"], 0.8)
@@ -104,8 +102,8 @@ def test_accuracies_keep_reference_only_class():
     )
     pij = m.div(m.sum(axis=1), axis=0) * 0.5  # any consistent proportion matrix
     acc = accuracies_from_matrices(m, pij)
-    assert np.isclose(acc.loc[1, "users_accuracy"], 0.8)   # 40/50, not 40/45
-    assert np.isclose(acc.loc[2, "users_accuracy"], 0.7)   # 35/50, not 35/45
+    assert np.isclose(acc.loc[1, "users_accuracy"], 0.8)  # 40/50, not 40/45
+    assert np.isclose(acc.loc[2, "users_accuracy"], 0.7)  # 35/50, not 35/45
 
 
 def test_overall_accuracy_is_diagonal_sum():

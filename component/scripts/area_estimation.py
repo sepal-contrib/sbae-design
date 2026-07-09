@@ -3,7 +3,7 @@
 Vendored and de-bugged from openforis/accuracy-assessment backend/compute.py:
 - weights are name-keyed (bug #1);
 - the single error-adjusted estimate IS the column sum * A_total, Eq. 8 (bug #2);
-- SRS uses reference-class column sums over total sample area (bug #3 + risk R1);
+- SRS uses reference-class column sums over total sample count (bug #3 + risk R1);
 - divide-by-zero coerces to 0; the dead se2_terms block is removed.
 Areas carry the input's native unit.
 """
@@ -38,7 +38,7 @@ def stratified_area_estimates(
 
     area_estimate_j = (sum_i p_ij) * A_total
     SE(p_j) = sqrt( sum_i w_i^2 * [f_ij (1 - f_ij) / (n_i - 1)] ),
-      f_ij = n_ij / n_i. (row fraction); n_i. is the row area-sum (== count when area=1).
+      f_ij = n_ij / n_i. (row fraction); n_i. is the stratum sample COUNT.
     """
     p_hat = pij.sum(axis=0)  # column sum over map classes i -> per ref class j
     w = pij.sum(axis=1)  # equals stratum weight W_i
@@ -69,8 +69,8 @@ def stratified_area_estimates(
 def srs_estimates(matrix_area: pd.DataFrame, A_total: float, z: float) -> pd.DataFrame:
     """Simple-random comparator per reference class.
 
-    p_j = (sum_i n_ij) / (sum_ij n_ij)  [reference-class column sum / total sample area]
-    SE(p_j) = sqrt(p_j (1 - p_j) / N),  N = total sample area (== sample count when area=1).
+    p_j = (sum_i n_ij) / (sum_ij n_ij)  [reference-class column sum / total sample count]
+    SE(p_j) = sqrt(p_j (1 - p_j) / N),  N = total sample COUNT.
     SE and CI are reported in AREA units (SE_area = SE(p_j) * A_total), matching the
     stratified `standard_error`/`confidence_interval` columns.
     """

@@ -49,7 +49,8 @@ def test_aa_design_workflow_forces_openforis_parity_sampling():
 
     assert state.sample_design_workflow.value == "aa_design"
     assert state.sampling_method.value == "stratified"
-    assert state.stratified_allocation_method.value == "proportional"
+    # aa_design is the per-class-EUA Olofsson design -> neyman allocation.
+    assert state.stratified_allocation_method.value == "neyman"
 
 
 def test_advanced_workflow_moves_away_from_stratified_default():

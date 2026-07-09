@@ -307,7 +307,7 @@ def test_stratified_strategy_uses_openforis_adjusted_allocation():
         confidence_level=95.0,
         expected_accuracy=85.0,
         area_data=area_data,
-        allocation_method=AllocationMethod.PROPORTIONAL,
+        allocation_method=AllocationMethod.NEYMAN,
         min_samples_per_class=5,
         expected_accuracies={1: 0.9, 2: 0.7},
     )
@@ -315,7 +315,7 @@ def test_stratified_strategy_uses_openforis_adjusted_allocation():
     results = StratifiedSamplingStrategy().calculate(inputs)
 
     assert results.success is True
-    assert results.allocation_method == "adjusted_proportional"
+    assert results.allocation_method == "neyman"
     assert results.allocation_dict == {1: 34, 2: 5}
     assert results.total_samples == 39
     rare_class = next(item for item in results.samples_per_class if item.map_code == 2)
@@ -341,7 +341,7 @@ def test_stratified_strategy_errors_when_class_eua_is_missing():
         confidence_level=95.0,
         expected_accuracy=85.0,
         area_data=area_data,
-        allocation_method=AllocationMethod.PROPORTIONAL,
+        allocation_method=AllocationMethod.NEYMAN,
         min_samples_per_class=5,
         expected_accuracies={1: 0.9},
     )
@@ -352,6 +352,45 @@ def test_stratified_strategy_errors_when_class_eua_is_missing():
     assert "Expected user accuracy is missing for class code(s): 2" in (
         results.error_message or ""
     )
+
+
+def _global_eua_inputs(method):
+    area_data = pd.DataFrame(
+        {"map_code": [1, 2], "map_area": [9000, 1000], "map_edited_class": ["A", "B"]}
+    )
+    return SamplingInputs(
+        sampling_method=SamplingMethod.STRATIFIED,
+        target_error=5.0,
+        confidence_level=95.0,
+        expected_accuracy=85.0,
+        area_data=area_data,
+        allocation_method=method,
+        min_samples_per_class=5,
+        expected_accuracies=None,  # non-Neyman must not require per-class EUA
+    )
+
+
+def test_stratified_proportional_uses_global_eua_without_per_class():
+    results = StratifiedSamplingStrategy().calculate(
+        _global_eua_inputs(AllocationMethod.PROPORTIONAL)
+    )
+    assert results.success is True
+    assert results.allocation_method == "proportional"
+    by_code = {a.map_code: a for a in results.samples_per_class}
+    # global EUA (0.85) drives sizing/MOE for every class
+    assert all(a.expected_accuracy == 0.85 for a in results.samples_per_class)
+    # proportional -> the larger class gets more samples than the rare one
+    assert by_code[1].samples > by_code[2].samples
+
+
+def test_stratified_equal_allocation_is_uniform():
+    results = StratifiedSamplingStrategy().calculate(
+        _global_eua_inputs(AllocationMethod.EQUAL)
+    )
+    assert results.success is True
+    assert results.allocation_method == "equal"
+    by_code = {a.map_code: a for a in results.samples_per_class}
+    assert by_code[1].samples == by_code[2].samples  # equal allocation
 
 
 if __name__ == "__main__":

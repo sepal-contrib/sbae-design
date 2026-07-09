@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from component.scripts.accuracy import confusion_matrix_area, standardize_reference
+from component.scripts.accuracy import confusion_matrix_counts, standardize_reference
 from component.scripts.area_estimation import (
     pij_matrix,
     srs_estimates,
@@ -24,7 +24,7 @@ def _ref_2x2():
 
 
 def _matrix_2x2():
-    return confusion_matrix_area(_ref_2x2(), [1, 2], [1, 2])
+    return confusion_matrix_counts(_ref_2x2(), [1, 2], [1, 2])
 
 
 def _area(order=(1, 2), values=(60.0, 40.0)):
@@ -90,14 +90,30 @@ def test_srs_uses_reference_column_sums():
     )
 
 
-def test_srs_weights_sum_to_one_with_plot_sizes():
-    """Bug #3: with per-plot areas != 1, weights still sum to 1 and SE is finite."""
+def test_srs_weights_sum_to_one():
+    """SRS weights sum to 1 and SE is finite; a per-plot area column is ignored."""
     rows = [(1, 1, 10.0)] * 4 + [(1, 2, 30.0)] + [(2, 1, 5.0)] + [(2, 2, 15.0)] * 3
     df = standardize_reference(
         pd.DataFrame(rows, columns=["m", "r", "plot"]),
         {"map": "m", "ref": "r", "sample_area": "plot"},
     )
-    m = confusion_matrix_area(df, [1, 2], [1, 2])
+    m = confusion_matrix_counts(df, [1, 2], [1, 2])
     out = srs_estimates(m, A_total=100.0, z=1.96)
     assert np.isclose(out["srs_weight"].sum(), 1.0)
     assert out["srs_standard_error"].notna().all()
+
+
+def test_matrix_is_sample_counts_not_summed_plot_area():
+    """Blocker: a per-sample area column must not inflate n_i / sample counts.
+
+    Two samples in stratum 1, each with plot area 50, must count as n_i = 2, not
+    100 (summed area), otherwise SE/CI and the reported sample counts are wrong.
+    """
+    rows = [(1, 1, 50.0), (1, 1, 50.0), (1, 2, 50.0)]
+    df = standardize_reference(
+        pd.DataFrame(rows, columns=["m", "r", "plot"]),
+        {"map": "m", "ref": "r", "sample_area": "plot"},
+    )
+    m = confusion_matrix_counts(df, [1, 2], [1, 2])
+    assert m.loc[1, 1] == 2.0 and m.loc[1, 2] == 1.0
+    assert m.loc[1].sum() == 3.0  # stratum-1 count, not 150

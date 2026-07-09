@@ -63,6 +63,22 @@ def test_analyze_errors_when_map_class_missing_from_area():
     assert "area" in (res.error_message or "").lower()
 
 
+def test_analyze_errors_when_area_stratum_has_no_reference_samples():
+    # Class 3 has area but no reference samples: its weight would be silently
+    # dropped, making the class proportions sum below 1 while reporting success.
+    s = StratifiedEstimationStrategy()
+    res = s.analyze(
+        _inputs(
+            area_data=pd.DataFrame(
+                {"map_code": [1, 2, 3], "map_area": [60.0, 40.0, 20.0]}
+            )
+        )
+    )
+    assert res.success is False
+    assert "no reference samples" in (res.error_message or "").lower()
+    assert "3" in (res.error_message or "")
+
+
 def test_analyze_applies_filter():
     s = StratifiedEstimationStrategy()
     rows = (

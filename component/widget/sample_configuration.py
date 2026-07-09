@@ -60,7 +60,9 @@ def apply_sample_design_workflow(state, workflow: str):
             state.expected_accuracy.value,
             sampling_method="stratified",
             simple_total_samples=state.simple_total_samples.value,
-            stratified_allocation_method="proportional",
+            # aa_design is the Olofsson per-class-EUA design -> neyman path
+            # (per-class EUA is only active for neyman; AGENTS.md).
+            stratified_allocation_method="neyman",
         )
     elif workflow == ADVANCED_WORKFLOW and state.sampling_method.value == "stratified":
         state.set_sampling_parameters(
