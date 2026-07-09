@@ -15,7 +15,11 @@ from component.tile.class_editor import class_editor_table
 from component.tile.export import Export
 from component.widget.aoi_upload_selector import AoiUploadSelector
 from component.widget.custom_widgets import Section
-from component.widget.point_generation import PointGeneration
+from component.widget.point_generation import (
+    PointGeneration,
+    PointGenerationView,
+    use_point_generation_task,
+)
 from component.widget.summary import Summary
 
 logger = logging.getLogger("sbae.sample_configuration")
@@ -137,6 +141,7 @@ def SampleConfiguration(sbae_map=None, theme_toggle=None):
             app_state.add_error(f"Error calculating samples: {e!s}")
 
     active_tab = solara.use_reactive(0)
+    point_generation_controller = use_point_generation_task(sbae_map)
 
     with solara.Column():
         with solara.lab.Tabs(value=active_tab):
@@ -144,7 +149,11 @@ def SampleConfiguration(sbae_map=None, theme_toggle=None):
             solara.lab.Tab("Analysis")
 
         if active_tab.value == 0:
-            DesignTab(sbae_map, theme_toggle=theme_toggle)
+            DesignTab(
+                sbae_map,
+                theme_toggle=theme_toggle,
+                point_generation_controller=point_generation_controller,
+            )
         else:
             AnalysisTab()
 
@@ -180,7 +189,7 @@ def MethodologyHelpButton(
 
 
 @solara.component
-def DesignTab(sbae_map=None, theme_toggle=None):
+def DesignTab(sbae_map=None, theme_toggle=None, point_generation_controller=None):
     """Olofsson accuracy-assessment sample design."""
     with solara.Row(style="align-items: center; gap: 4px;"):
         with solara.Column(style="flex: 1;"):
@@ -208,11 +217,15 @@ def DesignTab(sbae_map=None, theme_toggle=None):
 
     # Design outputs (summary / generate points / export) live inside the
     # Design tab so they no longer leak onto the Analysis tab.
-    DesignOutputs(sbae_map, theme_toggle=theme_toggle)
+    DesignOutputs(
+        sbae_map,
+        theme_toggle=theme_toggle,
+        point_generation_controller=point_generation_controller,
+    )
 
 
 @solara.component
-def DesignOutputs(sbae_map=None, theme_toggle=None):
+def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=None):
     """Design-phase outputs, relocated from standalone right-panel sections.
 
     Renders the sample-design summary, point generation and export blocks using
@@ -228,7 +241,10 @@ def DesignOutputs(sbae_map=None, theme_toggle=None):
         "mdi-map-marker-multiple",
         "Generate sample points based on calculated sample sizes.",
     )
-    PointGeneration(sbae_map)
+    if point_generation_controller is None:
+        PointGeneration(sbae_map)
+    else:
+        PointGenerationView(sbae_map, point_generation_controller)
 
     Section(
         "Export Results",

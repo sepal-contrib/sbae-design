@@ -6,7 +6,6 @@ from typing import Any, Dict
 import solara
 from sepal_ui.sepalwidgets.file_input import FileInputComponent
 from sepal_ui.solara.notifications import use_notifications
-from solara.alias import rv
 
 from component.model import app_state
 from component.scripts.geospatial import (
@@ -231,7 +230,7 @@ def UploadTile(sbae_map: SbaeMap):
             and raster_prep_result.state == solara.ResultState.RUNNING
         ):
             solara.Text(
-                "⏳ Optimizing raster for display… this may take a moment for large files.",
+                "Optimizing raster for display... this may take a moment for large files.",
                 style="font-size: 13px; opacity: 0.8;",
             )
             solara.ProgressLinear(value=True)
@@ -472,13 +471,27 @@ def FileUploadInstructions():
 
 @solara.component
 def FilePreview(file_info: Dict[str, Any]):
-    """Preview component showing file information before confirmation."""
-    with rv.Alert(type="info", text=True):
-        with solara.Column(gap="4px"):
-            solara.Text(
-                "File selected:", style="font-weight: bold; margin-bottom: 4px;"
-            )
-            solara.Text(f"Type: {file_info.get('file_type', 'unknown').title()}")
-            solara.Text(f"Size: {file_info.get('size_mb', 0):.1f} MB")
-            solara.Text(f"Features: {file_info.get('feature_count', 0):,}")
-            solara.Text(f"CRS: {file_info.get('crs', 'Not specified')}")
+    """Preview of the selected file's details, shown before confirmation.
+
+    A neutral, theme-aware panel (subtle border, no colored alert background).
+    """
+    rows = [
+        ("Type", file_info.get("file_type", "unknown").title()),
+        ("Size", f"{file_info.get('size_mb', 0):.1f} MB"),
+        ("Features", f"{file_info.get('feature_count', 0):,}"),
+        ("CRS", file_info.get("crs", "Not specified")),
+    ]
+    with solara.Column(
+        gap="2px",
+        style=(
+            "padding: 10px 12px; border-radius: 6px; "
+            "border: 1px solid var(--v-divider-base, rgba(0, 0, 0, 0.12));"
+        ),
+    ):
+        solara.Text("File selected", style="font-weight: 600; margin-bottom: 4px;")
+        for label, value in rows:
+            with solara.Row(gap="8px"):
+                solara.Text(
+                    f"{label}:", classes=["text--secondary"], style="min-width: 72px;"
+                )
+                solara.Text(str(value))

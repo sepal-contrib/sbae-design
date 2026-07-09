@@ -33,7 +33,7 @@ def test_current_table_display_shows_name_and_shape():
     assert "ref.csv" in text
     assert "3 rows" in text
     assert "2 columns" in text
-    # a single clear (✕) button is present
+    # a single clear button is present
     rc.find(v.Btn).assert_single()
 
 

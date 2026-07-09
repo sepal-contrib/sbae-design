@@ -88,7 +88,7 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             )
 
             if app_state.aoi_computing.value:
-                solara.Info("⏳ Computing AOI boundaries...")
+                solara.Info("Computing AOI boundaries...")
 
         elif sampling_method == "stratified":
 

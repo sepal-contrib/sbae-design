@@ -114,7 +114,7 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
     """Compact card showing a loaded analysis table.
 
     Mirrors ``CurrentFileDisplay`` from the design tab: once a CSV is loaded we
-    show its name and shape with a clear (✕) button instead of the file picker.
+    show its name and shape with a clear button instead of the file picker.
     """
     if df is None or df.empty:
         return

@@ -4,7 +4,7 @@ import ipyvuetify as v
 import solara
 
 from component.model import app_state
-from component.tile.upload import UploadTile
+from component.tile.upload import FilePreview, UploadTile
 from component.widget.aoi_upload_selector import UploadDialogCard
 
 
@@ -37,3 +37,22 @@ def test_upload_section_has_no_card_of_its_own():
     _, rc = solara.render(UploadTile(None), handle_error=False)
 
     rc.find(v.Card).assert_empty()
+
+
+def test_file_preview_is_not_a_colored_alert():
+    info = {
+        "file_type": "raster",
+        "size_mb": 67.8,
+        "feature_count": 3_530_071_680,
+        "crs": "EPSG:4326",
+    }
+
+    _, rc = solara.render(FilePreview(info), handle_error=False)
+
+    # No colored info alert (the previous blue box) and no nested card.
+    rc.find(v.Alert).assert_empty()
+    rc.find(v.Card).assert_empty()
+    text = " ".join(str(c) for w in rc.find(v.Html).widgets for c in (w.children or []))
+    assert "File selected" in text
+    assert "Raster" in text
+    assert "EPSG:4326" in text

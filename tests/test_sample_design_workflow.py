@@ -9,6 +9,7 @@ from ipyvuetify import VuetifyTemplate
 from component.model import app_state
 from component.model.state_manager import AppState
 from component.tile.class_editor import class_editor_table
+from component.widget.point_generation import build_point_generation_request
 from component.widget.sample_configuration import (
     AA_DESIGN_INTRO,
     AccuracyDesignControls,
@@ -164,3 +165,46 @@ def test_design_tab_includes_design_outputs_even_without_data():
     assert "Summary" in header_texts
     assert "Generate Points" in header_texts
     assert "Export Results" in header_texts
+
+
+def test_point_generation_request_captures_inputs_for_persistent_task():
+    """Point generation requests survive Design tab unmounts.
+
+    The running task owner lives above the Design/Analysis tab switch, so the
+    worker must receive an immutable request instead of reading component-local
+    trigger state after the Design tab has unmounted.
+    """
+    state = AppState()
+    state.file_path.value = "/tmp/classes.tif"
+    state.area_data.value = pd.DataFrame(
+        {
+            "map_code": [1],
+            "map_area": [1000],
+            "map_edited_class": ["Forest"],
+        }
+    )
+    state.set_sample_results(
+        {
+            "sampling_method": "stratified",
+            "total_samples": 3,
+            "samples_per_class": [{"map_code": 1, "samples": 3}],
+        }
+    )
+
+    request = build_point_generation_request(
+        state,
+        request_id=7,
+        use_custom_seed=True,
+        custom_seed=33,
+    )
+
+    assert request == {
+        "request_id": 7,
+        "seed": 33,
+        "sampling_method": "stratified",
+        "total_samples": 3,
+        "file_path": "/tmp/classes.tif",
+        "samples_per_class": {1: 3},
+        "class_lookup": {1: "Forest"},
+        "aoi_gdf": None,
+    }
