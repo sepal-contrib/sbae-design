@@ -67,10 +67,10 @@ Whenever you need to install a new package (or update an existing one) inside yo
 
 4.  Now install or update any package, for example:
     ```bash
-    pip install --upgrade sepal_ui
+    pip install --upgrade pysepal
     ```
-    - This will install (or upgrade) `sepal_ui` **inside** `sbae-design` only.
-5.  Once you've confirmed the packages and versions work correctly, make sure to update the `requirements.txt` file. This file will be read by the SEPAL production environment to create the read-only environment that will be shared with other users.
+    - This will install (or upgrade) `pysepal` **inside** `sbae-design` only.
+5.  Once you've confirmed the packages and versions work correctly, make sure to update the `sepal_environment.yml` file. This file will be read by the SEPAL production environment to create the read-only environment that will be shared with other users.
 6.  If you want to run notebooks again using your updated environment, go back into Jupyter and pick the "(test) sbae-design" kernel.
 
 ---
