@@ -1,7 +1,12 @@
 """Accuracy-assessment analysis: standardization, confusion matrix, accuracies.
 
-Olofsson et al. 2014. Vendored and de-bugged from openforis/accuracy-assessment
-backend (io.py, compute.py, accuracy.py). Areas carry the input's native unit.
+Olofsson et al. 2014. Ported from the openforis/accuracy-assessment backend
+(io.py, compute.py, accuracy.py) with two deliberate corrections:
+- the confusion matrix counts samples (n_ij) rather than summing the per-sample
+  `area` column, so n_i, SE/CI and the reported sample counts stay valid;
+- accuracies use the map-union-reference class set with full margins, keeping
+  reference-only classes (the reference squares on map classes only).
+See docs/analysis_port_report.md. Areas carry the input's native unit.
 """
 
 from __future__ import annotations
