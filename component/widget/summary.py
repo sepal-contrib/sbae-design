@@ -5,11 +5,9 @@ import pandas as pd
 import solara
 from ipecharts.option import Grid, Legend, Option, Title, Tooltip, XAxis, YAxis
 from ipecharts.option.series import Bar, Line, Pie
-from solara import v
 
 from component.model import app_state
 from component.scripts.stratified import calculate_per_class_moe_for_allocation
-from component.tile.class_editor import class_editor_table
 from component.widget.echarts import EChartsWidget
 
 logger = logging.getLogger("sbae.summary")
@@ -18,8 +16,6 @@ logger = logging.getLogger("sbae.summary")
 @solara.component
 def Summary(theme_toggle=None):
     """Right panel content with progress and summary."""
-    show_editor_dialog, set_show_editor_dialog = solara.use_state(False)
-
     sample_results = app_state.sample_results.value
     sampling_method = app_state.sampling_method.value
 
@@ -36,22 +32,9 @@ def Summary(theme_toggle=None):
 
         # Only show per-class precision for stratified sampling
         if sampling_method == "stratified":
-            per_class_precision_graph(
-                show_editor_dialog=show_editor_dialog,
-                set_show_editor_dialog=set_show_editor_dialog,
-                theme_toggle=theme_toggle,
-            )
+            per_class_precision_graph(theme_toggle=theme_toggle)
 
             area_proportion_pie_chart(theme_toggle=theme_toggle)
-
-    with v.Dialog(
-        v_model=show_editor_dialog, on_v_model=set_show_editor_dialog, max_width=900
-    ):
-        with v.Card():
-            v.CardTitle(children=["Edit Classes & Sample Allocation"])
-            with v.CardText(style="max-height: 70vh; overflow-y: auto;"):
-                if app_state.sample_results.value:
-                    class_editor_table()
 
 
 def statistics_summary(
@@ -112,11 +95,27 @@ def statistics_summary(
         moe_chip_ref = solara.use_reactive(None)
 
         if sample_results:
+            if sampling_method == "stratified":
+                precision_label = (
+                    f"Target SE: {sample_results.get('target_error', 'N/A')}%"
+                )
+                precision_tooltip = (
+                    "Target standard error of expected overall accuracy used to "
+                    "calculate the stratified sample size."
+                )
+            else:
+                precision_label = f"MOE: {sample_results.get('target_error', 'N/A')}%"
+                precision_tooltip = (
+                    "Margin of Error: The range of uncertainty in the overall "
+                    "accuracy estimate at the specified confidence level. Lower "
+                    "MOE indicates higher precision."
+                )
+
             moe_chip = solara.v.Chip(
                 small=True,
                 label=True,
                 outlined=True,
-                children=[f"MOE: {sample_results.get('target_error', 'N/A')}%"],
+                children=[precision_label],
             )
             moe_chip_ref.value = moe_chip
 
@@ -131,9 +130,7 @@ def statistics_summary(
                     }
                 ],
             ):
-                solara.Text(
-                    "Margin of Error: The range of uncertainty in the overall accuracy estimate at the specified confidence level. Lower MOE indicates higher precision."
-                )
+                solara.Text(precision_tooltip)
 
             solara.v.Chip(
                 small=True,
@@ -155,7 +152,7 @@ def statistics_summary(
 
     if not sample_results:
         solara.Info(
-            "Set your AOI or upload a classification map to start calculating sample sizes and margin of error."
+            "Define an area of interest, or load a classification map for stratified sampling, to compute the sample design."
         )
 
 
@@ -243,9 +240,7 @@ def precision_curve_graph(theme_toggle=None) -> None:
         )
 
 
-def per_class_precision_graph(
-    show_editor_dialog=None, set_show_editor_dialog=None, theme_toggle=None
-) -> None:
+def per_class_precision_graph(theme_toggle=None) -> None:
     """Display per-class precision (MOE) given current allocation."""
     sample_results = app_state.sample_results.value
     if not sample_results:
@@ -265,27 +260,12 @@ def per_class_precision_graph(
         allocation=allocation_dict,
         area_df=area_df,
         confidence_level=confidence_level,
-        expected_accuracies=None,
+        expected_accuracies=app_state.expected_user_accuracies.value or None,
         population_sizes=None,
         deff=1.0,
     )
 
     moe_df = moe_df.sort_values("moe_percent", ascending=False)
-
-    solara.HTML(tag="div", style="height: 12px;")
-
-    if set_show_editor_dialog:
-        with solara.Tooltip("Edit class names and sample allocations"):
-            solara.Button(
-                "Edit class names & Allocations",
-                icon_name="mdi-pencil",
-                on_click=lambda: set_show_editor_dialog(True),
-                color="primary",
-                # outlined=True,
-                block=True,
-                style="margin-bottom: 12px;",
-                small=True,
-            )
 
     class_names = moe_df["class_name"].tolist()
     moe_values = moe_df["moe_percent"].tolist()

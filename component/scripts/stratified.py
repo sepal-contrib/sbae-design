@@ -201,6 +201,100 @@ def calculate_stratified_sample_size(
     return math.ceil(n)
 
 
+def calculate_openforis_stratified_design(
+    area_df: pd.DataFrame,
+    expected_accuracies: Dict[int, float],
+    target_standard_error: float,
+    min_samples_per_class: int,
+) -> pd.DataFrame:
+    """Calculate the Olofsson (good-practices) stratified sample allocation.
+
+    Implements the Olofsson et al. (2014) design as ported from Open Foris
+    `aa_design/server.R`: class EUA values define stratum standard deviations,
+    target standard error defines the overall sample size, and adjusted
+    proportional allocation is used as the default final design.
+    """
+    if target_standard_error <= 0:
+        raise ValueError("Target standard error must be greater than 0")
+    if min_samples_per_class < 1:
+        raise ValueError("Minimum samples per class must be at least 1")
+
+    total_area = area_df["map_area"].sum()
+    if total_area == 0:
+        raise ValueError("Total area is zero")
+
+    missing_codes = [
+        int(row["map_code"])
+        for _, row in area_df.iterrows()
+        if int(row["map_code"]) not in expected_accuracies
+    ]
+    if missing_codes:
+        raise ValueError(
+            "Expected user accuracy is missing for class code(s): "
+            + ", ".join(str(code) for code in missing_codes)
+        )
+
+    rows = []
+    sum_wi_si = 0.0
+
+    for _, row in area_df.iterrows():
+        code = int(row["map_code"])
+        area = float(row["map_area"])
+        eua = float(expected_accuracies[code])
+        if eua < 0 or eua > 1:
+            raise ValueError(f"Expected user accuracy for class {code} must be 0-1")
+
+        wi = area / total_area
+        si = math.sqrt(eua * (1 - eua))
+        wisi = wi * si
+        sum_wi_si += wisi
+
+        rows.append(
+            {
+                "map_code": code,
+                "map_area": area,
+                "map_edited_class": row.get("map_edited_class", f"Class {code}"),
+                "wi": wi,
+                "eua": eua,
+                "si": si,
+                "wisi": wisi,
+            }
+        )
+
+    overall_sample = (sum_wi_si / target_standard_error) ** 2
+    included_classes = len(rows)
+    if included_classes == 0:
+        raise ValueError("At least one stratum is required")
+
+    for item in rows:
+        proportional = math.floor(item["wi"] * overall_sample)
+        item["equal"] = math.floor(overall_sample / included_classes)
+        item["proportional"] = proportional
+        item["minimum"] = (
+            min_samples_per_class if proportional < min_samples_per_class else 0
+        )
+
+    reserved_minimum = sum(item["minimum"] for item in rows)
+    above_minimum_area = sum(item["map_area"] for item in rows if item["minimum"] == 0)
+    remaining_samples = overall_sample - reserved_minimum
+
+    for item in rows:
+        if item["minimum"]:
+            adjusted = min_samples_per_class
+        elif above_minimum_area <= 0 or remaining_samples <= 0:
+            adjusted = min_samples_per_class
+        else:
+            adjusted = math.floor(
+                (item["map_area"] / above_minimum_area) * remaining_samples
+            )
+            adjusted = max(adjusted, min_samples_per_class)
+
+        item["adjusted"] = adjusted
+        item["final"] = adjusted
+
+    return pd.DataFrame(rows)
+
+
 def calculate_target_class_sample_size(
     target_class_accuracy: float, target_class_error: float, confidence_level: float
 ) -> int:
@@ -407,6 +501,7 @@ def calculate_per_class_moe_for_allocation(
 
         results.append(
             {
+                "map_code": code,
                 "class_code": code,
                 "class_name": class_name,
                 "samples": n_h,

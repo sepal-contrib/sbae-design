@@ -108,6 +108,10 @@ class ClassAllocation:
     samples: int
     area_ha: float = 0.0
     proportion: float = 0.0
+    expected_accuracy: Optional[float] = None
+    equal_samples: Optional[int] = None
+    proportional_samples: Optional[int] = None
+    adjusted_samples: Optional[int] = None
     moe_percent: Optional[float] = None
 
 
@@ -180,6 +184,10 @@ class SamplingResults:
                     "samples": c.samples,
                     "area_ha": c.area_ha,
                     "proportion": c.proportion,
+                    "expected_accuracy": c.expected_accuracy,
+                    "equal_samples": c.equal_samples,
+                    "proportional_samples": c.proportional_samples,
+                    "adjusted_samples": c.adjusted_samples,
                     "moe_percent": c.moe_percent,
                 }
                 for c in self.samples_per_class

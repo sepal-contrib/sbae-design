@@ -21,20 +21,19 @@ import solara
 from sepal_ui.logger import setup_logging
 from sepal_ui.sepalwidgets.vue_app import MapApp, ThemeToggle
 from sepal_ui.solara import (
+    ThemeState,
     setup_sessions,
     setup_solara_server,
     setup_theme_colors,
 )
+from sepal_ui.solara.notifications import NotificationProvider
 from solara.lab.components.theming import theme
 
 from component.model.app_model import AppModel
-from component.tile.export import Export
-from component.tile.landing import LandingTile
 from component.tile.upload import RasterMapWatcher
 from component.widget.map import SbaeMap
-from component.widget.point_generation import PointGeneration
+from component.widget.notification_bridge import ErrorToastBridge
 from component.widget.sample_configuration import SampleConfiguration
-from component.widget.summary import Summary
 
 logger = setup_logging(logger_name="sbae")
 
@@ -58,9 +57,19 @@ def on_kernel_start():
 # @with_sepal_sessions(module_name="sbae_app")
 def Page():
     """Main SBAE application page using MapApp layout."""
+    # Notification system (pysepal): mount the provider once at the app root,
+    # before any component that calls use_notifications(). Kept in the same page
+    # as MapApp so the task pill can track the right-panel offset.
+    NotificationProvider()
+    ErrorToastBridge()
+
     app_model = AppModel()
 
     setup_theme_colors()
+    # pysepal's MapApp requires a per-kernel ThemeState. In a local (non-SEPAL)
+    # run the session manager is active but has no theme_state component, so
+    # get_current_theme_state() would raise; provide an explicit one instead.
+    theme_state = solara.use_memo(ThemeState, [])
     theme_toggle = ThemeToggle()
     theme_toggle.observe(lambda e: setattr(theme, "dark", e["new"]), "dark")
     sbae_map = SbaeMap(theme_toggle=theme_toggle, gee=USE_GEE)
@@ -68,14 +77,6 @@ def Page():
     RasterMapWatcher(sbae_map)
 
     steps_data = [
-        {
-            "id": 1,
-            "name": "Getting Started",
-            "icon": "mdi-rocket",
-            "display": "dialog",
-            "content": LandingTile(app_model),
-            "width": 900,
-        },
         {
             "id": 4,
             "name": "Sample design",
@@ -95,29 +96,13 @@ def Page():
         "is_open": True,
     }
 
-    # Right panel content sections
+    # Right panel content: a single section holding the tabbed Sample
+    # Configuration (Design | Analysis). The design-phase outputs (summary /
+    # generate points / export) now live inside the Design tab, so they no
+    # longer appear while the user is on the Analysis tab.
     right_panel_content = [
         {
-            "title": "Sample Configuration",
-            "icon": "mdi-tune",
-            "content": [SampleConfiguration(sbae_map)],
-        },
-        {
-            "title": "Summary",
-            "icon": "mdi-progress-check",
-            "content": [Summary(theme_toggle=theme_toggle)],
-        },
-        {
-            "title": "Generate Points",
-            "icon": "mdi-map-marker-multiple",
-            "content": [PointGeneration(sbae_map)],
-            "description": "Generate sample points based on calculated sample sizes.",
-        },
-        {
-            "title": "Export Results",
-            "icon": "mdi-download",
-            "content": [Export()],
-            "description": "Generate sample points based on calculated sample sizes.",
+            "content": [SampleConfiguration(sbae_map, theme_toggle=theme_toggle)],
         },
     ]
 
@@ -127,8 +112,9 @@ def Page():
         app_icon="mdi-map-marker-radius",
         main_map=[sbae_map],
         steps_data=steps_data,
-        initial_step=1,
+        initial_step=4,
         theme_toggle=[theme_toggle],
+        theme_state=theme_state,
         dialog_width=900,
         right_panel_config=right_panel_config,
         right_panel_content=right_panel_content,

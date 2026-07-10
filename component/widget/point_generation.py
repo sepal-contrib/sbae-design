@@ -1,4 +1,6 @@
 import logging
+from dataclasses import dataclass
+from typing import Callable
 
 import solara
 
@@ -8,109 +10,149 @@ from component.scripts.geospatial import generate_sample_points
 logger = logging.getLogger("sbae.point_generation")
 
 
-@solara.component
-def PointGeneration(sbae_map):
-    """Point generation component for the right panel."""
-    use_custom_seed = solara.use_reactive(True)
-    custom_seed = solara.use_reactive(33)
-    should_generate = solara.use_reactive(False)
+POINT_GENERATION_RUNNING = "running"
+POINT_GENERATION_FINISHED = "finished"
+POINT_GENERATION_ERROR = "error"
 
-    # Get current parameters for dependencies
-    sampling_method = (
-        app_state.sample_results.value.get("sampling_method", "stratified")
-        if app_state.sample_results.value
-        else "stratified"
+
+@dataclass
+class PointGenerationController:
+    """State and actions for the point-generation UI."""
+
+    custom_seed_enabled: solara.Reactive[bool]
+    custom_seed: solara.Reactive[int]
+    is_generating: bool
+    trigger: Callable[[], None]
+
+
+def build_point_generation_request(
+    state,
+    *,
+    request_id: int,
+    use_custom_seed: bool,
+    custom_seed: int,
+):
+    """Capture all inputs needed by a point-generation worker.
+
+    The worker may outlive the Design tab component that started it, so it must
+    not read component-local trigger state after launch.
+    """
+    sample_results = state.sample_results.value or {}
+    sampling_method = sample_results.get("sampling_method", "stratified")
+
+    return {
+        "request_id": request_id,
+        "seed": custom_seed if use_custom_seed else None,
+        "sampling_method": sampling_method,
+        "total_samples": sample_results.get("total_samples", None),
+        "file_path": state.file_path.value,
+        "samples_per_class": dict(state.samples_per_class.value or {}),
+        "class_lookup": dict(state.get_class_lookup()),
+        "aoi_gdf": state.aoi_gdf.value,
+    }
+
+
+def run_point_generation_request(request):
+    """Generate points from a captured request."""
+    sampling_method = request["sampling_method"]
+    seed = request["seed"]
+
+    logger.debug(
+        "Starting point generation request %s with method: %s, seed: %s",
+        request["request_id"],
+        sampling_method,
+        seed,
     )
-    total_samples = (
-        app_state.sample_results.value.get("total_samples", None)
-        if app_state.sample_results.value
-        else None
-    )
 
-    def generate_points_worker():
-        """Worker function for point generation in separate thread."""
-        if not should_generate.value or not app_state.is_ready_for_point_generation():
-            return None
-
-        seed = custom_seed.value if use_custom_seed.value else None
-
-        logger.debug(
-            f"Starting point generation with method: {sampling_method}, seed: {seed}"
+    if sampling_method in ("simple", "systematic"):
+        points_df = generate_sample_points(
+            aoi_gdf=request["aoi_gdf"],
+            samples_per_class={},
+            class_lookup={},
+            seed=seed,
+            sampling_method=sampling_method,
+            total_samples=request["total_samples"],
+        )
+    else:
+        points_df = generate_sample_points(
+            file_path=request["file_path"],
+            samples_per_class=request["samples_per_class"],
+            class_lookup=request["class_lookup"],
+            seed=seed,
+            sampling_method=sampling_method,
+            total_samples=request["total_samples"],
         )
 
-        # For simple/systematic sampling, use AOI boundaries if available
-        if sampling_method in ("simple", "systematic"):
-            if app_state.aoi_gdf.value is None:
-                logger.error(
-                    "AOI GeoDataFrame not available for simple/systematic sampling"
-                )
-                return None
+    logger.debug("Generated %s sample points.", len(points_df))
+    return points_df
 
-            # Use AOI for point generation
-            points_df = generate_sample_points(
-                aoi_gdf=app_state.aoi_gdf.value,
-                samples_per_class={},
-                class_lookup={},
-                seed=seed,
-                sampling_method=sampling_method,
-                total_samples=total_samples,
-            )
-        else:
-            # Stratified sampling uses classification file
-            points_df = generate_sample_points(
-                file_path=app_state.file_path.value,
-                samples_per_class=app_state.samples_per_class.value,
-                class_lookup=app_state.get_class_lookup(),
-                seed=seed,
-                sampling_method=sampling_method,
-                total_samples=total_samples,
-            )
 
-        logger.debug(f"Generated {len(points_df)} sample points.")
-        return points_df
+def _result_is_generating(generation_result, generation_request) -> bool:
+    return generation_request.value is not None and generation_result.state in (
+        solara.ResultState.STARTING,
+        solara.ResultState.RUNNING,
+    )
 
-    # Use thread for point generation
+
+def use_point_generation_task(sbae_map=None) -> PointGenerationController:
+    """Own the point-generation thread from a component that survives tab swaps."""
+    use_custom_seed = solara.use_reactive(True)
+    custom_seed = solara.use_reactive(33)
+    generation_request = solara.use_reactive(None)
+    request_id_ref = solara.use_ref(0)
+
+    def generate_points_worker():
+        request = generation_request.value
+        if request is None:
+            return None
+        return run_point_generation_request(request)
+
     generation_result = solara.use_thread(
         generate_points_worker,
-        dependencies=[
-            should_generate.value,
-            app_state.samples_per_class.value,
-            app_state.file_path.value,
-            custom_seed.value if use_custom_seed.value else None,
-            sampling_method,
-            total_samples,
-        ],
+        dependencies=[generation_request.value],
         intrusive_cancel=False,
     )
 
-    # Handle generation result
     def handle_generation_result():
-        if generation_result.state == solara.ResultState.RUNNING:
+        if generation_request.value is None:
+            return
+
+        if generation_result.state in (
+            solara.ResultState.STARTING,
+            solara.ResultState.RUNNING,
+        ):
+            app_state.points_generation_status.value = POINT_GENERATION_RUNNING
             app_state.set_processing_status("Generating sample points...")
         elif generation_result.state == solara.ResultState.ERROR:
             app_state.add_error(f"Error generating points: {generation_result.error}")
+            app_state.points_generation_status.value = POINT_GENERATION_ERROR
             app_state.set_processing_status("")
-            should_generate.value = False
-        elif (
-            generation_result.state == solara.ResultState.FINISHED
-            and generation_result.value is not None
-            and should_generate.value
-        ):
+            generation_request.value = None
+        elif generation_result.state == solara.ResultState.FINISHED:
             points_df = generation_result.value
-            app_state.set_sample_points(points_df)
+            if points_df is not None:
+                app_state.set_sample_points(points_df)
 
-            if sbae_map and points_df is not None and not points_df.empty:
-                logger.info("Adding sample points to map...")
-                sbae_map.add_sample_points(points_df)
-                logger.debug(points_df.head())
+                if sbae_map and not points_df.empty:
+                    logger.info("Adding sample points to map...")
+                    sbae_map.add_sample_points(points_df)
+                    logger.debug(points_df.head())
+
+                app_state.points_generation_status.value = POINT_GENERATION_FINISHED
 
             app_state.set_processing_status("")
-            should_generate.value = False
+            generation_request.value = None
 
     solara.use_effect(handle_generation_result, [generation_result.state])
 
     def handle_generate_points():
         """Trigger point generation."""
+        if (
+            app_state.points_generation_status.value == POINT_GENERATION_RUNNING
+            or _result_is_generating(generation_result, generation_request)
+        ):
+            return
+
         if not app_state.is_ready_for_point_generation():
             sampling_method = app_state.sampling_method.value
             if sampling_method == "stratified":
@@ -122,7 +164,47 @@ def PointGeneration(sbae_map):
                     "Please select an Area of Interest and complete sample size calculation first."
                 )
             return
-        should_generate.value = True
+
+        request_id_ref.current += 1
+        generation_request.value = build_point_generation_request(
+            app_state,
+            request_id=request_id_ref.current,
+            use_custom_seed=use_custom_seed.value,
+            custom_seed=custom_seed.value,
+        )
+        app_state.points_generation_status.value = POINT_GENERATION_RUNNING
+        app_state.set_processing_status("Generating sample points...")
+
+    return PointGenerationController(
+        custom_seed_enabled=use_custom_seed,
+        custom_seed=custom_seed,
+        is_generating=(
+            app_state.points_generation_status.value == POINT_GENERATION_RUNNING
+            or _result_is_generating(generation_result, generation_request)
+        ),
+        trigger=handle_generate_points,
+    )
+
+
+@solara.component
+def PointGeneration(sbae_map):
+    """Point generation component for the right panel."""
+    PointGenerationView(sbae_map, use_point_generation_task(sbae_map))
+
+
+@solara.component
+def PointGenerationView(sbae_map, controller: PointGenerationController):
+    """Render point-generation controls for an existing task controller."""
+    custom_seed_enabled = controller.custom_seed_enabled
+    custom_seed = controller.custom_seed
+    is_generating = controller.is_generating
+
+    # Get current parameters for dependencies
+    sampling_method = (
+        app_state.sample_results.value.get("sampling_method", "stratified")
+        if app_state.sample_results.value
+        else "stratified"
+    )
 
     # Check if allocation has changed since points were generated
     allocation_changed = False
@@ -162,11 +244,11 @@ def PointGeneration(sbae_map):
             ):
                 solara.Checkbox(
                     label="Use custom seed",
-                    value=use_custom_seed.value,
-                    on_value=lambda v: setattr(use_custom_seed, "value", v),
+                    value=custom_seed_enabled.value,
+                    on_value=lambda v: setattr(custom_seed_enabled, "value", v),
                 )
 
-                if use_custom_seed.value:
+                if custom_seed_enabled.value:
                     solara.v.TextField(
                         label="Seed",
                         v_model=custom_seed.value,
@@ -183,25 +265,25 @@ def PointGeneration(sbae_map):
 
             solara.Button(
                 "Generate Points",
-                on_click=handle_generate_points,
+                on_click=controller.trigger,
                 color="primary",
                 block=True,
                 small=True,
-                loading=generation_result.state == solara.ResultState.RUNNING,
-                disabled=generation_result.state == solara.ResultState.RUNNING,
+                loading=is_generating,
+                disabled=is_generating,
             )
 
             # Show generation progress
-            if generation_result.state == solara.ResultState.RUNNING:
+            if is_generating:
                 solara.Info(
-                    "⏳ Generating sample points... This may take a moment for large datasets."
+                    "Generating sample points... This may take a moment for large datasets."
                 )
                 solara.ProgressLinear(value=True)
 
             # Warning if allocation changed
             if allocation_changed:
                 solara.Warning(
-                    "⚠️ Sample allocation has changed! The points shown on the map don't match your current allocation. Please regenerate points."
+                    "Sample allocation has changed! The points shown on the map don't match your current allocation. Please regenerate points."
                 )
             elif not ready_for_generation:
                 sampling_method = sample_results.get("sampling_method", "stratified")

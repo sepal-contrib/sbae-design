@@ -13,10 +13,18 @@ dependencies:
   - xarray>=2023.1.0
   - h5netcdf>=1.2.0
   - pip
-  - rasterio
-  - pyproj
+  # Keep the geospatial stack modern and internally consistent. The old
+  # `rasterio<1.3.11` pin forced an outdated PROJ (proj.db schema MINOR 3),
+  # incompatible with the pyproj that pysepal pulls (needs MINOR >= 6), which
+  # broke both CI workflows at import.
+  - rasterio>=1.4
+  - proj>=9.3
+  - pyproj>=3.6
+  - pytest>=7.0.0 # for running the test suite
   - pip:
-      - sepal_ui==3.1.1
+      # pysepal is the renamed sepal_ui; main has the notification system.
+      # The `sepal_ui` import path still works via a compatibility shim.
+      - git+https://github.com/openforis/pysepal.git
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
       - ipecharts>=1.0.0
       - voila

@@ -9,10 +9,16 @@ import math
 import pandas as pd
 import pytest
 
+from component.sampling.stratified import StratifiedSamplingStrategy
+from component.sampling.types import AllocationMethod, SamplingInputs, SamplingMethod
 from component.scripts.calc_utils import get_z_score
 from component.scripts.calculations import (
     apply_adjusted_allocation,
     calculate_stratified_sample_size,
+)
+from component.scripts.stratified import (
+    calculate_openforis_stratified_design,
+    calculate_per_class_moe_for_allocation,
 )
 
 
@@ -213,6 +219,178 @@ def test_stratified_formula_components():
     )
 
     assert abs(n - expected_n) <= 1, f"Expected {expected_n}, got {n}"
+
+
+def test_openforis_stratified_design_columns_and_final_allocation():
+    """Open Foris parity design should expose equal/proportional/adjusted/final."""
+    area_data = pd.DataFrame(
+        {
+            "map_code": [1, 2],
+            "map_area": [9000, 1000],
+            "map_edited_class": ["Stable", "Rare"],
+        }
+    )
+
+    design = calculate_openforis_stratified_design(
+        area_df=area_data,
+        expected_accuracies={1: 0.9, 2: 0.7},
+        target_standard_error=0.05,
+        min_samples_per_class=5,
+    ).set_index("map_code")
+
+    sum_wi_si = (0.9 * math.sqrt(0.9 * 0.1)) + (0.1 * math.sqrt(0.7 * 0.3))
+    overall_sample = (sum_wi_si / 0.05) ** 2
+
+    assert design.loc[1, "equal"] == math.floor(overall_sample / 2)
+    assert design.loc[2, "equal"] == math.floor(overall_sample / 2)
+    assert design.loc[1, "proportional"] == math.floor(0.9 * overall_sample)
+    assert design.loc[2, "proportional"] == math.floor(0.1 * overall_sample)
+    assert design.loc[1, "adjusted"] == math.floor(overall_sample - 5)
+    assert design.loc[2, "adjusted"] == 5
+    assert design.loc[1, "final"] == design.loc[1, "adjusted"]
+    assert design.loc[2, "final"] == design.loc[2, "adjusted"]
+
+
+def test_openforis_stratified_design_requires_eua_for_each_class():
+    area_data = pd.DataFrame(
+        {
+            "map_code": [1, 2],
+            "map_area": [9000, 1000],
+            "map_edited_class": ["Stable", "Rare"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="missing for class code\\(s\\): 2"):
+        calculate_openforis_stratified_design(
+            area_df=area_data,
+            expected_accuracies={1: 0.9},
+            target_standard_error=0.05,
+            min_samples_per_class=5,
+        )
+
+
+def test_per_class_moe_returns_map_code_and_expected_accuracy():
+    """Per-class MOE output should expose map_code and preserve class-specific EUA."""
+    area_data = pd.DataFrame(
+        {
+            "map_code": [1, 2],
+            "map_area": [7000, 3000],
+            "map_edited_class": ["Forest", "Loss"],
+        }
+    )
+
+    moe_df = calculate_per_class_moe_for_allocation(
+        allocation={1: 100, 2: 50},
+        area_df=area_data,
+        confidence_level=0.95,
+        expected_accuracies={1: 0.9, 2: 0.7},
+    )
+
+    assert "map_code" in moe_df.columns
+    assert "class_code" in moe_df.columns
+    assert moe_df.loc[moe_df["map_code"] == 1, "expected_accuracy"].iloc[0] == 0.9
+    assert moe_df.loc[moe_df["map_code"] == 2, "expected_accuracy"].iloc[0] == 0.7
+
+
+def test_stratified_strategy_uses_openforis_adjusted_allocation():
+    area_data = pd.DataFrame(
+        {
+            "map_code": [1, 2],
+            "map_area": [9000, 1000],
+            "map_edited_class": ["Stable", "Rare"],
+        }
+    )
+
+    inputs = SamplingInputs(
+        sampling_method=SamplingMethod.STRATIFIED,
+        target_error=5.0,
+        confidence_level=95.0,
+        expected_accuracy=85.0,
+        area_data=area_data,
+        allocation_method=AllocationMethod.NEYMAN,
+        min_samples_per_class=5,
+        expected_accuracies={1: 0.9, 2: 0.7},
+    )
+
+    results = StratifiedSamplingStrategy().calculate(inputs)
+
+    assert results.success is True
+    assert results.allocation_method == "neyman"
+    assert results.allocation_dict == {1: 34, 2: 5}
+    assert results.total_samples == 39
+    rare_class = next(item for item in results.samples_per_class if item.map_code == 2)
+    assert rare_class.proportional_samples == 3
+    assert rare_class.adjusted_samples == 5
+    assert rare_class.samples == 5
+    assert rare_class.expected_accuracy == 0.7
+    assert rare_class.moe_percent is not None
+
+
+def test_stratified_strategy_errors_when_class_eua_is_missing():
+    area_data = pd.DataFrame(
+        {
+            "map_code": [1, 2],
+            "map_area": [9000, 1000],
+            "map_edited_class": ["Stable", "Rare"],
+        }
+    )
+
+    inputs = SamplingInputs(
+        sampling_method=SamplingMethod.STRATIFIED,
+        target_error=5.0,
+        confidence_level=95.0,
+        expected_accuracy=85.0,
+        area_data=area_data,
+        allocation_method=AllocationMethod.NEYMAN,
+        min_samples_per_class=5,
+        expected_accuracies={1: 0.9},
+    )
+
+    results = StratifiedSamplingStrategy().calculate(inputs)
+
+    assert results.success is False
+    assert "Expected user accuracy is missing for class code(s): 2" in (
+        results.error_message or ""
+    )
+
+
+def _global_eua_inputs(method):
+    area_data = pd.DataFrame(
+        {"map_code": [1, 2], "map_area": [9000, 1000], "map_edited_class": ["A", "B"]}
+    )
+    return SamplingInputs(
+        sampling_method=SamplingMethod.STRATIFIED,
+        target_error=5.0,
+        confidence_level=95.0,
+        expected_accuracy=85.0,
+        area_data=area_data,
+        allocation_method=method,
+        min_samples_per_class=5,
+        expected_accuracies=None,  # non-Neyman must not require per-class EUA
+    )
+
+
+def test_stratified_proportional_uses_global_eua_without_per_class():
+    results = StratifiedSamplingStrategy().calculate(
+        _global_eua_inputs(AllocationMethod.PROPORTIONAL)
+    )
+    assert results.success is True
+    assert results.allocation_method == "proportional"
+    by_code = {a.map_code: a for a in results.samples_per_class}
+    # global EUA (0.85) drives sizing/MOE for every class
+    assert all(a.expected_accuracy == 0.85 for a in results.samples_per_class)
+    # proportional -> the larger class gets more samples than the rare one
+    assert by_code[1].samples > by_code[2].samples
+
+
+def test_stratified_equal_allocation_is_uniform():
+    results = StratifiedSamplingStrategy().calculate(
+        _global_eua_inputs(AllocationMethod.EQUAL)
+    )
+    assert results.success is True
+    assert results.allocation_method == "equal"
+    by_code = {a.map_code: a for a in results.samples_per_class}
+    assert by_code[1].samples == by_code[2].samples  # equal allocation
 
 
 if __name__ == "__main__":
