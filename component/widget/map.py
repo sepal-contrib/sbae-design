@@ -1,6 +1,7 @@
 import logging
 
 import ipyleaflet
+import solara
 from localtileserver import TileClient, get_leaflet_tile_layer
 from sepal_ui.mapping import SepalMap
 from sepal_ui.sepalwidgets.vue_app import ThemeToggle
@@ -26,6 +27,21 @@ def _build_class_colormap(class_colors: dict) -> dict:
     for code, hex_color in class_colors.items():
         colormap[int(code)] = (*_hex_to_rgb(hex_color), 255)
     return colormap
+
+
+def _tile_client_kwargs_for_runtime(is_voila: bool | None = None) -> dict:
+    """Return TileClient browser URL options for the current runtime."""
+    if is_voila is None:
+        is_voila = solara.util.is_running_in_voila()
+
+    if not is_voila:
+        return {}
+
+    return {
+        "client_host": "127.0.0.1",
+        "client_port": True,
+        "cors_all": True,
+    }
 
 
 class SbaeMap(SepalMap):
@@ -102,7 +118,7 @@ class SbaeMap(SepalMap):
                 fit_bounds=fit_bounds,
             )
 
-        client = TileClient(path)
+        client = TileClient(path, **_tile_client_kwargs_for_runtime())
         layer = get_leaflet_tile_layer(
             client,
             colormap=colormap_arg,

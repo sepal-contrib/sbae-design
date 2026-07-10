@@ -18,6 +18,7 @@ if os.path.exists(proj_data):
 import logging
 
 import solara
+import solara.server.kernel_context as solara_kernel_context
 from sepal_ui.logger import setup_logging
 from sepal_ui.sepalwidgets.vue_app import MapApp, ThemeToggle
 from sepal_ui.solara import (
@@ -48,19 +49,24 @@ setup_solara_server()
 USE_GEE = False
 
 
+def _has_solara_kernel_context() -> bool:
+    """Return whether the current render is running under Solara server."""
+    return solara_kernel_context.has_current_context()
+
+
 @solara.lab.on_kernel_start
 def on_kernel_start():
     return setup_sessions()
 
 
 @solara.component
-# @with_sepal_sessions(module_name="sbae_app")
 def Page():
     """Main SBAE application page using MapApp layout."""
     # Notification system (pysepal): mount the provider once at the app root,
     # before any component that calls use_notifications(). Kept in the same page
     # as MapApp so the task pill can track the right-panel offset.
-    NotificationProvider()
+    if _has_solara_kernel_context():
+        NotificationProvider()
     ErrorToastBridge()
 
     app_model = AppModel()
