@@ -47,8 +47,10 @@ def _tile_client_kwargs_for_runtime(is_voila: bool | None = None) -> dict:
 class SbaeMap(SepalMap):
     """SBAE Map class extending SepalMap for map visualization and interactions."""
 
-    def __init__(self, theme_toggle: ThemeToggle, gee: bool = False):
-        super().__init__(fullscreen=True, theme_toggle=theme_toggle, gee=gee)
+    def __init__(self, theme_toggle: ThemeToggle, gee: bool = False, min_zoom: int = 5):
+        super().__init__(
+            fullscreen=True, theme_toggle=theme_toggle, gee=gee, min_zoom=min_zoom
+        )
 
         self.classification_layer = None
         self.sample_points_layer = None
