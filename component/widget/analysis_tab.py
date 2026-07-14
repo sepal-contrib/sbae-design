@@ -146,7 +146,7 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
 
 
 @solara.component
-def AnalysisPanel():
+def AnalysisPanel(theme_toggle=None):
     """Full analysis panel filling the Analysis tab."""
     reading = solara.use_reactive(False)
     ref_path = solara.use_reactive(None)
@@ -271,7 +271,7 @@ def AnalysisPanel():
         # Results section, always present like the design's Summary: the worked
         # output once ready, otherwise a hint on what to do next.
         if app_state.analysis_results.value is not None:
-            AnalysisResultsView()
+            AnalysisResultsView(theme_toggle=theme_toggle)
         elif not ref_loaded:
             solara.Info(
                 "Upload a reference table (or load the example data) to run the "

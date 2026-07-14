@@ -53,6 +53,10 @@ def AreaEstimateChart(results: dict, unit: str, theme_toggle=None):
     )
 
     option = Option(
+        # Transparent background (alpha 00) so the chart blends into the panel
+        # instead of showing ECharts' built-in dark theme #100c2a fill. Matches
+        # the summary pie/precision charts in summary.py.
+        backgroundColor="#1e1e1e00",
         title=Title(
             text="Error-adjusted area by class",
             left="center",

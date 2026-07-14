@@ -12,7 +12,7 @@ def _unit_label(unit: str) -> str:
 
 
 @solara.component
-def AnalysisResultsView():
+def AnalysisResultsView(theme_toggle=None):
     results = app_state.analysis_results.value
     if not results:
         return
@@ -27,7 +27,7 @@ def AnalysisResultsView():
         _Accuracy(results)
         from component.widget.analysis_chart import AreaEstimateChart  # Task 10
 
-        AreaEstimateChart(results, unit)
+        AreaEstimateChart(results, unit, theme_toggle=theme_toggle)
         _Downloads()
 
 
