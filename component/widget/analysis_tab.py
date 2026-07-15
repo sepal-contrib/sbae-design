@@ -531,28 +531,35 @@ def _ClassificationMapUpload(sbae_map=None):
         app_state.analysis_area_df.value = area_df
         app_state.analysis_reference_df.value = ref_out
 
+        status.value = (
+            f"{len(ref_out)} points sampled, {dropped} dropped "
+            "(outside raster / nodata)"
+        )
+
         # Already running off-thread (this function is invoked via
         # asyncio.to_thread by _derive_task below), so call the map methods
         # directly -- no nested asyncio.to_thread, no sync render-path call.
+        # A failure here (e.g. a corrupt raster the tile server can't open)
+        # must not discard the valid analysis results computed above.
         if sbae_map is not None:
-            colors = app_state.class_colors.value or {}
-            sbae_map.add_class_raster(
-                raster, colors, "Classification (analysis)", "clas_an"
-            )
-            sbae_map.add_sample_points(
-                pd.DataFrame(
+            try:
+                colors = app_state.class_colors.value or {}
+                sbae_map.add_class_raster(
+                    raster, colors, "Classification (analysis)", "clas_an"
+                )
+                points = pd.DataFrame(
                     {
                         "longitude": ref_out[mapping["x"]],
                         "latitude": ref_out[mapping["y"]],
                         "map_code": ref_out["map_code"],
                     }
                 )
-            )
-
-        status.value = (
-            f"{len(ref_out)} points sampled, {dropped} dropped "
-            "(outside raster / nodata)"
-        )
+                sbae_map.add_sample_points(points)
+            except Exception as e:  # results are valid; only the map layer failed
+                app_state.add_error(
+                    "Analysis ran, but the classification map could not be "
+                    f"rendered on the map: {e}"
+                )
 
     async def _derive_task():
         await asyncio.to_thread(run_derivation)
