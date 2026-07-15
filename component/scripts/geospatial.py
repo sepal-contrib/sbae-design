@@ -1267,13 +1267,13 @@ def extract_map_codes(
             rxs, rys = warp_transform(points_crs, src.crs, xs.tolist(), ys.tolist())
         else:
             rxs, rys = xs.tolist(), ys.tolist()
-        left, bottom, right, top = src.bounds
         nodata = src.nodata
         pts = list(zip(rxs, rys))
         codes = []
-        for (x, y), val in zip(pts, src.sample(pts)):
+        for (x, y), val in zip(pts, src.sample(pts, indexes=1)):
+            row, col = src.index(x, y)
             v = val[0]
-            inside = left <= x <= right and bottom <= y <= top
+            inside = 0 <= row < src.height and 0 <= col < src.width
             if inside and not (nodata is not None and v == nodata):
                 codes.append(int(v))
             else:

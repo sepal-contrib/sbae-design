@@ -56,6 +56,17 @@ def test_drops_nodata(tmp_path):
     assert out.empty
 
 
+def test_drops_point_on_right_bottom_edge(tmp_path):
+    data = np.array([[1, 1], [1, 1]], dtype=np.uint8)
+    p = tmp_path / "edge.tif"
+    _write(p, data, "EPSG:4326", from_origin(0, 2, 1, 1))  # bounds x[0,2] y[0,2]
+    # (2.0, 1.0): x == right edge -> maps to col 2 (out of range) -> must be dropped
+    df = pd.DataFrame({"x": [2.0, 0.5], "y": [1.0, 0.5]})
+    out, dropped = extract_map_codes(df, str(p), "x", "y")
+    assert dropped == 1
+    assert out["map_code"].tolist() == [1]
+
+
 def test_reprojects_points(tmp_path):
     # Raster in Web Mercator, placed ~500km from the coordinate origin so a
     # broken implementation that forgot to reproject (used raw lon/lat as if
