@@ -147,7 +147,7 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
 
 
 @solara.component
-def AnalysisPanel():
+def AnalysisPanel(sbae_map=None):
     """Full analysis panel filling the Analysis tab."""
     reading = solara.use_reactive(False)
     ref_path = solara.use_reactive(None)
@@ -268,7 +268,7 @@ def AnalysisPanel():
             _ColumnMappingCard(
                 list(ref_df.columns), app_state.analysis_area_source.value
             )
-            _AnalysisControls()
+            _AnalysisControls(sbae_map=sbae_map)
             _FilterCard(list(ref_df.columns))
 
         # Results section, always present like the design's Summary: the worked
@@ -357,7 +357,7 @@ def _ColumnMappingCard(columns: list, area_source: str = "upload"):
 
 
 @solara.component
-def _AnalysisControls():
+def _AnalysisControls(sbae_map=None):
     """Area source, confidence level, unit, and optional filter controls."""
     with solara.Column(gap="8px"):
         Section("Options", "mdi-tune")
@@ -379,7 +379,7 @@ def _AnalysisControls():
         if app_state.analysis_area_source.value == "upload":
             _AreaUpload()
         if app_state.analysis_area_source.value == "map":
-            _ClassificationMapUpload()
+            _ClassificationMapUpload(sbae_map=sbae_map)
         solara.Select(
             label="Confidence level (%)",
             value=app_state.analysis_confidence_level.value,
@@ -501,7 +501,7 @@ def _AreaUpload():
 
 
 @solara.component
-def _ClassificationMapUpload():
+def _ClassificationMapUpload(sbae_map=None):
     """Pick a classification GeoTIFF and derive map_code + areas from it.
 
     Samples the raster at each reference point to fill map_code and computes
@@ -530,6 +530,25 @@ def _ClassificationMapUpload():
         app_state.analysis_column_mapping.value = mapping
         app_state.analysis_area_df.value = area_df
         app_state.analysis_reference_df.value = ref_out
+
+        # Already running off-thread (this function is invoked via
+        # asyncio.to_thread by _derive_task below), so call the map methods
+        # directly -- no nested asyncio.to_thread, no sync render-path call.
+        if sbae_map is not None:
+            colors = app_state.class_colors.value or {}
+            sbae_map.add_class_raster(
+                raster, colors, "Classification (analysis)", "clas_an"
+            )
+            sbae_map.add_sample_points(
+                pd.DataFrame(
+                    {
+                        "longitude": ref_out[mapping["x"]],
+                        "latitude": ref_out[mapping["y"]],
+                        "map_code": ref_out["map_code"],
+                    }
+                )
+            )
+
         status.value = (
             f"{len(ref_out)} points sampled, {dropped} dropped "
             "(outside raster / nodata)"

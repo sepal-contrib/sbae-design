@@ -3,8 +3,11 @@
 import asyncio
 
 import ipyvuetify as v
+import numpy as np
 import pandas as pd
+import rasterio
 import solara
+from rasterio.transform import from_origin
 
 from component.model import app_state
 from component.model.state_manager import AppState
@@ -274,3 +277,132 @@ def test_classification_map_upload_survives_derivation_error(monkeypatch, tmp_pa
     assert any(
         "x/y column mapping" in msg for msg in st.error_messages.value
     ), st.error_messages.value
+
+
+def test_analysis_panel_accepts_sbae_map():
+    import inspect
+
+    from component.widget.analysis_tab import AnalysisPanel
+
+    fn = getattr(AnalysisPanel, "f", AnalysisPanel)
+    assert "sbae_map" in inspect.signature(fn).parameters
+
+
+class _FakeSbaeMap:
+    """Records add_class_raster/add_sample_points calls instead of a real map."""
+
+    def __init__(self):
+        self.class_raster_calls = []
+        self.sample_points_calls = []
+
+    def add_class_raster(self, path, class_colors, layer_name, key):
+        self.class_raster_calls.append(
+            {
+                "path": path,
+                "class_colors": class_colors,
+                "layer_name": layer_name,
+                "key": key,
+            }
+        )
+
+    def add_sample_points(self, points_df):
+        self.sample_points_calls.append(points_df)
+
+
+def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_path):
+    """A successful derivation adds the classification raster + ref points to sbae_map.
+
+    Drives the real ``use_task`` derivation (real rasterio round-trip, same
+    fixture as ``test_derive_from_classification.py``) with a fake ``sbae_map``
+    standing in for ``SbaeMap``, so this exercises the actual success-path
+    wiring rather than asserting it by inspection.
+    """
+    data = np.array(
+        [[1, 1, 2, 2], [1, 1, 2, 2], [3, 3, 4, 4], [3, 3, 4, 4]], dtype=np.uint8
+    )
+    raster_path = tmp_path / "clas.tif"
+    with rasterio.open(
+        raster_path,
+        "w",
+        driver="GTiff",
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs="EPSG:4326",
+        transform=from_origin(0, 4, 1, 1),
+    ) as dst:
+        dst.write(data, 1)
+
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame(
+        {"lon": [0.5, 2.5], "lat": [3.5, 0.5], "ref_code": [1, 2]}
+    )
+    st.analysis_column_mapping.value = {"x": "lon", "y": "lat", "ref": "ref_code"}
+    st.analysis_classification_path.value = str(raster_path)
+    st.class_colors.value = {1: "#ff0000", 2: "#00ff00", 3: "#0000ff", 4: "#ffff00"}
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+
+    fake_map = _FakeSbaeMap()
+
+    async def _runner():
+        element = analysis_tab._ClassificationMapUpload.widget(sbae_map=fake_map)
+        # Let the use_task's background thread run the derivation and the
+        # resulting re-render settle (see pysepal's export-test pattern).
+        for _ in range(20):
+            await asyncio.sleep(0.05)
+        return element
+
+    _run_with_task_loop(_runner)
+
+    assert len(fake_map.class_raster_calls) == 1
+    call = fake_map.class_raster_calls[0]
+    assert call["path"] == str(raster_path)
+    assert call["class_colors"] == st.class_colors.value
+    assert call["key"] == "clas_an"
+
+    assert len(fake_map.sample_points_calls) == 1
+    points_df = fake_map.sample_points_calls[0]
+    assert set(points_df.columns) >= {"latitude", "longitude", "map_code"}
+    assert points_df["map_code"].tolist() == [1, 4]
+    assert points_df["longitude"].tolist() == [0.5, 2.5]
+    assert points_df["latitude"].tolist() == [3.5, 0.5]
+
+
+def test_classification_map_upload_skips_layers_without_sbae_map(monkeypatch, tmp_path):
+    """No sbae_map -> derivation still succeeds; no AttributeError from a None map."""
+    data = np.array(
+        [[1, 1, 2, 2], [1, 1, 2, 2], [3, 3, 4, 4], [3, 3, 4, 4]], dtype=np.uint8
+    )
+    raster_path = tmp_path / "clas.tif"
+    with rasterio.open(
+        raster_path,
+        "w",
+        driver="GTiff",
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs="EPSG:4326",
+        transform=from_origin(0, 4, 1, 1),
+    ) as dst:
+        dst.write(data, 1)
+
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame(
+        {"lon": [0.5, 2.5], "lat": [3.5, 0.5], "ref_code": [1, 2]}
+    )
+    st.analysis_column_mapping.value = {"x": "lon", "y": "lat", "ref": "ref_code"}
+    st.analysis_classification_path.value = str(raster_path)
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+
+    async def _runner():
+        element = analysis_tab._ClassificationMapUpload.widget()  # sbae_map=None
+        for _ in range(20):
+            await asyncio.sleep(0.05)
+        return element
+
+    _run_with_task_loop(_runner)
+
+    assert st.analysis_reference_df.value["map_code"].tolist() == [1, 4]
+    assert not st.error_messages.value
