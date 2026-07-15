@@ -12,23 +12,13 @@ def _unit_label(unit: str) -> str:
 
 
 @solara.component
-def AnalysisResultsView():
+def AnalysisResultsView(theme_toggle=None):
     results = app_state.analysis_results.value
     if not results:
         return
-    # Live unit: read the reactive so the ha/m² toggle updates the display
-    # without requiring a recompute (rather than the stale value baked into
-    # the results dict at compute time).
-    unit = app_state.analysis_area_unit.value
-    with solara.Column(style="gap: 14px;"):
-        _OverallAccuracy(results)
-        _ConfusionMatrix(results)
-        _AreaEstimates(results, unit)
-        _Accuracy(results)
-        from component.widget.analysis_chart import AreaEstimateChart  # Task 10
+    from component.widget.analysis_dashboard import AnalysisSummaryCard
 
-        AreaEstimateChart(results, unit)
-        _Downloads()
+    AnalysisSummaryCard(theme_toggle=theme_toggle)
 
 
 @solara.component
