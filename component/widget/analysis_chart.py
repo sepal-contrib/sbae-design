@@ -7,7 +7,7 @@ from ipecharts.tools import encode_js_fn
 
 from component.model import app_state
 from component.scripts.accuracy import convert_area
-from component.widget.echarts import EChartsWidget
+from component.widget.echarts import EChartsWidget, RawEChartsWidget
 
 
 @solara.component
@@ -68,6 +68,87 @@ def AreaEstimateChart(results: dict, unit: str, theme_toggle=None):
     )
     # Card-less: the chart carries its own title, and the right panel avoids cards.
     EChartsWidget.element(
+        option=option,
+        style={"height": "420px", "width": "100%"},
+        theme_toggle=theme_toggle,
+    )
+
+
+def confusion_heatmap_data(confusion_matrix: dict):
+    """Reshape a confusion-matrix dict into echarts heatmap inputs.
+
+    Returns (x_labels, y_labels, triples, max_count):
+      x_labels = reference classes (columns) as strings
+      y_labels = mapped classes (index) as strings
+      triples  = [x_index, y_index, count] for every cell
+      max_count = largest cell value, at least 1 (for visualMap.max)
+    """
+    x_labels = [str(c) for c in confusion_matrix.get("columns", [])]
+    y_labels = [str(i) for i in confusion_matrix.get("index", [])]
+    triples = []
+    max_count = 0.0
+    for y, row in enumerate(confusion_matrix.get("data", [])):
+        for x, value in enumerate(row):
+            count = float(value)
+            triples.append([x, y, count])
+            max_count = max(max_count, count)
+    return x_labels, y_labels, triples, max(max_count, 1.0)
+
+
+@solara.component
+def ConfusionMatrixChart(results: dict, theme_toggle=None):
+    cm = results.get("confusion_matrix")
+    if not cm:
+        return
+    x_labels, y_labels, triples, max_count = confusion_heatmap_data(cm)
+    option = {
+        "backgroundColor": "#1e1e1e00",
+        "title": {
+            "text": "Confusion matrix (map -> reference)",
+            "left": "center",
+            "textStyle": {"fontSize": 13, "fontWeight": "normal"},
+        },
+        "tooltip": {"position": "top"},
+        "grid": {"top": "14%", "bottom": "18%", "left": "16%", "right": "8%"},
+        "xAxis": {
+            "type": "category",
+            "data": x_labels,
+            "name": "reference",
+            "nameLocation": "middle",
+            "nameGap": 28,
+            "splitArea": {"show": True},
+            "axisLabel": {"fontSize": 10},
+        },
+        "yAxis": {
+            "type": "category",
+            "data": y_labels,
+            "name": "map",
+            "splitArea": {"show": True},
+            "axisLabel": {"fontSize": 10},
+        },
+        "visualMap": {
+            "min": 0,
+            "max": max_count,
+            "calculable": True,
+            "orient": "horizontal",
+            "left": "center",
+            "bottom": "2%",
+        },
+        "series": [
+            {
+                "type": "heatmap",
+                "data": triples,
+                "label": {"show": True, "fontSize": 9},
+                "emphasis": {
+                    "itemStyle": {
+                        "shadowBlur": 6,
+                        "shadowColor": "rgba(0,0,0,0.3)",
+                    }
+                },
+            }
+        ],
+    }
+    RawEChartsWidget.element(
         option=option,
         style={"height": "420px", "width": "100%"},
         theme_toggle=theme_toggle,
