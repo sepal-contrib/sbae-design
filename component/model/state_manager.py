@@ -82,8 +82,13 @@ class AppState:
 
         # --- Analysis (accuracy assessment) ---
         self.analysis_reference_df = solara.reactive(pd.DataFrame())
-        self.analysis_area_source = solara.reactive("design")  # "design" | "upload"
+        self.analysis_area_source = solara.reactive(
+            "design"
+        )  # "design" | "upload" | "map"
         self.analysis_area_df = solara.reactive(pd.DataFrame())
+        self.analysis_classification_path = solara.reactive(
+            None
+        )  # raster path for "map" source
         self.analysis_column_mapping = solara.reactive({})
         self.analysis_filter = solara.reactive(None)
         self.analysis_confidence_level = solara.reactive(95.0)

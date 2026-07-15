@@ -45,3 +45,19 @@ def test_not_ready_when_no_reference():
     st.analysis_reference_df = _R(pd.DataFrame())
     assert AnalysisService.is_ready(st) is False
     assert AnalysisService.get_validation_errors(st)
+
+
+def test_create_inputs_map_source_uses_area_df():
+    from component.model.state_manager import AppState
+
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame(
+        {"map_code": [1, 2], "ref_code": [1, 1]}
+    )
+    st.analysis_column_mapping.value = {"map": "map_code", "ref": "ref_code"}
+    st.analysis_area_df.value = pd.DataFrame(
+        {"map_code": [1, 2], "map_area": [100.0, 50.0]}
+    )
+    st.analysis_area_source.value = "map"
+    inputs = AnalysisService.create_inputs_from_state(st)
+    assert list(inputs.area_data["map_area"]) == [100.0, 50.0]

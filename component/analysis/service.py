@@ -44,6 +44,10 @@ class AnalysisService:
                 if raw_area is not None and not raw_area.empty
                 else pd.DataFrame()
             )
+        elif app_state.analysis_area_source.value == "map":
+            # raster-derived area table is already canonical map_code / map_area
+            raw_area = app_state.analysis_area_df.value
+            area = raw_area.copy() if raw_area is not None else pd.DataFrame()
         else:
             # design side already yields map_code / map_area
             area = app_state.area_data.value

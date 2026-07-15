@@ -153,6 +153,26 @@ def overall_accuracy(pij: pd.DataFrame) -> float:
     return float(np.trace(m.values))
 
 
+def derive_from_classification(reference_df, mapping, raster_path):
+    """Fill map_code by sampling a raster and compute the per-class area table.
+
+    Returns (reference_df_with_map_code, area_df, dropped_count). The map wins:
+    any existing map_code column is overwritten by the sampled value.
+    """
+    from component.scripts.geospatial import (
+        compute_area_from_raster,
+        extract_map_codes,
+    )
+
+    x_col = mapping.get("x")
+    y_col = mapping.get("y")
+    if not x_col or not y_col:
+        raise ValueError("Classification-map analysis requires x/y column mapping.")
+    ref_out, dropped = extract_map_codes(reference_df, raster_path, x_col, y_col)
+    area_df = compute_area_from_raster(raster_path)
+    return ref_out, area_df, dropped
+
+
 def convert_area(value: float, unit: str) -> float:
     """Convert a native (m2) area for display. 'ha' -> /10000; else identity."""
     if unit == "ha":
