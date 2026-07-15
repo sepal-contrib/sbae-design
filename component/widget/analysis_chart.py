@@ -103,7 +103,7 @@ def confusion_heatmap_data(confusion_matrix: dict):
 @solara.component
 def ConfusionMatrixChart(results: dict, theme_toggle=None):
     cm = results.get("confusion_matrix")
-    if not cm:
+    if not cm or not cm.get("data"):
         return
     x_labels, y_labels, triples, max_count = confusion_heatmap_data(cm)
     option = {
