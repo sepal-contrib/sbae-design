@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.transform import xy
+from rasterio.warp import transform as warp_transform
 from rasterio.windows import Window
 from shapely.geometry import Point
 
@@ -1243,3 +1244,42 @@ def get_file_info(file_path: str) -> Dict:
         info["error"] = str(e)
 
     return info
+
+
+def extract_map_codes(
+    reference_df: pd.DataFrame,
+    raster_path: str,
+    x_col: str,
+    y_col: str,
+    points_crs: str = "EPSG:4326",
+) -> "tuple[pd.DataFrame, int]":
+    """Sample a classification raster at each reference point to fill map_code.
+
+    Reprojects the (x_col, y_col) points from points_crs to the raster CRS,
+    samples band 1, and returns (df_with_map_code, dropped_count). Rows whose
+    point falls outside the raster footprint or on the nodata value are dropped.
+    """
+    df = reference_df.copy()
+    xs = df[x_col].astype(float).to_numpy()
+    ys = df[y_col].astype(float).to_numpy()
+    with rasterio.open(raster_path) as src:
+        if src.crs is not None and points_crs and str(src.crs) != str(points_crs):
+            rxs, rys = warp_transform(points_crs, src.crs, xs.tolist(), ys.tolist())
+        else:
+            rxs, rys = xs.tolist(), ys.tolist()
+        left, bottom, right, top = src.bounds
+        nodata = src.nodata
+        pts = list(zip(rxs, rys))
+        codes = []
+        for (x, y), val in zip(pts, src.sample(pts)):
+            v = val[0]
+            inside = left <= x <= right and bottom <= y <= top
+            if inside and not (nodata is not None and v == nodata):
+                codes.append(int(v))
+            else:
+                codes.append(None)
+    df["map_code"] = codes
+    dropped = int(df["map_code"].isna().sum())
+    df = df[df["map_code"].notna()].copy()
+    df["map_code"] = df["map_code"].astype(int)
+    return df, dropped
