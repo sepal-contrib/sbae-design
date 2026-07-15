@@ -5,6 +5,7 @@ import pandas as pd
 import solara
 
 from component.model import app_state
+from component.model.state_manager import AppState
 from component.widget.analysis_results import _ConfusionMatrix
 from component.widget.analysis_tab import (
     AnalysisPanel,
@@ -182,3 +183,21 @@ def test_section_without_description_renders_only_title_text():
     ]
     assert len(text_spans) == 1
     assert "Generate Points" in (text_spans[0].children or [])
+
+
+def test_column_mapping_hides_map_role_for_map_source(monkeypatch):
+    from component.widget import analysis_tab
+
+    st = AppState()
+    st.analysis_area_source.value = "map"
+    st.analysis_column_mapping.value = {}
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+    _, rc = solara.render(
+        analysis_tab._ColumnMappingCard(["a", "b"], area_source="map"),
+        handle_error=False,
+    )
+    # Select labels are a v.Select widget trait (rendered client-side by
+    # Vuetify), not v.Html children, so inspect the Select widgets directly.
+    labels = " ".join(str(s.label) for s in rc.find(v.Select).widgets)
+    assert "Reference class" in labels
+    assert "Map / predicted" not in labels  # map role hidden when the map derives it

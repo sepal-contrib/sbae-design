@@ -574,6 +574,7 @@ class AppState:
         self.analysis_reference_df.value = pd.DataFrame()
         self.analysis_area_source.value = "design"
         self.analysis_area_df.value = pd.DataFrame()
+        self.analysis_classification_path.value = None
         self.analysis_column_mapping.value = {}
         self.analysis_filter.value = None
         self.analysis_confidence_level.value = 95.0

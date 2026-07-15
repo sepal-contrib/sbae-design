@@ -1,5 +1,6 @@
 """Accuracy-assessment analysis UI: upload -> mapping -> compute -> results."""
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -264,7 +265,9 @@ def AnalysisPanel():
             )
 
         if ref_loaded:
-            _ColumnMappingCard(list(ref_df.columns))
+            _ColumnMappingCard(
+                list(ref_df.columns), app_state.analysis_area_source.value
+            )
             _AnalysisControls()
             _FilterCard(list(ref_df.columns))
 
@@ -319,7 +322,7 @@ def _ReferenceUploadDialog(ref_path, on_close=None):
 
 
 @solara.component
-def _ColumnMappingCard(columns: list):
+def _ColumnMappingCard(columns: list, area_source: str = "upload"):
     """Dropdowns mapping CSV columns to analysis roles."""
     mapping = app_state.analysis_column_mapping.value
     options = [None, *list(columns)]
@@ -332,13 +335,16 @@ def _ColumnMappingCard(columns: list):
 
         return _set
 
+    map_source = area_source == "map"
     labels = {
         "map": "Map / predicted class *",
         "ref": "Reference class *",
-        "x": "X / longitude",
-        "y": "Y / latitude",
+        "x": "X / longitude *" if map_source else "X / longitude",
+        "y": "Y / latitude *" if map_source else "Y / latitude",
         "sample_area": "Per-sample area (optional)",
     }
+    if map_source:
+        del labels["map"]  # map_code is derived from the raster
     with solara.Column(gap="4px"):
         Section("Column mapping", "mdi-swap-horizontal")
         for role, label in labels.items():
@@ -362,7 +368,7 @@ def _AnalysisControls():
         solara.Select(
             label="Area / strata source",
             value=app_state.analysis_area_source.value,
-            values=["design", "upload"],
+            values=["design", "upload", "map"],
             on_value=lambda v: app_state.analysis_area_source.set(v),
         )
         if app_state.analysis_area_source.value == "design" and not has_design_area:
@@ -372,6 +378,8 @@ def _AnalysisControls():
             )
         if app_state.analysis_area_source.value == "upload":
             _AreaUpload()
+        if app_state.analysis_area_source.value == "map":
+            _ClassificationMapUpload()
         solara.Select(
             label="Confidence level (%)",
             value=app_state.analysis_confidence_level.value,
@@ -490,3 +498,50 @@ def _AreaUpload():
             values=[None, *cols],
             on_value=set_area_role("area_value"),
         )
+
+
+@solara.component
+def _ClassificationMapUpload():
+    """Pick a classification GeoTIFF and derive map_code + areas from it.
+
+    Samples the raster at each reference point to fill map_code and computes
+    the per-class area table — the map is the source of truth.
+    """
+    status = solara.use_reactive("")
+    path = app_state.analysis_classification_path
+
+    def run_derivation():
+        ref = app_state.analysis_reference_df.value
+        raster = path.value
+        if not raster or ref is None or ref.empty:
+            return
+        from component.scripts.accuracy import derive_from_classification
+
+        ref_out, area_df, dropped = derive_from_classification(
+            ref, app_state.analysis_column_mapping.value or {}, raster
+        )
+        mapping = dict(app_state.analysis_column_mapping.value or {})
+        mapping["map"] = "map_code"
+        app_state.analysis_column_mapping.value = mapping
+        app_state.analysis_area_df.value = area_df
+        app_state.analysis_reference_df.value = ref_out
+        status.value = (
+            f"{len(ref_out)} points sampled, {dropped} dropped "
+            "(outside raster / nodata)"
+        )
+
+    async def _derive_task():
+        await asyncio.to_thread(run_derivation)
+
+    solara.lab.use_task(_derive_task, dependencies=[path.value], prefer_threaded=False)
+
+    if path.value:
+        with solara.Row(style="align-items: center; gap: 8px;"):
+            solara.Text(Path(path.value).name)
+            solara.Button(
+                icon_name="mdi-close", icon=True, on_click=lambda: path.set(None)
+            )
+    else:
+        FileInputComponent(extensions=[".tif", ".tiff"], on_value=lambda p: path.set(p))
+    if status.value:
+        solara.Text(status.value, style="opacity: 0.8;")
