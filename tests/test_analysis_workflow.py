@@ -115,5 +115,14 @@ def test_standalone_map_analysis_end_to_end(tmp_path):
     results = AnalysisService.analyze_from_state(st)
     assert results.success
     d = results.to_dict()
-    assert d["confusion_matrix"] is not None
-    assert len(d["class_estimates"]) >= 1
+    # every reference point's map_code == ref_code by construction -> perfect accuracy
+    assert d["overall_accuracy"] == 1.0
+    assert len(d["class_estimates"]) == 4
+    # each of 4 classes covers 4 of 16 unit-area pixels -> per-class 4.0, total 16.0
+    assert sum(c["area_estimate"] for c in d["class_estimates"]) == 16.0
+    # perfect agreement => diagonal confusion matrix (no off-diagonal confusion)
+    cm = d["confusion_matrix"]
+    for i, row in enumerate(cm["data"]):
+        for j, val in enumerate(row):
+            if i != j:
+                assert val == 0
