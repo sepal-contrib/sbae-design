@@ -1,11 +1,14 @@
 """UI-widget tests for the analysis tab: current-table card and download menu."""
 
+import asyncio
+
 import ipyvuetify as v
 import pandas as pd
 import solara
 
 from component.model import app_state
 from component.model.state_manager import AppState
+from component.widget import analysis_tab
 from component.widget.analysis_results import _ConfusionMatrix
 from component.widget.analysis_tab import (
     AnalysisPanel,
@@ -201,3 +204,73 @@ def test_column_mapping_hides_map_role_for_map_source(monkeypatch):
     labels = " ".join(str(s.label) for s in rc.find(v.Select).widgets)
     assert "Reference class" in labels
     assert "Map / predicted" not in labels  # map role hidden when the map derives it
+
+
+def _walk_widgets(widget):
+    yield widget
+    for child in getattr(widget, "children", ()) or ():
+        yield from _walk_widgets(child)
+
+
+def _run_with_task_loop(coro_factory):
+    """Run ``coro_factory()`` on a real event loop, then restore loop state.
+
+    ``asyncio.run`` unconditionally clears the process' "current" event loop
+    when it tears down, which sticks for the rest of the test session and
+    breaks later tests that rely on ``asyncio.get_event_loop()``'s legacy
+    auto-create fallback (e.g. solara's task runner). Save whatever loop was
+    current beforehand and restore it afterward so this test stays isolated.
+    """
+    try:
+        previous_loop = asyncio.get_event_loop_policy().get_event_loop()
+    except RuntimeError:
+        previous_loop = None
+    try:
+        return asyncio.run(coro_factory())
+    finally:
+        asyncio.set_event_loop(previous_loop)
+
+
+def test_classification_map_upload_survives_derivation_error(monkeypatch, tmp_path):
+    """A raster picked before x/y mapping must not crash the whole widget tree.
+
+    Regression test for a bug where ``derive_from_classification`` raising
+    inside the ``use_task`` derivation (e.g. because x/y columns aren't
+    mapped yet) propagated out of render: with reacton's default
+    ``handle_error=True`` the whole widget tree -- clear button included --
+    gets replaced by a raw traceback ``ipywidgets.HTML``, wedging the page.
+    Verified empirically against the pre-fix code: the tree collapsed to a
+    single traceback widget and the clear button vanished. Post-fix the
+    error is caught, surfaced via ``status`` + ``app_state.add_error``, and
+    the normal widget tree (clear button included) is preserved.
+    """
+    raster_path = tmp_path / "classification.tif"
+    raster_path.write_bytes(b"")  # never opened: the x/y check raises first
+
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame(
+        {"x": [1, 2], "y": [3, 4], "ref_code": [1, 2]}
+    )
+    st.analysis_column_mapping.value = {}  # x/y NOT mapped yet
+    st.analysis_classification_path.value = str(raster_path)
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+
+    async def _runner():
+        element = analysis_tab._ClassificationMapUpload.widget()
+        # Let the use_task's background thread run the derivation and the
+        # resulting re-render settle (see pysepal's export-test pattern).
+        for _ in range(20):
+            await asyncio.sleep(0.05)
+        return element
+
+    element = _run_with_task_loop(_runner)
+
+    widgets = list(_walk_widgets(element))
+    # No raw traceback widget replaced the tree.
+    assert not [w for w in widgets if type(w).__name__ == "HTML"]
+    # The clear (mdi-close) button is still there -- the session isn't stuck.
+    assert [w for w in widgets if isinstance(w, v.Btn)]
+    # The error is surfaced through the app's error channel.
+    assert any(
+        "x/y column mapping" in msg for msg in st.error_messages.value
+    ), st.error_messages.value

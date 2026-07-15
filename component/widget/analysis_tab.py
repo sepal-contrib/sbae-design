@@ -517,9 +517,14 @@ def _ClassificationMapUpload():
             return
         from component.scripts.accuracy import derive_from_classification
 
-        ref_out, area_df, dropped = derive_from_classification(
-            ref, app_state.analysis_column_mapping.value or {}, raster
-        )
+        try:
+            ref_out, area_df, dropped = derive_from_classification(
+                ref, app_state.analysis_column_mapping.value or {}, raster
+            )
+        except Exception as e:  # surface, don't crash the page
+            status.value = f"Could not sample the classification map: {e}"
+            app_state.add_error(f"Classification-map analysis failed: {e}")
+            return
         mapping = dict(app_state.analysis_column_mapping.value or {})
         mapping["map"] = "map_code"
         app_state.analysis_column_mapping.value = mapping
@@ -533,7 +538,12 @@ def _ClassificationMapUpload():
     async def _derive_task():
         await asyncio.to_thread(run_derivation)
 
-    solara.lab.use_task(_derive_task, dependencies=[path.value], prefer_threaded=False)
+    solara.lab.use_task(
+        _derive_task,
+        dependencies=[path.value],
+        prefer_threaded=False,
+        raise_error=False,
+    )
 
     if path.value:
         with solara.Row(style="align-items: center; gap: 8px;"):
