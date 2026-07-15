@@ -2,7 +2,7 @@
 
 import solara
 from ipecharts.option import Grid, Legend, Option, Title, Tooltip, XAxis, YAxis
-from ipecharts.option.series import Bar, Custom
+from ipecharts.option.series import Bar, Custom, Pie
 from ipecharts.tools import encode_js_fn
 
 from component.model import app_state
@@ -180,6 +180,61 @@ def AccuracyByClassChart(results: dict, theme_toggle=None):
         yAxis=YAxis(type="value", name="%", max=100),
         grid=Grid(left="10%", right="6%", top="14%", bottom="18%"),
         series=[Bar(name="User's", data=users), Bar(name="Producer's", data=producers)],
+    )
+    EChartsWidget.element(
+        option=option,
+        style={"height": "420px", "width": "100%"},
+        theme_toggle=theme_toggle,
+    )
+
+
+_PIE_FALLBACK = [
+    "#5470c6",
+    "#91cc75",
+    "#fac858",
+    "#ee6666",
+    "#73c0de",
+    "#3ba272",
+    "#fc8452",
+    "#9a60b4",
+    "#ea7ccc",
+]
+
+
+@solara.component
+def AreaProportionChart(results: dict, theme_toggle=None):
+    rows = results.get("class_estimates", [])
+    if not rows:
+        return
+    colors = app_state.class_colors.value or {}
+    total = sum(max(r["area_estimate"], 0.0) for r in rows) or 1.0
+    pie_data = []
+    chart_colors = []
+    for idx, r in enumerate(rows):
+        pct = 100.0 * max(r["area_estimate"], 0.0) / total
+        chart_colors.append(
+            colors.get(r["map_code"], _PIE_FALLBACK[idx % len(_PIE_FALLBACK)])
+        )
+        pie_data.append(
+            {"value": round(pct, 2), "name": f"{r['class_name']} ({pct:.1f}%)"}
+        )
+    pie = Pie(
+        data=pie_data,
+        radius=[50, 100],
+        itemStyle={"borderRadius": 5, "borderColor": "#fff", "borderWidth": 2},
+        label={"show": False, "position": "center"},
+        emphasis={"label": {"show": True, "fontSize": 12}},
+    )
+    option = Option(
+        backgroundColor="#1e1e1e00",
+        legend=Legend(bottom=0),
+        series=[pie],
+        color=chart_colors,
+        title=Title(
+            text="Estimated area proportion",
+            left="center",
+            textStyle={"fontSize": 13, "fontWeight": "normal"},
+        ),
     )
     EChartsWidget.element(
         option=option,

@@ -3,6 +3,7 @@ import solara
 
 from component.widget.analysis_chart import (
     AccuracyByClassChart,
+    AreaProportionChart,
     ConfusionMatrixChart,
     confusion_heatmap_data,
 )
@@ -83,3 +84,13 @@ def test_accuracy_by_class_chart_two_series():
     series = widgets[0].option.series
     assert [s.name for s in series] == ["User's", "Producer's"]
     assert series[0].data == [80.0, 90.0]
+
+
+def test_area_proportion_chart_pie_sums_to_100():
+    _, rc = solara.render(
+        AreaProportionChart(_RESULTS, theme_toggle=None), handle_error=False
+    )
+    widgets = rc.find(EChartsWidget).widgets
+    assert len(widgets) == 1
+    pie = widgets[0].option.series[0]
+    assert round(sum(d["value"] for d in pie.data), 1) == 100.0
