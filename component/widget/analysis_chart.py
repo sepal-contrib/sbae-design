@@ -1,4 +1,8 @@
-"""Bar chart of error-adjusted area per class, with confidence-interval bars."""
+"""Charts for the analysis results.
+
+Error-adjusted area bars, confusion-matrix heatmap, accuracy-by-class bars,
+and estimated-area proportion pie.
+"""
 
 import solara
 from ipecharts.option import Grid, Legend, Option, Title, Tooltip, XAxis, YAxis

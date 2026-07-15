@@ -22,15 +22,6 @@ def AnalysisResultsView(theme_toggle=None):
 
 
 @solara.component
-def _OverallAccuracy(results):
-    oa = results.get("overall_accuracy", 0.0) * 100
-    ci = results.get("confidence_level", 95.0)
-    with solara.Column(gap="4px"):
-        Section("Overall accuracy", "mdi-bullseye-arrow")
-        solara.Markdown(f"**{oa:.1f}%**  ·  confidence level {ci:.0f}%")
-
-
-@solara.component
 def _ConfusionMatrix(results):
     cm = results.get("confusion_matrix")
     if not cm:
