@@ -1,7 +1,7 @@
 """Bar chart of error-adjusted area per class, with confidence-interval bars."""
 
 import solara
-from ipecharts.option import Grid, Option, Title, Tooltip, XAxis, YAxis
+from ipecharts.option import Grid, Legend, Option, Title, Tooltip, XAxis, YAxis
 from ipecharts.option.series import Bar, Custom
 from ipecharts.tools import encode_js_fn
 
@@ -149,6 +149,39 @@ def ConfusionMatrixChart(results: dict, theme_toggle=None):
         ],
     }
     RawEChartsWidget.element(
+        option=option,
+        style={"height": "420px", "width": "100%"},
+        theme_toggle=theme_toggle,
+    )
+
+
+@solara.component
+def AccuracyByClassChart(results: dict, theme_toggle=None):
+    rows = results.get("accuracy_rows", [])
+    if not rows:
+        return
+    names = [r["class_name"] for r in rows]
+    users = [round(r["users_accuracy"] * 100, 1) for r in rows]
+    producers = [round(r["producers_accuracy"] * 100, 1) for r in rows]
+    option = Option(
+        backgroundColor="#1e1e1e00",
+        title=Title(
+            text="Accuracy by class",
+            left="center",
+            textStyle={"fontSize": 13, "fontWeight": "normal"},
+        ),
+        tooltip=Tooltip(trigger="axis", axisPointer={"type": "shadow"}),
+        legend=Legend(bottom=0),
+        xAxis=XAxis(
+            type="category",
+            data=names,
+            axisLabel={"fontSize": 10, "interval": 0, "rotate": 30},
+        ),
+        yAxis=YAxis(type="value", name="%", max=100),
+        grid=Grid(left="10%", right="6%", top="14%", bottom="18%"),
+        series=[Bar(name="User's", data=users), Bar(name="Producer's", data=producers)],
+    )
+    EChartsWidget.element(
         option=option,
         style={"height": "420px", "width": "100%"},
         theme_toggle=theme_toggle,

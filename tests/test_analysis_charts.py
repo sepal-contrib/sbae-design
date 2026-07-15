@@ -2,10 +2,11 @@
 import solara
 
 from component.widget.analysis_chart import (
+    AccuracyByClassChart,
     ConfusionMatrixChart,
     confusion_heatmap_data,
 )
-from component.widget.echarts import RawEChartsWidget
+from component.widget.echarts import EChartsWidget, RawEChartsWidget
 
 _RESULTS = {
     "confusion_matrix": {
@@ -71,3 +72,14 @@ def test_confusion_matrix_chart_renders_raw_widget():
     assert opt["backgroundColor"] == "#1e1e1e00"
     assert opt["series"][0]["type"] == "heatmap"
     assert "visualMap" in opt
+
+
+def test_accuracy_by_class_chart_two_series():
+    _, rc = solara.render(
+        AccuracyByClassChart(_RESULTS, theme_toggle=None), handle_error=False
+    )
+    widgets = rc.find(EChartsWidget).widgets
+    assert len(widgets) == 1
+    series = widgets[0].option.series
+    assert [s.name for s in series] == ["User's", "Producer's"]
+    assert series[0].data == [80.0, 90.0]
