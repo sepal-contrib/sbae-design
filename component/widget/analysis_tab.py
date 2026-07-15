@@ -536,6 +536,19 @@ def _ClassificationMapUpload(sbae_map=None):
             "(outside raster / nodata)"
         )
 
+        # Standalone mode never runs the design-step upload that populates
+        # class_colors, so it's empty here -- without this, add_class_raster
+        # falls back to a continuous colormap and the map renders near-black.
+        # Populate it from the raster so both the map layer and the dashboard
+        # charts (which also read app_state.class_colors) get consistent
+        # categorical colors. Guarded so a real design-step palette is kept.
+        if not app_state.class_colors.value:
+            from component.scripts.geospatial import get_color_palette
+
+            app_state.class_colors.value = get_color_palette(
+                raster, sorted(int(c) for c in area_df["map_code"].tolist())
+            )
+
         # Already running off-thread (this function is invoked via
         # asyncio.to_thread by _derive_task below), so call the map methods
         # directly -- no nested asyncio.to_thread, no sync render-path call.

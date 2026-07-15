@@ -340,7 +340,10 @@ def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_pa
     )
     st.analysis_column_mapping.value = {"x": "lon", "y": "lat", "ref": "ref_code"}
     st.analysis_classification_path.value = str(raster_path)
-    st.class_colors.value = {1: "#ff0000", 2: "#00ff00", 3: "#0000ff", 4: "#ffff00"}
+    # Standalone mode: class_colors starts EMPTY, as it would with no
+    # design-step upload. run_derivation must derive it from the raster
+    # (see test assertions below) instead of leaving it empty.
+    assert st.class_colors.value == {}
     monkeypatch.setattr(analysis_tab, "app_state", st)
 
     fake_map = _FakeSbaeMap()
@@ -360,6 +363,11 @@ def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_pa
     assert call["path"] == str(raster_path)
     assert call["class_colors"] == st.class_colors.value
     assert call["key"] == "clas_an"
+    # The map layer must never fall back to a continuous colormap: with no
+    # design-step upload, class_colors starts empty and run_derivation must
+    # derive it from the raster (one entry per class present in the raster).
+    assert call["class_colors"], "class_colors must not be empty (near-black map)"
+    assert set(call["class_colors"]) == {1, 2, 3, 4}
 
     assert len(fake_map.sample_points_calls) == 1
     points_df = fake_map.sample_points_calls[0]

@@ -67,6 +67,16 @@ def test_drops_point_on_right_bottom_edge(tmp_path):
     assert out["map_code"].tolist() == [1]
 
 
+def test_existing_map_code_is_overwritten(tmp_path):
+    data = np.array([[1, 1], [1, 1]], dtype=np.uint8)
+    p = tmp_path / "clas.tif"
+    _write(p, data, "EPSG:4326", from_origin(0, 2, 1, 1))
+    df = pd.DataFrame({"x": [0.5], "y": [1.5], "map_code": [99]})  # bogus pre-existing
+    out, dropped = extract_map_codes(df, str(p), "x", "y")
+    assert dropped == 0
+    assert out["map_code"].tolist() == [1]  # raster value wins, 99 overwritten
+
+
 def test_reprojects_points(tmp_path):
     # Raster in Web Mercator, placed ~500km from the coordinate origin so a
     # broken implementation that forgot to reproject (used raw lon/lat as if
