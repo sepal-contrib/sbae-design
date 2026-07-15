@@ -53,6 +53,7 @@ def AreaEstimateChart(results: dict, unit: str, theme_toggle=None):
     )
 
     option = Option(
+        backgroundColor="#1e1e1e00",
         title=Title(
             text="Error-adjusted area by class",
             left="center",
