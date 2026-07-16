@@ -6,6 +6,7 @@ import solara
 
 from component.model import app_state
 from component.scripts.geospatial import generate_sample_points
+from component.scripts.vector_tiles import build_layer_or_notify
 
 logger = logging.getLogger("sbae.point_generation")
 
@@ -105,7 +106,9 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
         request = generation_request.value
         if request is None:
             return None
-        return run_point_generation_request(request)
+        points_df = run_point_generation_request(request)
+        layer = build_layer_or_notify(sbae_map, points_df, app_state.class_colors.value)
+        return (points_df, layer)
 
     generation_result = solara.use_thread(
         generate_points_worker,
@@ -129,15 +132,14 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
             app_state.set_processing_status("")
             generation_request.value = None
         elif generation_result.state == solara.ResultState.FINISHED:
-            points_df = generation_result.value
+            result = generation_result.value
+            points_df = result[0] if result is not None else None
+            layer = result[1] if result is not None else None
             if points_df is not None:
                 app_state.set_sample_points(points_df)
-
-                if sbae_map and not points_df.empty:
-                    logger.info("Adding sample points to map...")
-                    sbae_map.add_sample_points(points_df)
-                    logger.debug(points_df.head())
-
+                if sbae_map and layer is not None:
+                    logger.info("Attaching sample points layer to map...")
+                    sbae_map.attach_sample_points_layer(layer)
                 app_state.points_generation_status.value = POINT_GENERATION_FINISHED
 
             app_state.set_processing_status("")

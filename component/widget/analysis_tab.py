@@ -567,7 +567,7 @@ def _ClassificationMapUpload(sbae_map=None):
                         "map_code": ref_out["map_code"],
                     }
                 )
-                sbae_map.add_sample_points(points)
+                sbae_map.add_sample_points(points, colors)
             except Exception as e:  # results are valid; only the map layer failed
                 app_state.add_error(
                     "Analysis ran, but the classification map could not be "

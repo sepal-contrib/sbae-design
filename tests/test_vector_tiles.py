@@ -136,3 +136,37 @@ def test_build_points_layer_real(tmp_path):
     except VectorTileError as e:
         pytest.skip(f"tile library unavailable: {e}")
     assert layer is not None
+
+
+from component.scripts.vector_tiles import build_layer_or_notify
+
+
+class _MapOK:
+    def build_sample_points_layer(self, df, colors):
+        return "LAYER"
+
+
+class _MapBoom:
+    def build_sample_points_layer(self, df, colors):
+        raise VectorTileError("bad raster")
+
+
+def test_build_layer_or_notify_success():
+    df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
+    assert build_layer_or_notify(_MapOK(), df, {3: "#333333"}) == "LAYER"
+
+
+def test_build_layer_or_notify_none_map_or_empty():
+    df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0]})
+    assert build_layer_or_notify(None, df, {}) is None
+    assert build_layer_or_notify(_MapOK(), pd.DataFrame(), {}) is None
+
+
+def test_build_layer_or_notify_failure_notifies(monkeypatch):
+    from component.model import app_state as real_app_state
+
+    errs = []
+    monkeypatch.setattr(real_app_state, "add_error", lambda msg: errs.append(msg))
+    df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
+    assert build_layer_or_notify(_MapBoom(), df, {}) is None
+    assert errs and "Could not render sample points" in errs[0]

@@ -305,8 +305,8 @@ class _FakeSbaeMap:
             }
         )
 
-    def add_sample_points(self, points_df):
-        self.sample_points_calls.append(points_df)
+    def add_sample_points(self, points_df, class_colors=None):
+        self.sample_points_calls.append((points_df, class_colors))
 
 
 def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_path):
@@ -370,11 +370,14 @@ def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_pa
     assert set(call["class_colors"]) == {1, 2, 3, 4}
 
     assert len(fake_map.sample_points_calls) == 1
-    points_df = fake_map.sample_points_calls[0]
+    points_df, colors = fake_map.sample_points_calls[0]
     assert set(points_df.columns) >= {"latitude", "longitude", "map_code"}
     assert points_df["map_code"].tolist() == [1, 4]
     assert points_df["longitude"].tolist() == [0.5, 2.5]
     assert points_df["latitude"].tolist() == [3.5, 0.5]
+    # Task 5 wiring: the derived class_colors must be passed through to the
+    # sample-points layer too, not just the classification raster.
+    assert colors == st.class_colors.value
 
 
 def test_classification_map_upload_skips_layers_without_sbae_map(monkeypatch, tmp_path):

@@ -165,3 +165,21 @@ def build_points_pmtiles_layer(
         raise
     except Exception as e:
         raise VectorTileError(f"Could not build PMTiles point layer: {e}") from e
+
+
+def build_layer_or_notify(sbae_map, points_df, class_colors):
+    """Build the sample-points layer, notifying (not raising) on failure.
+
+    Returns the layer, or ``None`` when there is no map, no points, or the build
+    failed (an error is surfaced via ``app_state.add_error``). Safe to call from
+    a worker thread; the caller attaches the returned layer on the main thread.
+    """
+    if sbae_map is None or points_df is None or points_df.empty:
+        return None
+    from component.model import app_state
+
+    try:
+        return sbae_map.build_sample_points_layer(points_df, class_colors)
+    except VectorTileError as e:
+        app_state.add_error(f"Could not render sample points on the map: {e}")
+        return None
