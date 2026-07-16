@@ -180,6 +180,13 @@ def build_layer_or_notify(sbae_map, points_df, class_colors):
 
     try:
         return sbae_map.build_sample_points_layer(points_df, class_colors)
-    except VectorTileError as e:
+    except Exception as e:
+        # Intentionally broad: this is a non-essential map-layer build, called
+        # from the point-generation worker thread. Any failure here -- not just
+        # VectorTileError -- must be swallowed and reported, never raised, or
+        # the worker thread dies before it can hand the already-generated
+        # points back to the app (see build_sample_points_layer's mkdtemp call,
+        # which can raise a raw OSError outside build_points_pmtiles_layer's
+        # own try/except).
         app_state.add_error(f"Could not render sample points on the map: {e}")
         return None

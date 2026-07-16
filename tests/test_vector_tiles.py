@@ -170,3 +170,21 @@ def test_build_layer_or_notify_failure_notifies(monkeypatch):
     df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
     assert build_layer_or_notify(_MapBoom(), df, {}) is None
     assert errs and "Could not render sample points" in errs[0]
+
+
+class _MapNonVectorTileBoom:
+    def build_sample_points_layer(self, df, colors):
+        # e.g. tempfile.mkdtemp() failing with a raw OSError (disk full /
+        # quota) before build_points_pmtiles_layer -- and its VectorTileError
+        # wrapping -- is ever reached.
+        raise OSError("disk full")
+
+
+def test_build_layer_or_notify_non_vector_tile_error_notifies(monkeypatch):
+    from component.model import app_state as real_app_state
+
+    errs = []
+    monkeypatch.setattr(real_app_state, "add_error", lambda msg: errs.append(msg))
+    df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
+    assert build_layer_or_notify(_MapNonVectorTileBoom(), df, {}) is None
+    assert errs and "Could not render sample points" in errs[0]
