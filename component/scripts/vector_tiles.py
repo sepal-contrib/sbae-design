@@ -43,3 +43,52 @@ def points_to_geojson(
             }
         )
     return {"type": "FeatureCollection", "features": features}
+
+
+def build_point_style(
+    pmtiles_url: str,
+    class_colors: dict,
+    source_layer: str,
+    *,
+    color_field: str = "map_code",
+    default_color: str = "#888888",
+    radius: int = 5,
+    stroke_color: str = "#ffffff",
+    stroke_width: int = 1,
+    opacity: float = 0.85,
+) -> dict:
+    """Build a MapLibre style with one categorized ``circle`` layer.
+
+    ``circle-color`` is a ``["match", ["get", color_field], code, hex, ...,
+    default]`` expression from ``class_colors``. Empty ``class_colors`` yields a
+    plain ``default_color`` (no match expression).
+    """
+    if class_colors:
+        circle_color = ["match", ["get", color_field]]
+        for code, hex_color in class_colors.items():
+            circle_color.extend([int(code), hex_color])
+        circle_color.append(default_color)
+    else:
+        circle_color = default_color
+
+    return {
+        "version": 8,
+        "sources": {
+            "pmtiles_source": {"type": "vector", "url": f"pmtiles://{pmtiles_url}"}
+        },
+        "layers": [
+            {
+                "id": "sample-points-circle",
+                "type": "circle",
+                "source": "pmtiles_source",
+                "source-layer": source_layer,
+                "paint": {
+                    "circle-radius": radius,
+                    "circle-color": circle_color,
+                    "circle-stroke-color": stroke_color,
+                    "circle-stroke-width": stroke_width,
+                    "circle-opacity": opacity,
+                },
+            }
+        ],
+    }
