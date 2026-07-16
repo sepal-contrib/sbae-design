@@ -8,6 +8,10 @@ import is confined to ``_default_client_factory`` -- the ONE seam where the
 
 from __future__ import annotations
 
+import json
+import os
+from typing import Callable, Optional
+
 import pandas as pd
 
 
@@ -92,3 +96,72 @@ def build_point_style(
             }
         ],
     }
+
+
+class VectorTileError(Exception):
+    """Raised when a PMTiles point layer cannot be built."""
+
+
+# tippecanoe options that keep 100% of point features at every zoom. Accuracy
+# assessment cannot silently drop points, so dot-dropping and the tile/feature
+# limits are disabled. See the ipy-pmtiles contract, requirement R2.
+POINT_CONVERSION_OPTIONS = {
+    "drop_rate": 1,  # -r1: no dot-dropping below maxzoom
+    "no_feature_limit": True,  # -pf
+    "no_tile_size_limit": True,  # -pk
+}
+
+
+def _default_client_factory(**kwargs):
+    """The ONE seam where the tile-library name appears.
+
+    When the package is published, update this import to the real name; nothing
+    else in the codebase references the library.
+    """
+    from pyvectortiles.client import TileClient  # noqa: PLC0415
+
+    return TileClient(**kwargs)
+
+
+def build_points_pmtiles_layer(
+    df: pd.DataFrame,
+    class_colors: dict,
+    *,
+    dest_dir: str,
+    color_field: str = "map_code",
+    client_factory: Optional[Callable] = None,
+):
+    """Convert points to PMTiles and return an ipyleaflet layer.
+
+    Writes the GeoJSON into ``dest_dir``, runs the tile client (tippecanoe) with
+    point-retention options, builds the circle style, and returns the leaflet
+    layer. Raises :class:`VectorTileError` on any failure (missing library,
+    tippecanoe error, no vector layers produced).
+    """
+    if client_factory is None:
+        client_factory = _default_client_factory
+
+    geojson_path = os.path.join(dest_dir, "sample_points.geojson")
+    try:
+        with open(geojson_path, "w") as fh:
+            json.dump(points_to_geojson(df, props=(color_field,)), fh)
+    except OSError as e:
+        raise VectorTileError(f"Could not write points GeoJSON: {e}") from e
+
+    try:
+        client = client_factory(
+            data_source=geojson_path,
+            conversion_options=POINT_CONVERSION_OPTIONS,
+            allowed_directories=[dest_dir],
+        )
+        layers = client.list_layers()
+        if not layers:
+            raise VectorTileError("Tile conversion produced no vector layers.")
+        style = build_point_style(
+            client.pmtiles_url, class_colors, layers[0], color_field=color_field
+        )
+        return client.create_leaflet_layer(style=style)
+    except VectorTileError:
+        raise
+    except Exception as e:
+        raise VectorTileError(f"Could not build PMTiles point layer: {e}") from e
