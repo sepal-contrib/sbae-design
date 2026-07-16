@@ -9,10 +9,13 @@ import is confined to ``_default_client_factory`` -- the ONE seam where the
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Callable, Optional
 
 import pandas as pd
+
+logger = logging.getLogger("sbae.vector_tiles")
 
 
 def points_to_geojson(
@@ -118,7 +121,7 @@ def _default_client_factory(**kwargs):
     When the package is published, update this import to the real name; nothing
     else in the codebase references the library.
     """
-    from pyvectortiles.client import TileClient  # noqa: PLC0415
+    from pyvectortiles.client import TileClient
 
     return TileClient(**kwargs)
 
@@ -188,5 +191,6 @@ def build_layer_or_notify(sbae_map, points_df, class_colors):
         # points back to the app (see build_sample_points_layer's mkdtemp call,
         # which can raise a raw OSError outside build_points_pmtiles_layer's
         # own try/except).
+        logger.warning("Sample points layer failed: %s", e)
         app_state.add_error(f"Could not render sample points on the map: {e}")
         return None

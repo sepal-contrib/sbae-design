@@ -1,11 +1,9 @@
-import types
-
 import pandas as pd
 import pytest
 
+from component.scripts.vector_tiles import VectorTileError
 from component.widget import map as map_mod
 from component.widget.map import SbaeMap
-from component.scripts.vector_tiles import VectorTileError
 
 
 class _FakeMap:
@@ -63,3 +61,40 @@ def test_add_sample_points_error_notifies(monkeypatch):
     SbaeMap.add_sample_points(m, df)  # must not raise
     assert errs and "Could not render sample points" in errs[0]
     assert m.added == []
+
+
+def test_attach_removes_previous_backing_dir(tmp_path):
+    old_dir = tmp_path / "old"
+    new_dir = tmp_path / "new"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    m = _FakeMap()
+    m.sample_points_layer = "OLD"
+    m.sample_points_dir = str(old_dir)
+    m._pending_points_dir = str(new_dir)
+
+    SbaeMap.attach_sample_points_layer(m, "NEW")
+
+    assert not old_dir.exists()  # previous layer's backing dir is reclaimed
+    assert new_dir.exists()  # the dir backing the now-live layer survives
+    assert m.sample_points_dir == str(new_dir)
+
+
+def test_build_cleans_dir_on_failure(monkeypatch, tmp_path):
+    built_dir = tmp_path / "built"
+
+    def fake_mkdtemp(prefix=""):
+        built_dir.mkdir()
+        return str(built_dir)
+
+    def boom(df, colors, *, dest_dir):
+        raise VectorTileError("nope")
+
+    monkeypatch.setattr(map_mod.tempfile, "mkdtemp", fake_mkdtemp)
+    monkeypatch.setattr(map_mod, "build_points_pmtiles_layer", boom)
+    df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
+
+    with pytest.raises(VectorTileError):
+        SbaeMap.build_sample_points_layer(_FakeMap(), df, {})
+
+    assert not built_dir.exists()  # the just-created dir is not leaked

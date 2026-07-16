@@ -1,4 +1,5 @@
 import logging
+import shutil
 import tempfile
 
 from localtileserver import TileClient, get_leaflet_tile_layer
@@ -41,6 +42,8 @@ class SbaeMap(SepalMap):
 
         self.classification_layer = None
         self.sample_points_layer = None
+        self.sample_points_dir = None
+        self._pending_points_dir = None
 
     def add_class_raster(
         self,
@@ -139,26 +142,52 @@ class SbaeMap(SepalMap):
 
             class_colors = app_state.class_colors.value or {}
         dest_dir = tempfile.mkdtemp(prefix="sbae_points_")
-        return build_points_pmtiles_layer(points_data, class_colors, dest_dir=dest_dir)
+        try:
+            layer = build_points_pmtiles_layer(
+                points_data, class_colors, dest_dir=dest_dir
+            )
+        except Exception:
+            # Don't leak the dir when the build itself failed.
+            shutil.rmtree(dest_dir, ignore_errors=True)
+            raise
+        self._pending_points_dir = dest_dir
+        return layer
 
     def attach_sample_points_layer(self, layer):
-        """Swap the sample-points layer on the map (call on the main thread)."""
+        """Swap the sample-points layer on the map.
+
+        Mutates the map, so the main thread is preferred. ``add_sample_points``
+        deliberately calls this off the UI thread anyway, matching the
+        pre-existing off-thread ``add_class_raster`` mutation in
+        ``analysis_tab.py``.
+        """
+        old_dir = getattr(self, "sample_points_dir", None)
         if self.sample_points_layer is not None:
             self.remove_layer(self.sample_points_layer)
             self.sample_points_layer = None
+        self.sample_points_dir = None
         if layer is not None:
             self.add_layer(layer, key="sample_pts")
             self.sample_points_layer = layer
+            self.sample_points_dir = getattr(self, "_pending_points_dir", None)
+        self._pending_points_dir = None
+        if old_dir:
+            # Reclaim the previous layer's backing dir now that the swap is done.
+            shutil.rmtree(old_dir, ignore_errors=True)
 
     def add_sample_points(self, points_data, class_colors=None):
         """Build + attach the sample-points PMTiles layer.
 
-        For callers already off the UI thread (e.g. the analysis derivation).
+        Called off the UI thread by the analysis derivation path -- see
+        ``attach_sample_points_layer``'s docstring for why that's fine here.
         On failure, notify and skip -- the map shows no points layer; other
         results are unaffected.
         """
         from component.model import app_state
 
+        # Explicit class dispatch (SbaeMap.foo(self, ...), not self.foo(...)) keeps
+        # this method callable unbound against duck-typed test doubles; for a real
+        # SbaeMap instance it behaves identically to self.foo(...).
         try:
             layer = SbaeMap.build_sample_points_layer(self, points_data, class_colors)
         except VectorTileError as e:
