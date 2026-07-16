@@ -145,7 +145,7 @@ def build_points_pmtiles_layer(
     try:
         with open(geojson_path, "w") as fh:
             json.dump(points_to_geojson(df, props=(color_field,)), fh)
-    except OSError as e:
+    except (OSError, TypeError) as e:
         raise VectorTileError(f"Could not write points GeoJSON: {e}") from e
 
     try:

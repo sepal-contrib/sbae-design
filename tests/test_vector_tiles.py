@@ -104,6 +104,22 @@ def test_build_points_layer_client_error_wrapped(tmp_path):
         build_points_pmtiles_layer(df, {}, dest_dir=str(tmp_path), client_factory=boom)
 
 
+def test_build_points_layer_geojson_serialization_error_wrapped(tmp_path):
+    # All-integer columns (including lon/lat) so iterrows() keeps the row dtype
+    # int64 instead of upcasting to float64 -- that upcast is what makes
+    # np.int64 JSON-serializable (it becomes a plain float subtype), so it
+    # would silently hide the bug this test guards against.
+    df = pd.DataFrame({"longitude": [1], "latitude": [2], "class_id": [7]})
+    with pytest.raises(VectorTileError):
+        build_points_pmtiles_layer(
+            df,
+            {7: "#333333"},
+            dest_dir=str(tmp_path),
+            color_field="class_id",
+            client_factory=lambda **k: _FakeClient(**k),
+        )
+
+
 @pytest.mark.skipif(
     __import__("shutil").which("tippecanoe") is None, reason="tippecanoe not installed"
 )
