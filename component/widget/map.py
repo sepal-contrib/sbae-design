@@ -1,9 +1,14 @@
 import logging
+import tempfile
 
-import ipyleaflet
 from localtileserver import TileClient, get_leaflet_tile_layer
 from sepal_ui.mapping import SepalMap
 from sepal_ui.sepalwidgets.vue_app import ThemeToggle
+
+from component.scripts.vector_tiles import (
+    VectorTileError,
+    build_points_pmtiles_layer,
+)
 
 logger = logging.getLogger("sbae.map")
 
@@ -120,23 +125,44 @@ class SbaeMap(SepalMap):
 
         return layer
 
-    def add_sample_points(self, points_data):
-        """Add sample points layer."""
-        if self.sample_points_layer:
-            logger.debug("Removing existing sample points layer.")
+    def build_sample_points_layer(self, points_data, class_colors=None):
+        """Build (off the UI thread) a PMTiles layer for the sample points.
+
+        Returns ``None`` for an empty DataFrame. Does NOT mutate the map, so it
+        is safe to call from a worker thread. Raises ``VectorTileError`` on
+        failure. ``class_colors=None`` resolves to ``app_state.class_colors``.
+        """
+        if points_data is None or points_data.empty:
+            return None
+        if class_colors is None:
+            from component.model import app_state
+
+            class_colors = app_state.class_colors.value or {}
+        dest_dir = tempfile.mkdtemp(prefix="sbae_points_")
+        return build_points_pmtiles_layer(points_data, class_colors, dest_dir=dest_dir)
+
+    def attach_sample_points_layer(self, layer):
+        """Swap the sample-points layer on the map (call on the main thread)."""
+        if self.sample_points_layer is not None:
             self.remove_layer(self.sample_points_layer)
+            self.sample_points_layer = None
+        if layer is not None:
+            self.add_layer(layer, key="sample_pts")
+            self.sample_points_layer = layer
 
-        if not points_data.empty:
-            markers = []
-            logger.debug(f"Adding {len(points_data)} sample points to the map.")
-            for _, point in points_data.iterrows():
-                marker = ipyleaflet.Marker(
-                    location=(point["latitude"], point["longitude"]),
-                    title=f"Class: {point.get('map_code', 'Unknown')}",
-                )
-                markers.append(marker)
+    def add_sample_points(self, points_data, class_colors=None):
+        """Build + attach the sample-points PMTiles layer.
 
-            logger.debug("Creating marker cluster for sample points.")
+        For callers already off the UI thread (e.g. the analysis derivation).
+        On failure, notify and skip -- the map shows no points layer; other
+        results are unaffected.
+        """
+        from component.model import app_state
 
-            self.sample_points_layer = ipyleaflet.MarkerCluster(markers=markers)
-            self.add_layer(self.sample_points_layer)
+        try:
+            layer = SbaeMap.build_sample_points_layer(self, points_data, class_colors)
+        except VectorTileError as e:
+            logger.warning("Sample points layer failed: %s", e)
+            app_state.add_error(f"Could not render sample points on the map: {e}")
+            return
+        SbaeMap.attach_sample_points_layer(self, layer)
