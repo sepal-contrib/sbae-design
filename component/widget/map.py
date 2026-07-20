@@ -1,4 +1,5 @@
 import logging
+import os
 import shutil
 import tempfile
 
@@ -110,7 +111,13 @@ class SbaeMap(SepalMap):
                 fit_bounds=fit_bounds,
             )
 
-        client = TileClient(path)
+        # Bind the tile server to a reachable interface when serving the app
+        # over the network (e.g. Solara --host over Tailscale). Defaults to
+        # loopback for local dev; set LOCALTILESERVER_HOST=0.0.0.0 (or the
+        # tailnet IP) plus LOCALTILESERVER_CLIENT_HOST for remote access.
+        client = TileClient(
+            path, host=os.environ.get("LOCALTILESERVER_HOST", "127.0.0.1")
+        )
         layer = get_leaflet_tile_layer(
             client,
             colormap=colormap_arg,
