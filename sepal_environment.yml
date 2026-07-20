@@ -21,6 +21,8 @@ dependencies:
   - proj>=9.3
   - pyproj>=3.6
   - pytest>=7.0.0 # for running the test suite
+  # tippecanoe builds the PMTiles vector tiles for the map sample-points layer.
+  - tippecanoe>=2
   - pip:
       # pysepal is the renamed sepal_ui; main has the notification system.
       # The `sepal_ui` import path still works via a compatibility shim.
@@ -28,3 +30,5 @@ dependencies:
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
       - ipecharts>=1.0.0
       - voila
+      # local vector-tile server for the PMTiles map sample-points layer
+      - vectortileserver>=0.1.0

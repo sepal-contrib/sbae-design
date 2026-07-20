@@ -2,8 +2,8 @@
 
 DataFrame -> GeoJSON, the MapLibre circle style, and the call into the tile
 library all live here so they stay pure and unit-testable. The tile-library
-import is confined to ``_default_client_factory`` -- the ONE seam where the
-(not-yet-published) package name appears.
+import is confined to ``_default_client_factory`` -- the ONE seam that touches
+``vectortileserver``.
 """
 
 from __future__ import annotations
@@ -116,12 +116,12 @@ POINT_CONVERSION_OPTIONS = {
 
 
 def _default_client_factory(**kwargs):
-    """The ONE seam where the tile-library name appears.
+    """The ONE seam where the tile-library is imported.
 
-    When the package is published, update this import to the real name; nothing
-    else in the codebase references the library.
+    ``vectortileserver`` (PyPI) is the only external tile dependency; nothing
+    else in the codebase references it.
     """
-    from pyvectortiles.client import TileClient
+    from vectortileserver.client import TileClient
 
     return TileClient(**kwargs)
 
