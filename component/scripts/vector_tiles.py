@@ -15,6 +15,8 @@ from typing import Callable, Optional
 
 import pandas as pd
 
+from component.scripts.logging_config import quiet_tile_server_logs
+
 logger = logging.getLogger("sbae.vector_tiles")
 
 
@@ -157,6 +159,9 @@ def build_points_pmtiles_layer(
             conversion_options=POINT_CONVERSION_OPTIONS,
             allowed_directories=[dest_dir],
         )
+        # The tile server just booted its uvicorn (and vectortileserver's DEBUG
+        # logger); pin their levels down now so it sticks past uvicorn's config.
+        quiet_tile_server_logs()
         layers = client.list_layers()
         if not layers:
             raise VectorTileError("Tile conversion produced no vector layers.")

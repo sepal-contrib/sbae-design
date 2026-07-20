@@ -7,6 +7,7 @@ from localtileserver import TileClient, get_leaflet_tile_layer
 from sepal_ui.mapping import SepalMap
 from sepal_ui.sepalwidgets.vue_app import ThemeToggle
 
+from component.scripts.logging_config import quiet_tile_server_logs
 from component.scripts.vector_tiles import (
     VectorTileError,
     build_points_pmtiles_layer,
@@ -118,6 +119,7 @@ class SbaeMap(SepalMap):
         client = TileClient(
             path, host=os.environ.get("LOCALTILESERVER_HOST", "127.0.0.1")
         )
+        quiet_tile_server_logs()
         layer = get_leaflet_tile_layer(
             client,
             colormap=colormap_arg,
