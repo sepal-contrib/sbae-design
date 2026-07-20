@@ -183,7 +183,7 @@ def extract_raster_colormap(file_path: str) -> Dict[int, str]:
                 for class_code, rgba in colormap.items():
                     # Convert RGBA tuple to hex color
                     # rasterio returns values in 0-255 range
-                    r, g, b, a = rgba
+                    r, g, b, _ = rgba
                     hex_color = f"#{r:02x}{g:02x}{b:02x}"
                     colors[class_code] = hex_color
 
@@ -1252,12 +1252,18 @@ def extract_map_codes(
     x_col: str,
     y_col: str,
     points_crs: str = "EPSG:4326",
+    drop_missing: bool = True,
 ) -> "tuple[pd.DataFrame, int]":
     """Sample a classification raster at each reference point to fill map_code.
 
     Reprojects the (x_col, y_col) points from points_crs to the raster CRS,
-    samples band 1, and returns (df_with_map_code, dropped_count). Rows whose
-    point falls outside the raster footprint or on the nodata value are dropped.
+    samples band 1, and returns (df_with_map_code, dropped_count). Points that
+    fall outside the raster footprint or on the nodata value are "missing".
+
+    ``drop_missing=True`` (default, the analysis path) drops those rows.
+    ``drop_missing=False`` (the design path, where the sample is fixed) keeps
+    every row and leaves missing points at their prior ``map_code`` (or 0).
+    In both cases ``dropped_count`` reports how many were missing.
     """
     df = reference_df.copy()
     xs = df[x_col].astype(float).to_numpy()
@@ -1279,7 +1285,14 @@ def extract_map_codes(
             else:
                 codes.append(None)
     df["map_code"] = codes
-    dropped = int(df["map_code"].isna().sum())
-    df = df[df["map_code"].notna()].copy()
+    missing = df["map_code"].isna()
+    dropped = int(missing.sum())
+    if drop_missing:
+        df = df[~missing].copy()
+    else:
+        # Keep every point; unsampleable ones fall back to their prior map_code
+        # (0 for freshly-generated design points) instead of being dropped.
+        fallback = reference_df["map_code"] if "map_code" in reference_df.columns else 0
+        df["map_code"] = df["map_code"].where(~missing, fallback)
     df["map_code"] = df["map_code"].astype(int)
     return df, dropped

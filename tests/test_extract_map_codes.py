@@ -46,6 +46,29 @@ def test_drops_out_of_bounds(tmp_path):
     assert out["map_code"].tolist() == [1]
 
 
+def test_keeps_all_points_when_drop_missing_false(tmp_path):
+    # Design path: the sample is fixed, so keep every point -- sampled ones get
+    # their real class, unsampleable ones fall back to their prior map_code.
+    data = np.array([[1, 1], [1, 1]], dtype=np.uint8)
+    p = tmp_path / "clas.tif"
+    _write(p, data, "EPSG:4326", from_origin(0, 2, 1, 1))
+    df = pd.DataFrame({"x": [0.5, 100.0], "y": [1.5, 100.0], "map_code": [0, 0]})
+    out, dropped = extract_map_codes(df, str(p), "x", "y", drop_missing=False)
+    assert dropped == 1  # one point was unsampleable
+    assert len(out) == 2  # but nothing dropped
+    assert out["map_code"].tolist() == [1, 0]  # sampled -> 1, missing -> prior 0
+
+
+def test_drop_missing_false_without_prior_map_code_falls_back_to_zero(tmp_path):
+    data = np.array([[7, 7], [7, 7]], dtype=np.uint8)
+    p = tmp_path / "clas.tif"
+    _write(p, data, "EPSG:4326", from_origin(0, 2, 1, 1))
+    df = pd.DataFrame({"x": [0.5, 100.0], "y": [1.5, 100.0]})  # no map_code column
+    out, dropped = extract_map_codes(df, str(p), "x", "y", drop_missing=False)
+    assert dropped == 1
+    assert out["map_code"].tolist() == [7, 0]  # missing -> 0 when no prior column
+
+
 def test_drops_nodata(tmp_path):
     data = np.array([[5, 255], [5, 5]], dtype=np.uint8)
     p = tmp_path / "clas.tif"

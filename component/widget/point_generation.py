@@ -5,7 +5,7 @@ from typing import Callable
 import solara
 
 from component.model import app_state
-from component.scripts.geospatial import generate_sample_points
+from component.scripts.geospatial import extract_map_codes, generate_sample_points
 from component.scripts.vector_tiles import build_layer_or_notify
 
 logger = logging.getLogger("sbae.point_generation")
@@ -107,6 +107,22 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
         if request is None:
             return None
         points_df = run_point_generation_request(request)
+        # Generation leaves map_code=0; sample the design's classification raster
+        # at each point to record its real map class (keep all points -- the
+        # sample is fixed, so unsampleable ones stay as generated).
+        raster = app_state.optimized_raster_path.value or app_state.file_path.value
+        if (
+            raster
+            and points_df is not None
+            and not points_df.empty
+            and "longitude" in points_df.columns
+        ):
+            try:
+                points_df, _ = extract_map_codes(
+                    points_df, raster, "longitude", "latitude", drop_missing=False
+                )
+            except Exception as e:
+                logger.warning("Could not sample map_code from design raster: %s", e)
         layer = build_layer_or_notify(sbae_map, points_df, app_state.class_colors.value)
         return (points_df, layer)
 
