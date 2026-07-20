@@ -48,6 +48,35 @@ setup_solara_server()
 USE_GEE = False
 
 
+@solara.component
+def _TileLoopbackBridge():
+    """Tunnel localtileserver's localhost tile URLs over the widget comm.
+
+    When the app is served behind a reverse proxy -- ``run-solara --serve``
+    (tailscale serve) or SEPAL -- the raster tile server's
+    ``http://127.0.0.1:<port>`` URL is unreachable from the browser, which only
+    sees the proxied app origin. This mounts jupyter_loopback's anywidget comm
+    bridge; its frontend reroutes those requests over the same websocket Solara
+    already uses (localtileserver's ``get_leaflet_tile_layer`` registers each
+    tile port via ``enable_for_port``). Gated on ``LOCALTILESERVER_COMM_BRIDGE``
+    so plain local runs keep the faster direct-HTTP tile path.
+    """
+    enabled = bool(os.environ.get("LOCALTILESERVER_COMM_BRIDGE"))
+
+    def _enable():
+        if not enabled:
+            return None
+        import jupyter_loopback
+
+        return jupyter_loopback.enable_comm_bridge(display=False)
+
+    bridge = solara.use_memo(_enable, [])
+    if bridge is not None:
+        # Mount the (invisible) bridge widget so its ESM loads and installs the
+        # window.__jupyter_loopback__ interceptor in the browser.
+        solara.display(bridge)
+
+
 @solara.lab.on_kernel_start
 def on_kernel_start():
     return setup_sessions()
@@ -57,19 +86,23 @@ def on_kernel_start():
 # @with_sepal_sessions(module_name="sbae_app")
 def Page():
     """Main SBAE application page using MapApp layout."""
-    # Notification system (pysepal): mount the provider once at the app root,
-    # before any component that calls use_notifications(). Kept in the same page
-    # as MapApp so the task pill can track the right-panel offset.
-    NotificationProvider()
-    ErrorToastBridge()
-
-    app_model = AppModel()
-
-    setup_theme_colors()
     # pysepal's MapApp requires a per-kernel ThemeState. In a local (non-SEPAL)
     # run the session manager is active but has no theme_state component, so
     # get_current_theme_state() would raise; provide an explicit one instead.
     theme_state = solara.use_memo(ThemeState, [])
+
+    # Notification system (pysepal): mount the provider once at the app root,
+    # before any component that calls use_notifications(). Kept in the same page
+    # as MapApp so the task pill can track the right-panel offset. It takes the
+    # same ThemeState as MapApp: without it the provider falls back to a
+    # process-local default and the toasts/pill stay light under a dark app.
+    NotificationProvider(theme_state=theme_state)
+    ErrorToastBridge()
+    _TileLoopbackBridge()
+
+    app_model = AppModel()
+
+    setup_theme_colors()
     theme_toggle = ThemeToggle()
     theme_toggle.observe(lambda e: setattr(theme, "dark", e["new"]), "dark")
     sbae_map = SbaeMap(theme_toggle=theme_toggle, gee=USE_GEE)
