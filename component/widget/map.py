@@ -46,6 +46,10 @@ class SbaeMap(SepalMap):
         self.sample_points_layer = None
         self.sample_points_dir = None
         self._pending_points_dir = None
+        # Analysis reference points -- a separate layer so they coexist with the
+        # design sample points (distinct key/name/color; see add_reference_points).
+        self.reference_points_layer = None
+        self.reference_points_dir = None
 
     def add_class_raster(
         self,
@@ -137,7 +141,9 @@ class SbaeMap(SepalMap):
 
         return layer
 
-    def build_sample_points_layer(self, points_data, class_colors=None):
+    def build_sample_points_layer(
+        self, points_data, class_colors=None, *, point_color=None
+    ):
         """Build (off the UI thread) a PMTiles layer for the sample points.
 
         Returns ``None`` for an empty DataFrame. Does NOT mutate the map, so it
@@ -153,7 +159,10 @@ class SbaeMap(SepalMap):
         dest_dir = tempfile.mkdtemp(prefix="sbae_points_")
         try:
             layer = build_points_pmtiles_layer(
-                points_data, class_colors, dest_dir=dest_dir
+                points_data,
+                class_colors,
+                dest_dir=dest_dir,
+                default_color=point_color or "#888888",
             )
         except Exception:
             # Don't leak the dir when the build itself failed.
@@ -204,3 +213,40 @@ class SbaeMap(SepalMap):
             app_state.add_error(f"Could not render sample points on the map: {e}")
             return
         SbaeMap.attach_sample_points_layer(self, layer)
+
+    def add_reference_points(
+        self, points_data, *, point_color="#ff7f0e", layer_name="Reference points"
+    ):
+        """Render the analysis reference points as their own map layer.
+
+        Kept separate from the design sample (``add_sample_points`` / the
+        ``"sample_pts"`` layer): distinct key (``"ref_pts"``), name, and a uniform
+        ``point_color`` so the two coexist and are visually distinguishable.
+        Builds off the UI thread; on failure, notify and skip.
+        """
+        from component.model import app_state
+
+        try:
+            layer = SbaeMap.build_sample_points_layer(
+                self, points_data, {}, point_color=point_color
+            )
+        except VectorTileError as e:
+            logger.warning("Reference points layer failed: %s", e)
+            app_state.add_error(f"Could not render reference points on the map: {e}")
+            return
+        old_dir = self.reference_points_dir
+        if self.reference_points_layer is not None:
+            self.remove_layer(self.reference_points_layer)
+            self.reference_points_layer = None
+        self.reference_points_dir = None
+        if layer is not None:
+            try:
+                layer.name = layer_name
+            except Exception:
+                pass
+            self.add_layer(layer, key="ref_pts")
+            self.reference_points_layer = layer
+            self.reference_points_dir = getattr(self, "_pending_points_dir", None)
+        self._pending_points_dir = None
+        if old_dir:
+            shutil.rmtree(old_dir, ignore_errors=True)

@@ -9,6 +9,8 @@ from component.widget.map import SbaeMap
 class _FakeMap:
     def __init__(self):
         self.sample_points_layer = None
+        self.reference_points_layer = None
+        self.reference_points_dir = None
         self.added = []
         self.removed = []
 
@@ -36,7 +38,7 @@ def test_build_empty_returns_none():
 def test_build_delegates(monkeypatch):
     called = {}
 
-    def fake_build(df, colors, *, dest_dir):
+    def fake_build(df, colors, *, dest_dir, default_color="#888888"):
         called["colors"] = colors
         return "LAYER"
 
@@ -50,7 +52,7 @@ def test_build_delegates(monkeypatch):
 def test_add_sample_points_error_notifies(monkeypatch):
     from component.model import app_state as real_app_state
 
-    def boom(df, colors, *, dest_dir):
+    def boom(df, colors, *, dest_dir, default_color="#888888"):
         raise VectorTileError("nope")
 
     errs = []
@@ -87,7 +89,7 @@ def test_build_cleans_dir_on_failure(monkeypatch, tmp_path):
         built_dir.mkdir()
         return str(built_dir)
 
-    def boom(df, colors, *, dest_dir):
+    def boom(df, colors, *, dest_dir, default_color="#888888"):
         raise VectorTileError("nope")
 
     monkeypatch.setattr(map_mod.tempfile, "mkdtemp", fake_mkdtemp)
@@ -98,3 +100,38 @@ def test_build_cleans_dir_on_failure(monkeypatch, tmp_path):
         SbaeMap.build_sample_points_layer(_FakeMap(), df, {})
 
     assert not built_dir.exists()  # the just-created dir is not leaked
+
+
+def test_build_sample_points_layer_passes_point_color(monkeypatch):
+    captured = {}
+
+    def fake_build(df, colors, *, dest_dir, default_color="#888888"):
+        captured["default_color"] = default_color
+        return "LAYER"
+
+    monkeypatch.setattr(map_mod, "build_points_pmtiles_layer", fake_build)
+    df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
+    SbaeMap.build_sample_points_layer(_FakeMap(), df, {}, point_color="#ff7f0e")
+    assert captured["default_color"] == "#ff7f0e"
+
+
+def test_add_reference_points_uses_own_layer(monkeypatch):
+    class _Layer:
+        pass
+
+    def fake_build(df, colors, *, dest_dir, default_color="#888888"):
+        layer = _Layer()
+        layer._color = default_color
+        return layer
+
+    monkeypatch.setattr(map_mod, "build_points_pmtiles_layer", fake_build)
+    m = _FakeMap()
+    df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
+    SbaeMap.add_reference_points(m, df, point_color="#ff7f0e")
+
+    # attached under the distinct ref key, tracked apart from the design layer
+    assert m.added and m.added[0][1] == "ref_pts"
+    assert m.reference_points_layer is not None
+    assert m.sample_points_layer is None  # design layer untouched
+    assert m.added[0][0].name == "Reference points"
+    assert m.added[0][0]._color == "#ff7f0e"

@@ -134,6 +134,7 @@ def build_points_pmtiles_layer(
     *,
     dest_dir: str,
     color_field: str = "map_code",
+    default_color: str = "#888888",
     client_factory: Optional[Callable] = None,
 ):
     """Convert points to PMTiles and return an ipyleaflet layer.
@@ -166,7 +167,11 @@ def build_points_pmtiles_layer(
         if not layers:
             raise VectorTileError("Tile conversion produced no vector layers.")
         style = build_point_style(
-            client.pmtiles_url, class_colors, layers[0], color_field=color_field
+            client.pmtiles_url,
+            class_colors,
+            layers[0],
+            color_field=color_field,
+            default_color=default_color,
         )
         return client.create_leaflet_layer(style=style)
     except VectorTileError:
