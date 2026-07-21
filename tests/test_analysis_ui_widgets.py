@@ -151,9 +151,10 @@ def test_section_uses_theme_aware_classes_not_hardcoded_colors():
     htmls = rc.find(v.Html).widgets
     title = next(w for w in htmls if "Summary" in (w.children or []))
     assert "subtitle-2" in (title.class_ or "")
-    # Description is theme-aware muted text, not a hardcoded gray.
+    # Description inherits the theme text color rather than a hardcoded gray.
     desc = next(w for w in htmls if "A description" in (w.children or []))
-    assert "text--secondary" in (desc.class_ or "")
+    assert "body-2" in (desc.class_ or "")
+    assert "text--secondary" not in (desc.class_ or "")
     assert "#" not in (desc.style_ or "")
     assert any(
         "mdi-progress-check" in (i.children or []) for i in rc.find(v.Icon).widgets
@@ -294,6 +295,7 @@ class _FakeSbaeMap:
     def __init__(self):
         self.class_raster_calls = []
         self.sample_points_calls = []
+        self.reference_points_calls = []
 
     def add_class_raster(self, path, class_colors, layer_name, key):
         self.class_raster_calls.append(
@@ -308,9 +310,12 @@ class _FakeSbaeMap:
     def add_sample_points(self, points_df, class_colors=None):
         self.sample_points_calls.append((points_df, class_colors))
 
+    def add_reference_points(self, points_df, **kwargs):
+        self.reference_points_calls.append((points_df, kwargs))
+
 
 def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_path):
-    """A successful derivation adds the classification raster + ref points to sbae_map.
+    """A successful derivation adds the classification raster to sbae_map.
 
     Drives the real ``use_task`` derivation (real rasterio round-trip, same
     fixture as ``test_derive_from_classification.py``) with a fake ``sbae_map``
@@ -369,15 +374,10 @@ def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_pa
     assert call["class_colors"], "class_colors must not be empty (near-black map)"
     assert set(call["class_colors"]) == {1, 2, 3, 4}
 
-    assert len(fake_map.sample_points_calls) == 1
-    points_df, colors = fake_map.sample_points_calls[0]
-    assert set(points_df.columns) >= {"latitude", "longitude", "map_code"}
-    assert points_df["map_code"].tolist() == [1, 4]
-    assert points_df["longitude"].tolist() == [0.5, 2.5]
-    assert points_df["latitude"].tolist() == [3.5, 0.5]
-    # Task 5 wiring: the derived class_colors must be passed through to the
-    # sample-points layer too, not just the classification raster.
-    assert colors == st.class_colors.value
+    # Reference points are no longer rendered by the derivation itself: the
+    # AnalysisPanel's render thread draws them (from analysis_reference_df, for
+    # every source) on their own "ref_pts" layer. The derivation adds the raster.
+    assert fake_map.sample_points_calls == []
 
 
 def test_classification_map_upload_skips_layers_without_sbae_map(monkeypatch, tmp_path):

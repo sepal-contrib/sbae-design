@@ -98,7 +98,6 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
                 solara.HTML(
                     tag="div",
                     unsafe_innerHTML=f"Type: {file_type} | Size: {size_mb:.1f} MB",
-                    classes=["text--secondary"],
                     style="font-size: 12px; margin-top: 4px;",
                 )
 
@@ -491,7 +490,5 @@ def FilePreview(file_info: Dict[str, Any]):
         solara.Text("File selected", style="font-weight: 600; margin-bottom: 4px;")
         for label, value in rows:
             with solara.Row(gap="8px"):
-                solara.Text(
-                    f"{label}:", classes=["text--secondary"], style="min-width: 72px;"
-                )
+                solara.Text(f"{label}:", style="min-width: 72px;")
                 solara.Text(str(value))

@@ -34,6 +34,26 @@ AA_ANALYSIS_HELP = (
     "confidence intervals, and user's / producer's / overall accuracies."
 )
 
+# Short inline help shown under each section header (kept to 2-3 lines).
+_COLUMN_MAPPING_HELP = (
+    "Match each CSV column to its role. Every reference point needs its "
+    "**mapped class** (`map_code` -- what the classification assigned) and its "
+    "**reference class** (`ref_code` -- the interpreted truth); those two build "
+    "the error matrix. X/Y are required only when the class is read from an "
+    "uploaded map. Fields marked \\* are required."
+)
+_OPTIONS_HELP = (
+    "Where the per-class **areas** (the stratum weights) come from -- the design "
+    "step's classification, a separate area/strata CSV, or a classification map "
+    "you upload here -- plus the **confidence level** for the error-adjusted "
+    "intervals and the **display unit**."
+)
+_FILTER_HELP = (
+    "Optional: restrict the assessment to a subset of reference points -- pick a "
+    "column and keep only the values you choose (e.g. one region, tile, or "
+    "campaign). Leave empty to use every row."
+)
+
 # Bundled example dataset (collected reference + strata for the aa_test_congo map).
 _EXAMPLE_DIR = (
     Path(__file__).parent.parent.parent / "tests" / "data" / "analysis_example"
@@ -132,7 +152,6 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
                     solara.Text(name or "loaded", style="font-size: 14px;")
                 solara.Text(
                     f"{n_rows:,} {row_word}, {n_cols} {col_word}",
-                    classes=["text--secondary"],
                     style="font-size: 12px;",
                 )
             if on_clear is not None:
@@ -224,6 +243,46 @@ def AnalysisPanel(sbae_map=None):
             app_state.analysis_confidence_level.value,
             app_state.analysis_filter.value,
         ],
+    )
+
+    # Render the analysis reference points on their own map layer (distinct color
+    # + name from the design sample), for every source, whenever the reference
+    # table and its x/y mapping are ready. Build + attach run off the UI thread
+    # (tippecanoe), mirroring the derivation's raster render.
+    def render_reference_points_worker():
+        if sbae_map is None:
+            return None
+        df = app_state.analysis_reference_df.value
+        mapping = app_state.analysis_column_mapping.value or {}
+        x, y = mapping.get("x"), mapping.get("y")
+        if (
+            df is None
+            or df.empty
+            or not x
+            or not y
+            or x not in df.columns
+            or y not in df.columns
+        ):
+            return None
+        points = pd.DataFrame(
+            {
+                "longitude": df[x],
+                "latitude": df[y],
+                "map_code": df["map_code"] if "map_code" in df.columns else 0,
+            }
+        )
+        sbae_map.add_reference_points(points)
+        return len(points)
+
+    _mapping_now = app_state.analysis_column_mapping.value or {}
+    solara.use_thread(
+        render_reference_points_worker,
+        dependencies=[
+            app_state.analysis_reference_df.value,
+            _mapping_now.get("x"),
+            _mapping_now.get("y"),
+        ],
+        intrusive_cancel=False,
     )
 
     ref_df = app_state.analysis_reference_df.value
@@ -347,6 +406,7 @@ def _ColumnMappingCard(columns: list, area_source: str = "upload"):
         del labels["map"]  # map_code is derived from the raster
     with solara.Column(gap="4px"):
         Section("Column mapping", "mdi-swap-horizontal")
+        solara.Markdown(_COLUMN_MAPPING_HELP)
         for role, label in labels.items():
             solara.Select(
                 label=label,
@@ -361,6 +421,7 @@ def _AnalysisControls(sbae_map=None):
     """Area source, confidence level, unit, and optional filter controls."""
     with solara.Column(gap="8px"):
         Section("Options", "mdi-tune")
+        solara.Markdown(_OPTIONS_HELP)
         has_design_area = (
             app_state.area_data.value is not None
             and not app_state.area_data.value.empty
@@ -412,6 +473,7 @@ def _FilterCard(columns: list):
 
     with solara.Column(gap="4px"):
         Section("Filter (optional)", "mdi-filter-variant")
+        solara.Markdown(_FILTER_HELP)
         solara.Select(
             label="Filter column",
             value=col,
@@ -560,14 +622,8 @@ def _ClassificationMapUpload(sbae_map=None):
                 sbae_map.add_class_raster(
                     raster, colors, "Classification (analysis)", "clas_an"
                 )
-                points = pd.DataFrame(
-                    {
-                        "longitude": ref_out[mapping["x"]],
-                        "latitude": ref_out[mapping["y"]],
-                        "map_code": ref_out["map_code"],
-                    }
-                )
-                sbae_map.add_sample_points(points, colors)
+                # Reference points are drawn by the panel's render thread (from
+                # analysis_reference_df, for every source) on their own layer.
             except Exception as e:  # results are valid; only the map layer failed
                 app_state.add_error(
                     "Analysis ran, but the classification map could not be "

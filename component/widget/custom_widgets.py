@@ -17,14 +17,14 @@ def Section(
     """A theme-aware section header (icon + title + optional description).
 
     Mirrors pysepal's RightPanel section styling with Vuetify theme classes and
-    CSS variables (``subtitle-2``, ``text--secondary``, ``--v-divider-base``)
-    instead of hardcoded colors, so it adapts to light/dark themes. Render it
-    before the section's content.
+    CSS variables (``subtitle-2``, ``--v-divider-base``) instead of hardcoded
+    colors, so it adapts to light/dark themes. Render it before the section's
+    content.
 
     Args:
         title: Section title (shown with theme typography).
         icon: Optional leading MDI icon name.
-        description: Optional muted, theme-aware description line.
+        description: Optional theme-aware description line.
     """
     if title or icon:
         with solara.Row(
@@ -40,7 +40,7 @@ def Section(
     if description:
         solara.Text(
             description,
-            classes=["body-2", "text--secondary"],
+            classes=["body-2"],
             style="padding-left: 16px; margin-bottom: 12px; display: block;",
         )
 
