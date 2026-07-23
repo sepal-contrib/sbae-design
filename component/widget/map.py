@@ -51,6 +51,29 @@ class SbaeMap(SepalMap):
         self.reference_points_layer = None
         self.reference_points_dir = None
 
+    def _optimize_for_tiles(self, path) -> str:
+        """Return a tiling-optimized (cached COG with overviews) path.
+
+        rio-tiler reads full-resolution pixels -- and warns ``NoOverviewWarning``
+        -- for every tile when the source has no overviews, so low-zoom tiles are
+        slow. ``prepare_for_tiles`` is a fast no-op when ``path`` is already a
+        tiled COG with overviews (the design step pre-optimizes off-thread); it
+        only does real work for raw rasters such as the analysis classification
+        map, which are added off the UI thread. Best-effort: on failure, serve the
+        raw raster (tiling still works, just slower).
+        """
+        from component.scripts.tiling import prepare_for_tiles
+
+        try:
+            return prepare_for_tiles(str(path))["path"]
+        except Exception as e:
+            logger.warning(
+                "Tiling optimization failed for %s (%s); serving the raw raster.",
+                path,
+                e,
+            )
+            return str(path)
+
     def add_class_raster(
         self,
         path,
@@ -76,6 +99,10 @@ class SbaeMap(SepalMap):
             opacity: layer opacity, default 1.0.
             fit_bounds: whether to recenter/zoom onto the raster.
         """
+        # Build (or reuse a cached) COG with overviews before tiling: rio-tiler
+        # otherwise reads full-res pixels and logs NoOverviewWarning per tile.
+        tile_path = self._optimize_for_tiles(path)
+
         if not class_colors:
             logger.warning(
                 "add_class_raster called without class_colors; "
@@ -83,7 +110,7 @@ class SbaeMap(SepalMap):
                 path,
             )
             return self.add_raster(
-                path,
+                tile_path,
                 layer_name=layer_name,
                 key=key,
                 opacity=opacity,
@@ -109,7 +136,7 @@ class SbaeMap(SepalMap):
                 path,
             )
             return self.add_raster(
-                path,
+                tile_path,
                 layer_name=layer_name,
                 key=key,
                 opacity=opacity,
@@ -121,7 +148,7 @@ class SbaeMap(SepalMap):
         # loopback for local dev; set LOCALTILESERVER_HOST=0.0.0.0 (or the
         # tailnet IP) plus LOCALTILESERVER_CLIENT_HOST for remote access.
         client = TileClient(
-            path, host=os.environ.get("LOCALTILESERVER_HOST", "127.0.0.1")
+            tile_path, host=os.environ.get("LOCALTILESERVER_HOST", "127.0.0.1")
         )
         quiet_tile_server_logs()
         layer = get_leaflet_tile_layer(
