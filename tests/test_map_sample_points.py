@@ -13,12 +13,21 @@ class _FakeMap:
         self.reference_points_dir = None
         self.added = []
         self.removed = []
+        self.fitted = None
 
     def add_layer(self, layer, key=None):
         self.added.append((layer, key))
 
     def remove_layer(self, layer):
         self.removed.append(layer)
+
+    def fit_bounds(self, bounds):
+        self.fitted = bounds
+
+
+class _BoundedLayer:
+    def __init__(self):
+        self.bounds = [[0.0, 0.0], [1.0, 2.0]]
 
 
 def test_attach_swaps_layer():
@@ -29,6 +38,18 @@ def test_attach_swaps_layer():
     SbaeMap.attach_sample_points_layer(m, "L2")
     assert m.removed == ["L1"]
     assert m.sample_points_layer == "L2"
+
+
+def test_attach_zooms_to_layer_bounds():
+    m = _FakeMap()
+    SbaeMap.attach_sample_points_layer(m, _BoundedLayer())
+    assert m.fitted == [[0.0, 0.0], [1.0, 2.0]]  # auto-zoomed to the points
+
+
+def test_attach_skips_zoom_when_layer_has_no_bounds():
+    m = _FakeMap()
+    SbaeMap.attach_sample_points_layer(m, "L1")  # a bounds-less layer double
+    assert m.fitted is None  # view left untouched
 
 
 def test_build_empty_returns_none():

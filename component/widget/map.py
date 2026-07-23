@@ -198,6 +198,17 @@ class SbaeMap(SepalMap):
         self._pending_points_dir = dest_dir
         return layer
 
+    def _zoom_to_points(self, layer):
+        """Zoom to the points layer's own extent, when it has one.
+
+        Layers built via ``vector_tiles`` carry a fit-ready ``.bounds``
+        (``[[S,W],[N,E]]``); a single point yields ``None`` -- nothing sensible to
+        fit -- and the view is left untouched.
+        """
+        bounds = getattr(layer, "bounds", None)
+        if bounds:
+            self.fit_bounds(bounds)
+
     def attach_sample_points_layer(self, layer):
         """Swap the sample-points layer on the map.
 
@@ -215,6 +226,7 @@ class SbaeMap(SepalMap):
             self.add_layer(layer, key="sample_pts")
             self.sample_points_layer = layer
             self.sample_points_dir = getattr(self, "_pending_points_dir", None)
+            SbaeMap._zoom_to_points(self, layer)
         self._pending_points_dir = None
         if old_dir:
             # Reclaim the previous layer's backing dir now that the swap is done.
@@ -274,6 +286,7 @@ class SbaeMap(SepalMap):
             self.add_layer(layer, key="ref_pts")
             self.reference_points_layer = layer
             self.reference_points_dir = getattr(self, "_pending_points_dir", None)
+            SbaeMap._zoom_to_points(self, layer)
         self._pending_points_dir = None
         if old_dir:
             shutil.rmtree(old_dir, ignore_errors=True)

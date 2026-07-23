@@ -117,15 +117,19 @@ POINT_CONVERSION_OPTIONS = {
 }
 
 
-def _default_client_factory(**kwargs):
+def _default_layer_factory(source, *, style, conversion_options, allowed_directories):
     """The ONE seam where the tile-library is imported.
 
     ``vectortileserver`` (PyPI) is the only external tile dependency; nothing
-    else in the codebase references it.
+    else in the codebase references it. A per-build ``TileWorkspace`` carries the
+    temp ``dest_dir`` as an allowed directory so the shared tile server can serve
+    it. ``.open`` runs tippecanoe synchronously on the calling (worker) thread and
+    returns a layer that already knows its own ``.bounds``.
     """
-    from vectortileserver.client import TileClient
+    import vectortileserver as vts
 
-    return TileClient(**kwargs)
+    workspace = vts.TileWorkspace(allowed_directories=allowed_directories)
+    return workspace.open(source, style=style, conversion_options=conversion_options)
 
 
 def build_points_pmtiles_layer(
@@ -135,17 +139,18 @@ def build_points_pmtiles_layer(
     dest_dir: str,
     color_field: str = "map_code",
     default_color: str = "#888888",
-    client_factory: Optional[Callable] = None,
+    layer_factory: Optional[Callable] = None,
 ):
     """Convert points to PMTiles and return an ipyleaflet layer.
 
-    Writes the GeoJSON into ``dest_dir``, runs the tile client (tippecanoe) with
-    point-retention options, builds the circle style, and returns the leaflet
-    layer. Raises :class:`VectorTileError` on any failure (missing library,
+    Writes the GeoJSON into ``dest_dir``, opens it through ``vectortileserver``
+    (tippecanoe, with point-retention options) with a categorized ``circle``
+    style, and returns the layer -- which carries its own ``.bounds`` for
+    auto-zoom. Raises :class:`VectorTileError` on any failure (missing library,
     tippecanoe error, no vector layers produced).
     """
-    if client_factory is None:
-        client_factory = _default_client_factory
+    if layer_factory is None:
+        layer_factory = _default_layer_factory
 
     geojson_path = os.path.join(dest_dir, "sample_points.geojson")
     try:
@@ -154,26 +159,31 @@ def build_points_pmtiles_layer(
     except (OSError, TypeError) as e:
         raise VectorTileError(f"Could not write points GeoJSON: {e}") from e
 
+    def style_from(metadata, pmtiles_url):
+        # A style *builder*: the circle style needs the tile URL and the archive's
+        # own vector-layer id, neither known until the archive has been built.
+        vector_layers = metadata.get("vector_layers", [])
+        if not vector_layers:
+            raise VectorTileError("Tile conversion produced no vector layers.")
+        return build_point_style(
+            pmtiles_url,
+            class_colors,
+            vector_layers[0]["id"],
+            color_field=color_field,
+            default_color=default_color,
+        )
+
     try:
-        client = client_factory(
-            data_source=geojson_path,
+        layer = layer_factory(
+            geojson_path,
+            style=style_from,
             conversion_options=POINT_CONVERSION_OPTIONS,
             allowed_directories=[dest_dir],
         )
         # The tile server just booted its uvicorn (and vectortileserver's DEBUG
         # logger); pin their levels down now so it sticks past uvicorn's config.
         quiet_tile_server_logs()
-        layers = client.list_layers()
-        if not layers:
-            raise VectorTileError("Tile conversion produced no vector layers.")
-        style = build_point_style(
-            client.pmtiles_url,
-            class_colors,
-            layers[0],
-            color_field=color_field,
-            default_color=default_color,
-        )
-        return client.create_leaflet_layer(style=style)
+        return layer
     except VectorTileError:
         raise
     except Exception as e:

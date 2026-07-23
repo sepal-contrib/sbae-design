@@ -4,6 +4,7 @@ import pytest
 from component.scripts.vector_tiles import (
     POINT_CONVERSION_OPTIONS,
     VectorTileError,
+    build_layer_or_notify,
     build_point_style,
     build_points_pmtiles_layer,
     points_to_geojson,
@@ -52,56 +53,49 @@ def test_build_point_style_empty_colors_plain_default():
     assert style["layers"][0]["paint"]["circle-color"] == "#abcdef"
 
 
-class _FakeClient:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-        self.pmtiles_url = "http://localhost:1/pmtiles?filePath=p.pmtiles"
-
-    def list_layers(self):
-        return ["sample_points"]
-
-    def create_leaflet_layer(self, style=None):
-        return {"layer": True, "style": style}
-
-
 def test_build_points_layer_writes_geojson_and_passes_style(tmp_path):
     df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
     captured = {}
 
-    def factory(**kwargs):
-        captured["kwargs"] = kwargs
-        return _FakeClient(**kwargs)
+    def factory(source, *, style, conversion_options, allowed_directories):
+        captured["conversion_options"] = conversion_options
+        captured["allowed_directories"] = allowed_directories
+        # ``style`` is a builder; resolve it with fake archive metadata + URL.
+        metadata = {"vector_layers": [{"id": "sample_points"}]}
+        resolved = style(metadata, "http://localhost:1/pmtiles?filePath=p.pmtiles")
+        return {"layer": True, "style": resolved, "bounds": [[0.0, 0.0], [1.0, 1.0]]}
 
     layer = build_points_pmtiles_layer(
-        df, {3: "#333333"}, dest_dir=str(tmp_path), client_factory=factory
+        df, {3: "#333333"}, dest_dir=str(tmp_path), layer_factory=factory
     )
     assert (tmp_path / "sample_points.geojson").exists()
-    assert captured["kwargs"]["conversion_options"] == POINT_CONVERSION_OPTIONS
-    assert captured["kwargs"]["allowed_directories"] == [str(tmp_path)]
+    assert captured["conversion_options"] == POINT_CONVERSION_OPTIONS
+    assert captured["allowed_directories"] == [str(tmp_path)]
     style = layer["style"]
     assert style["layers"][0]["source-layer"] == "sample_points"
     assert style["layers"][0]["paint"]["circle-color"][2:] == [3, "#333333", "#888888"]
+    assert layer["bounds"] == [[0.0, 0.0], [1.0, 1.0]]
 
 
 def test_build_points_layer_no_layers_raises(tmp_path):
-    class _NoLayers(_FakeClient):
-        def list_layers(self):
-            return []
+    def factory(source, *, style, conversion_options, allowed_directories):
+        # Empty archive metadata -> the style builder must raise.
+        return {"style": style({"vector_layers": []}, "u")}
 
     df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
     with pytest.raises(VectorTileError):
         build_points_pmtiles_layer(
-            df, {}, dest_dir=str(tmp_path), client_factory=lambda **k: _NoLayers(**k)
+            df, {}, dest_dir=str(tmp_path), layer_factory=factory
         )
 
 
-def test_build_points_layer_client_error_wrapped(tmp_path):
-    def boom(**k):
+def test_build_points_layer_open_error_wrapped(tmp_path):
+    def boom(source, *, style, conversion_options, allowed_directories):
         raise RuntimeError("tippecanoe missing")
 
     df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
     with pytest.raises(VectorTileError):
-        build_points_pmtiles_layer(df, {}, dest_dir=str(tmp_path), client_factory=boom)
+        build_points_pmtiles_layer(df, {}, dest_dir=str(tmp_path), layer_factory=boom)
 
 
 def test_build_points_layer_geojson_serialization_error_wrapped(tmp_path):
@@ -116,7 +110,7 @@ def test_build_points_layer_geojson_serialization_error_wrapped(tmp_path):
             {7: "#333333"},
             dest_dir=str(tmp_path),
             color_field="class_id",
-            client_factory=lambda **k: _FakeClient(**k),
+            layer_factory=lambda source, **k: {"layer": True},
         )
 
 
@@ -136,9 +130,6 @@ def test_build_points_layer_real(tmp_path):
     except VectorTileError as e:
         pytest.skip(f"tile library unavailable: {e}")
     assert layer is not None
-
-
-from component.scripts.vector_tiles import build_layer_or_notify
 
 
 class _MapOK:
