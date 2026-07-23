@@ -1,7 +1,5 @@
 """UI-widget tests for the analysis tab: current-table card and download menu."""
 
-import asyncio
-
 import ipyvuetify as v
 import numpy as np
 import pandas as pd
@@ -9,6 +7,7 @@ import rasterio
 import solara
 from rasterio.transform import from_origin
 
+from component.analysis.service import AnalysisService
 from component.model import app_state
 from component.model.state_manager import AppState
 from component.widget import analysis_tab
@@ -210,43 +209,12 @@ def test_column_mapping_hides_map_role_for_map_source(monkeypatch):
     assert "Map / predicted" not in labels  # map role hidden when the map derives it
 
 
-def _walk_widgets(widget):
-    yield widget
-    for child in getattr(widget, "children", ()) or ():
-        yield from _walk_widgets(child)
+def test_derive_map_source_surfaces_error_without_xy_mapping(tmp_path):
+    """derive_map_source must not raise when x/y columns aren't mapped.
 
-
-def _run_with_task_loop(coro_factory):
-    """Run ``coro_factory()`` on a real event loop, then restore loop state.
-
-    ``asyncio.run`` unconditionally clears the process' "current" event loop
-    when it tears down, which sticks for the rest of the test session and
-    breaks later tests that rely on ``asyncio.get_event_loop()``'s legacy
-    auto-create fallback (e.g. solara's task runner). Save whatever loop was
-    current beforehand and restore it afterward so this test stays isolated.
-    """
-    try:
-        previous_loop = asyncio.get_event_loop_policy().get_event_loop()
-    except RuntimeError:
-        previous_loop = None
-    try:
-        return asyncio.run(coro_factory())
-    finally:
-        asyncio.set_event_loop(previous_loop)
-
-
-def test_classification_map_upload_survives_derivation_error(monkeypatch, tmp_path):
-    """A raster picked before x/y mapping must not crash the whole widget tree.
-
-    Regression test for a bug where ``derive_from_classification`` raising
-    inside the ``use_task`` derivation (e.g. because x/y columns aren't
-    mapped yet) propagated out of render: with reacton's default
-    ``handle_error=True`` the whole widget tree -- clear button included --
-    gets replaced by a raw traceback ``ipywidgets.HTML``, wedging the page.
-    Verified empirically against the pre-fix code: the tree collapsed to a
-    single traceback widget and the clear button vanished. Post-fix the
-    error is caught, surfaced via ``status`` + ``app_state.add_error``, and
-    the normal widget tree (clear button included) is preserved.
+    The Calculate action runs this off the UI thread; a raised exception would
+    abort the task. Instead the error is surfaced via ``app_state.add_error``
+    and the reference table is left untouched (no partial map_code column).
     """
     raster_path = tmp_path / "classification.tif"
     raster_path.write_bytes(b"")  # never opened: the x/y check raises first
@@ -257,27 +225,15 @@ def test_classification_map_upload_survives_derivation_error(monkeypatch, tmp_pa
     )
     st.analysis_column_mapping.value = {}  # x/y NOT mapped yet
     st.analysis_classification_path.value = str(raster_path)
-    monkeypatch.setattr(analysis_tab, "app_state", st)
 
-    async def _runner():
-        element = analysis_tab._ClassificationMapUpload.widget()
-        # Let the use_task's background thread run the derivation and the
-        # resulting re-render settle (see pysepal's export-test pattern).
-        for _ in range(20):
-            await asyncio.sleep(0.05)
-        return element
+    result = analysis_tab.derive_map_source(st, None)  # must not raise
 
-    element = _run_with_task_loop(_runner)
-
-    widgets = list(_walk_widgets(element))
-    # No raw traceback widget replaced the tree.
-    assert not [w for w in widgets if type(w).__name__ == "HTML"]
-    # The clear (mdi-close) button is still there -- the session isn't stuck.
-    assert [w for w in widgets if isinstance(w, v.Btn)]
-    # The error is surfaced through the app's error channel.
+    assert result is None
     assert any(
         "x/y column mapping" in msg for msg in st.error_messages.value
     ), st.error_messages.value
+    # reference table untouched -- no map_code column was added
+    assert "map_code" not in st.analysis_reference_df.value.columns
 
 
 def test_analysis_panel_accepts_sbae_map():
@@ -314,18 +270,11 @@ class _FakeSbaeMap:
         self.reference_points_calls.append((points_df, kwargs))
 
 
-def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_path):
-    """A successful derivation adds the classification raster to sbae_map.
-
-    Drives the real ``use_task`` derivation (real rasterio round-trip, same
-    fixture as ``test_derive_from_classification.py``) with a fake ``sbae_map``
-    standing in for ``SbaeMap``, so this exercises the actual success-path
-    wiring rather than asserting it by inspection.
-    """
+def _write_2x2_class_raster(raster_path):
+    """4x4 raster of four 2x2 class blocks (1 top-left, 2 top-right, 3, 4)."""
     data = np.array(
         [[1, 1, 2, 2], [1, 1, 2, 2], [3, 3, 4, 4], [3, 3, 4, 4]], dtype=np.uint8
     )
-    raster_path = tmp_path / "clas.tif"
     with rasterio.open(
         raster_path,
         "w",
@@ -338,6 +287,17 @@ def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_pa
         transform=from_origin(0, 4, 1, 1),
     ) as dst:
         dst.write(data, 1)
+
+
+def test_derive_map_source_renders_raster_layer(tmp_path):
+    """derive_map_source samples the raster, fills map_code, and adds the layer.
+
+    Also derives class colors from the raster (standalone mode). Real rasterio
+    round-trip (same fixture as ``test_derive_from_classification``) with a fake
+    ``sbae_map`` -- exercises the actual success path, no rendering.
+    """
+    raster_path = tmp_path / "clas.tif"
+    _write_2x2_class_raster(raster_path)
 
     st = AppState()
     st.analysis_reference_df.value = pd.DataFrame(
@@ -346,58 +306,35 @@ def test_classification_map_upload_renders_layers_on_success(monkeypatch, tmp_pa
     st.analysis_column_mapping.value = {"x": "lon", "y": "lat", "ref": "ref_code"}
     st.analysis_classification_path.value = str(raster_path)
     # Standalone mode: class_colors starts EMPTY, as it would with no
-    # design-step upload. run_derivation must derive it from the raster
-    # (see test assertions below) instead of leaving it empty.
+    # design-step upload. derive_map_source must derive it from the raster.
     assert st.class_colors.value == {}
-    monkeypatch.setattr(analysis_tab, "app_state", st)
 
     fake_map = _FakeSbaeMap()
+    dropped = analysis_tab.derive_map_source(st, fake_map)
 
-    async def _runner():
-        element = analysis_tab._ClassificationMapUpload.widget(sbae_map=fake_map)
-        # Let the use_task's background thread run the derivation and the
-        # resulting re-render settle (see pysepal's export-test pattern).
-        for _ in range(20):
-            await asyncio.sleep(0.05)
-        return element
-
-    _run_with_task_loop(_runner)
-
+    assert dropped == 0
     assert len(fake_map.class_raster_calls) == 1
     call = fake_map.class_raster_calls[0]
     assert call["path"] == str(raster_path)
     assert call["class_colors"] == st.class_colors.value
     assert call["key"] == "clas_an"
     # The map layer must never fall back to a continuous colormap: with no
-    # design-step upload, class_colors starts empty and run_derivation must
+    # design-step upload, class_colors starts empty and derive_map_source must
     # derive it from the raster (one entry per class present in the raster).
     assert call["class_colors"], "class_colors must not be empty (near-black map)"
     assert set(call["class_colors"]) == {1, 2, 3, 4}
-
-    # Reference points are no longer rendered by the derivation itself: the
-    # AnalysisPanel's render thread draws them (from analysis_reference_df, for
-    # every source) on their own "ref_pts" layer. The derivation adds the raster.
+    # map_code filled on the reference + mapping updated to the derived column
+    assert st.analysis_column_mapping.value["map"] == "map_code"
+    assert st.analysis_reference_df.value["map_code"].tolist() == [1, 4]
+    # Reference points are drawn by the AnalysisPanel's render thread (on their
+    # own "ref_pts" layer), not by the derivation.
     assert fake_map.sample_points_calls == []
 
 
-def test_classification_map_upload_skips_layers_without_sbae_map(monkeypatch, tmp_path):
-    """No sbae_map -> derivation still succeeds; no AttributeError from a None map."""
-    data = np.array(
-        [[1, 1, 2, 2], [1, 1, 2, 2], [3, 3, 4, 4], [3, 3, 4, 4]], dtype=np.uint8
-    )
+def test_derive_map_source_without_sbae_map(tmp_path):
+    """No sbae_map -> derivation still fills map_code; no AttributeError."""
     raster_path = tmp_path / "clas.tif"
-    with rasterio.open(
-        raster_path,
-        "w",
-        driver="GTiff",
-        height=data.shape[0],
-        width=data.shape[1],
-        count=1,
-        dtype=data.dtype,
-        crs="EPSG:4326",
-        transform=from_origin(0, 4, 1, 1),
-    ) as dst:
-        dst.write(data, 1)
+    _write_2x2_class_raster(raster_path)
 
     st = AppState()
     st.analysis_reference_df.value = pd.DataFrame(
@@ -405,15 +342,139 @@ def test_classification_map_upload_skips_layers_without_sbae_map(monkeypatch, tm
     )
     st.analysis_column_mapping.value = {"x": "lon", "y": "lat", "ref": "ref_code"}
     st.analysis_classification_path.value = str(raster_path)
-    monkeypatch.setattr(analysis_tab, "app_state", st)
 
-    async def _runner():
-        element = analysis_tab._ClassificationMapUpload.widget()  # sbae_map=None
-        for _ in range(20):
-            await asyncio.sleep(0.05)
-        return element
+    dropped = analysis_tab.derive_map_source(st, None)  # sbae_map=None
 
-    _run_with_task_loop(_runner)
-
+    assert dropped == 0
     assert st.analysis_reference_df.value["map_code"].tolist() == [1, 4]
     assert not st.error_messages.value
+
+
+# ---- explicit Calculate flow: signature, freshness, button, source labels ----
+
+
+def test_inputs_signature_changes_when_an_input_changes():
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame({"m": [1], "r": [1]})
+    st.analysis_reference_name.value = "ref.csv"
+    sig1 = AnalysisService.inputs_signature(st)
+    st.analysis_confidence_level.value = 90.0
+    assert AnalysisService.inputs_signature(st) != sig1
+
+
+def test_inputs_signature_stable_when_nothing_changes():
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame({"m": [1], "r": [1]})
+    assert AnalysisService.inputs_signature(st) == AnalysisService.inputs_signature(st)
+
+
+def test_results_are_fresh_tracks_input_edits():
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame({"m": [1], "r": [1]})
+    st.set_analysis_results(
+        {"overall_accuracy": 0.9}, signature=AnalysisService.inputs_signature(st)
+    )
+    assert analysis_tab._results_are_fresh(st) is True
+    # any later edit invalidates the stored results -> dashboard hidden
+    st.analysis_confidence_level.value = 90.0
+    assert analysis_tab._results_are_fresh(st) is False
+
+
+def test_set_analysis_results_none_clears_signature():
+    st = AppState()
+    st.set_analysis_results({"x": 1}, signature=("sig",))
+    st.set_analysis_results(None)
+    assert st.analysis_results.value is None
+    assert st.analysis_results_signature.value is None
+
+
+def test_run_calculation_design_source_sets_fresh_results():
+    st = AppState()
+    st.area_data.value = pd.DataFrame(
+        {
+            "map_code": [1, 2],
+            "map_area": [600000.0, 400000.0],
+            "map_edited_class": ["Forest", "NonForest"],
+        }
+    )
+    rows = [(1, 1)] * 45 + [(1, 2)] * 5 + [(2, 1)] * 10 + [(2, 2)] * 40
+    st.analysis_reference_df.value = pd.DataFrame(rows, columns=["mapc", "refc"])
+    st.analysis_column_mapping.value = {"map": "mapc", "ref": "refc"}
+    st.analysis_area_source.value = "design"
+
+    analysis_tab.run_calculation(st, None)
+
+    assert st.analysis_results.value is not None
+    assert analysis_tab._results_are_fresh(st) is True
+
+
+def test_run_calculation_without_inputs_reports_error_and_stays_blank():
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame()  # nothing loaded
+    analysis_tab.run_calculation(st, None)
+    assert st.analysis_results.value is None
+    assert st.error_messages.value  # a validation error surfaced
+
+
+def test_area_source_labels_are_bijective():
+    assert set(analysis_tab._AREA_SOURCE_LABELS) == {"design", "upload", "map"}
+    # order presented to the user: design map, upload a map, area CSV
+    assert analysis_tab._AREA_SOURCE_ORDER == ["design", "map", "upload"]
+    for key, label in analysis_tab._AREA_SOURCE_LABELS.items():
+        assert analysis_tab._AREA_SOURCE_BY_LABEL[label] == key
+
+
+def test_area_source_select_shows_friendly_labels_not_raw_keys(monkeypatch):
+    st = AppState()
+    st.analysis_area_source.value = "map"
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+    _, rc = solara.render(analysis_tab._AnalysisControls(), handle_error=False)
+    src = next(s for s in rc.find(v.Select).widgets if "source" in str(s.label).lower())
+    # current selection renders as the friendly label, never the raw key
+    assert src.v_model == "Upload a classification map"
+    items = [str(x) for x in (src.items or [])]
+    assert "Upload a classification map" in items
+    assert "map" not in items and "design" not in items
+
+
+def test_design_source_shows_classification_card(monkeypatch, tmp_path):
+    st = AppState()
+    st.analysis_area_source.value = "design"
+    st.file_path.value = str(tmp_path / "my_design.tif")
+    st.area_data.value = pd.DataFrame(
+        {"map_code": [1, 2, 3], "map_area": [1.0, 2.0, 3.0]}
+    )
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+    _, rc = solara.render(analysis_tab._AnalysisControls(), handle_error=False)
+    text = _html_text(rc)
+    assert "Design map:" in text
+    assert "my_design.tif" in text
+    assert "3 classes" in text
+
+
+def test_classification_map_upload_shows_card_when_path_set(monkeypatch, tmp_path):
+    raster = tmp_path / "clas.tif"
+    raster.write_bytes(b"")
+    st = AppState()
+    st.analysis_classification_path.value = str(raster)
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+    _, rc = solara.render(analysis_tab._ClassificationMapUpload(), handle_error=False)
+    text = _html_text(rc)
+    assert "Classification map:" in text
+    assert "clas.tif" in text
+    rc.find(v.Btn).assert_single()  # the clear button
+
+
+def test_analysis_panel_shows_calculate_button_when_reference_loaded(monkeypatch):
+    st = AppState()
+    st.analysis_reference_df.value = pd.DataFrame({"mapc": [1, 2], "refc": [1, 2]})
+    st.analysis_reference_name.value = "ref.csv"
+    st.analysis_column_mapping.value = {"map": "mapc", "ref": "refc"}
+    st.analysis_area_source.value = "design"
+    st.area_data.value = pd.DataFrame({"map_code": [1, 2], "map_area": [1.0, 2.0]})
+    monkeypatch.setattr(analysis_tab, "app_state", st)
+    _, rc = solara.render(analysis_tab.AnalysisPanel(), handle_error=False)
+    labels = " ".join(
+        str(c) for b in rc.find(v.Btn).widgets for c in (b.children or [])
+    )
+    assert "Calculate" in labels

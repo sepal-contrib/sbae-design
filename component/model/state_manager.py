@@ -94,6 +94,10 @@ class AppState:
         self.analysis_confidence_level = solara.reactive(95.0)
         self.analysis_area_unit = solara.reactive("ha")  # "ha" | "m2"
         self.analysis_results = solara.reactive(None)
+        # Signature of the inputs that produced analysis_results. Results are only
+        # (re)computed by an explicit Calculate action; when the live inputs no
+        # longer match this signature the dashboard is treated as stale and hidden.
+        self.analysis_results_signature = solara.reactive(None)
         self.analysis_status = solara.reactive("")
         # Display names for the loaded analysis tables (mirrors uploaded_file_info
         # for the design tab): shown by CurrentTableDisplay once a CSV is loaded.
@@ -565,9 +569,15 @@ class AppState:
         # Clear analysis data
         self.clear_analysis_data()
 
-    def set_analysis_results(self, results: Dict):
-        """Store analysis results (AnalysisResults.to_dict())."""
+    def set_analysis_results(self, results: Dict, signature=None):
+        """Store analysis results and the inputs signature that produced them.
+
+        The signature lets the Analysis tab hide the dashboard once any input
+        changes (results are only recomputed on an explicit Calculate). Passing
+        ``None`` (the default) clears both, blanking the dashboard.
+        """
         self.analysis_results.value = results
+        self.analysis_results_signature.value = signature
 
     def clear_analysis_data(self):
         """Reset all analysis inputs and outputs."""
@@ -580,6 +590,7 @@ class AppState:
         self.analysis_confidence_level.value = 95.0
         self.analysis_area_unit.value = "ha"
         self.analysis_results.value = None
+        self.analysis_results_signature.value = None
         self.analysis_status.value = ""
         self.analysis_reference_name.value = ""
         self.analysis_area_name.value = ""

@@ -75,6 +75,41 @@ class AnalysisService:
         )
 
     @staticmethod
+    def inputs_signature(app_state) -> tuple:
+        """A cheap, stable fingerprint of every input that affects the result.
+
+        The Analysis tab computes results only on an explicit Calculate and
+        stores this signature alongside them; when the live inputs no longer
+        produce the same signature, the shown dashboard is stale and hidden
+        until the user recalculates. Uses table shapes + names (not full
+        content) to stay cheap while still changing whenever a table is
+        loaded/cleared/replaced or the map derivation adds a ``map_code``
+        column.
+        """
+        import json
+
+        def _shape(df):
+            if df is None or getattr(df, "empty", True):
+                return (0, 0)
+            return (int(df.shape[0]), int(df.shape[1]))
+
+        mapping = app_state.analysis_column_mapping.value or {}
+        filt = app_state.analysis_filter.value
+        return (
+            app_state.analysis_area_source.value,
+            tuple(sorted((str(k), str(v)) for k, v in mapping.items())),
+            float(app_state.analysis_confidence_level.value),
+            str(app_state.analysis_area_unit.value),
+            json.dumps(filt, sort_keys=True, default=str) if filt else None,
+            app_state.analysis_reference_name.value,
+            _shape(app_state.analysis_reference_df.value),
+            app_state.analysis_area_name.value,
+            _shape(app_state.analysis_area_df.value),
+            _shape(app_state.area_data.value),
+            app_state.analysis_classification_path.value,
+        )
+
+    @staticmethod
     def is_ready(app_state) -> bool:
         try:
             inputs = AnalysisService.create_inputs_from_state(app_state)

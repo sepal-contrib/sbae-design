@@ -58,6 +58,6 @@ def test_summary_card_shows_kpis_and_button():
     _, rc = solara.render(AnalysisResultsView(theme_toggle=None), handle_error=False)
     text = " ".join(str(c) for w in rc.find(v.Html).widgets for c in (w.children or []))
     assert "85.0%" in text
-    # a "Ver dashboard" button exists among the rendered buttons
+    # a "View dashboard" button exists among the rendered buttons
     labels = [str(c) for b in rc.find(v.Btn).widgets for c in (b.children or [])]
     assert any("dashboard" in lbl.lower() for lbl in labels)

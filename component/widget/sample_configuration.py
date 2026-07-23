@@ -157,7 +157,7 @@ def SampleConfiguration(sbae_map=None, theme_toggle=None):
                 point_generation_controller=point_generation_controller,
             )
         else:
-            AnalysisTab(sbae_map=sbae_map)
+            AnalysisTab(sbae_map=sbae_map, theme_toggle=theme_toggle)
 
 
 @solara.component
@@ -257,11 +257,11 @@ def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=
 
 
 @solara.component
-def AnalysisTab(sbae_map=None):
+def AnalysisTab(sbae_map=None, theme_toggle=None):
     """Accuracy-assessment analysis (area estimation + accuracies)."""
     from component.widget.analysis_tab import AnalysisPanel
 
-    AnalysisPanel(sbae_map=sbae_map)
+    AnalysisPanel(sbae_map=sbae_map, theme_toggle=theme_toggle)
 
 
 @solara.component
