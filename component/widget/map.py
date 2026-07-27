@@ -9,17 +9,48 @@ from sepal_ui.sepalwidgets.vue_app import ThemeToggle
 
 from component.scripts.logging_config import quiet_tile_server_logs
 from component.scripts.vector_tiles import (
+    CORRECT_COLOR,
+    INCORRECT_COLOR,
+    REFERENCE_NEUTRAL_COLOR,
+    SAMPLE_POINT_COLOR,
     VectorTileError,
     build_points_pmtiles_layer,
 )
 
 logger = logging.getLogger("sbae.map")
 
+# On-map legend entries (label -> hex). Composed from whichever point layers are
+# currently shown; see ``_points_legend_dict``.
+_SAMPLE_LEGEND_LABEL = "Sample point"
+_CORRECT_LEGEND_LABEL = "Correct"
+_INCORRECT_LEGEND_LABEL = "Incorrect"
+_REFERENCE_LEGEND_LABEL = "Reference point"
+
 
 def _hex_to_rgb(hex_color: str) -> tuple:
     """Convert '#rrggbb' to an (r, g, b) tuple."""
     h = hex_color.lstrip("#")
     return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def _compose_points_legend(
+    has_sample: bool, has_reference: bool, reference_evaluated: bool
+) -> dict:
+    """Legend entries (label -> hex) for the point layers currently shown.
+
+    Sample points contribute one neutral entry; reference points contribute the
+    green/red correctness key once evaluated, else a single neutral entry.
+    """
+    legend = {}
+    if has_sample:
+        legend[_SAMPLE_LEGEND_LABEL] = SAMPLE_POINT_COLOR
+    if has_reference:
+        if reference_evaluated:
+            legend[_CORRECT_LEGEND_LABEL] = CORRECT_COLOR
+            legend[_INCORRECT_LEGEND_LABEL] = INCORRECT_COLOR
+        else:
+            legend[_REFERENCE_LEGEND_LABEL] = REFERENCE_NEUTRAL_COLOR
+    return legend
 
 
 def _build_class_colormap(class_colors: dict) -> dict:
@@ -50,6 +81,10 @@ class SbaeMap(SepalMap):
         # design sample points (distinct key/name/color; see add_reference_points).
         self.reference_points_layer = None
         self.reference_points_dir = None
+        # Whether the reference points are coloured by correctness (green/red)
+        # vs a single neutral colour -- drives the legend entries.
+        self._reference_evaluated = False
+        self._points_legend = None  # the LegendControl, added lazily
 
     def _optimize_for_tiles(self, path) -> str:
         """Return a tiling-optimized (cached COG with overviews) path.
@@ -168,33 +203,50 @@ class SbaeMap(SepalMap):
 
         return layer
 
-    def build_sample_points_layer(
-        self, points_data, class_colors=None, *, point_color=None
+    async def build_sample_points_layer(
+        self,
+        points_data,
+        class_colors=None,
+        *,
+        point_color=None,
+        color_field="map_code",
+        radius=5,
+        stroke_width=1,
     ):
         """Build (off the UI thread) a PMTiles layer for the sample points.
 
         Returns ``None`` for an empty DataFrame. Does NOT mutate the map, so it
         is safe to call from a worker thread. Raises ``VectorTileError`` on
-        failure. ``class_colors=None`` resolves to ``app_state.class_colors``.
+        failure. Empty/omitted ``class_colors`` yields a single uniform
+        ``point_color`` layer (design sample points); a non-empty
+        ``class_colors`` colours one flat layer per ``color_field`` value (the
+        analysis green/red).
         """
         if points_data is None or points_data.empty:
             return None
-        if class_colors is None:
-            from component.model import app_state
-
-            class_colors = app_state.class_colors.value or {}
         dest_dir = tempfile.mkdtemp(prefix="sbae_points_")
         try:
-            layer = build_points_pmtiles_layer(
+            layer = await build_points_pmtiles_layer(
                 points_data,
-                class_colors,
+                class_colors or {},
                 dest_dir=dest_dir,
-                default_color=point_color or "#888888",
+                color_field=color_field,
+                default_color=point_color or SAMPLE_POINT_COLOR,
+                radius=radius,
+                stroke_width=stroke_width,
             )
         except Exception:
             # Don't leak the dir when the build itself failed.
             shutil.rmtree(dest_dir, ignore_errors=True)
             raise
+        # Ride in leaflet's overlayPane (z 400) so points always draw above
+        # raster layers: both the PMTiles points and the localtileserver rasters
+        # are GridLayers, and rasters sit in the tilePane (z 200); without this a
+        # classification map added after the points would cover them.
+        try:
+            layer.pane = "overlayPane"
+        except Exception:
+            pass
         self._pending_points_dir = dest_dir
         return layer
 
@@ -219,7 +271,7 @@ class SbaeMap(SepalMap):
         """
         old_dir = getattr(self, "sample_points_dir", None)
         if self.sample_points_layer is not None:
-            self.remove_layer(self.sample_points_layer)
+            self.remove_layer(self.sample_points_layer, none_ok=True)
             self.sample_points_layer = None
         self.sample_points_dir = None
         if layer is not None:
@@ -228,12 +280,13 @@ class SbaeMap(SepalMap):
             self.sample_points_dir = getattr(self, "_pending_points_dir", None)
             SbaeMap._zoom_to_points(self, layer)
         self._pending_points_dir = None
+        SbaeMap._refresh_points_legend(self)
         if old_dir:
             # Reclaim the previous layer's backing dir now that the swap is done.
             shutil.rmtree(old_dir, ignore_errors=True)
 
-    def add_sample_points(self, points_data, class_colors=None):
-        """Build + attach the sample-points PMTiles layer.
+    async def add_sample_points(self, points_data):
+        """Build + attach the design sample-points PMTiles layer (uniform colour).
 
         Called off the UI thread by the analysis derivation path -- see
         ``attach_sample_points_layer``'s docstring for why that's fine here.
@@ -246,28 +299,48 @@ class SbaeMap(SepalMap):
         # this method callable unbound against duck-typed test doubles; for a real
         # SbaeMap instance it behaves identically to self.foo(...).
         try:
-            layer = SbaeMap.build_sample_points_layer(self, points_data, class_colors)
+            layer = await SbaeMap.build_sample_points_layer(
+                self, points_data, point_color=SAMPLE_POINT_COLOR
+            )
         except VectorTileError as e:
             logger.warning("Sample points layer failed: %s", e)
             app_state.add_error(f"Could not render sample points on the map: {e}")
             return
         SbaeMap.attach_sample_points_layer(self, layer)
 
-    def add_reference_points(
-        self, points_data, *, point_color="#ff7f0e", layer_name="Reference points"
-    ):
-        """Render the analysis reference points as their own map layer.
+    async def add_reference_points(self, points_data, *, layer_name="Reference points"):
+        """Render the analysis reference points on their own layer, by agreement.
 
         Kept separate from the design sample (``add_sample_points`` / the
-        ``"sample_pts"`` layer): distinct key (``"ref_pts"``), name, and a uniform
-        ``point_color`` so the two coexist and are visually distinguishable.
-        Builds off the UI thread; on failure, notify and skip.
+        ``"sample_pts"`` layer): distinct key (``"ref_pts"``) and name. When both
+        the map and reference class are known, points are coloured green where
+        they agree (correct) and red where they don't; otherwise (e.g. map class
+        not sampled yet) they fall back to a single neutral colour. Builds off the
+        UI thread; on failure, notify and skip.
         """
         from component.model import app_state
 
+        pts = points_data
+        color_field = "map_code"
+        class_colors = {}
+        evaluated = False
+        if {"map_code", "ref_code"} <= set(pts.columns) and bool(
+            pts[["map_code", "ref_code"]].notna().all(axis=1).all()
+        ):
+            pts = pts.copy()
+            pts["correct"] = (pts["map_code"] == pts["ref_code"]).astype(int)
+            class_colors = {0: INCORRECT_COLOR, 1: CORRECT_COLOR}
+            color_field = "correct"
+            evaluated = True
+
         try:
-            layer = SbaeMap.build_sample_points_layer(
-                self, points_data, {}, point_color=point_color
+            layer = await SbaeMap.build_sample_points_layer(
+                self,
+                pts,
+                class_colors,
+                point_color=REFERENCE_NEUTRAL_COLOR,
+                color_field=color_field,
+                radius=6,
             )
         except VectorTileError as e:
             logger.warning("Reference points layer failed: %s", e)
@@ -275,7 +348,7 @@ class SbaeMap(SepalMap):
             return
         old_dir = self.reference_points_dir
         if self.reference_points_layer is not None:
-            self.remove_layer(self.reference_points_layer)
+            self.remove_layer(self.reference_points_layer, none_ok=True)
             self.reference_points_layer = None
         self.reference_points_dir = None
         if layer is not None:
@@ -287,6 +360,64 @@ class SbaeMap(SepalMap):
             self.reference_points_layer = layer
             self.reference_points_dir = getattr(self, "_pending_points_dir", None)
             SbaeMap._zoom_to_points(self, layer)
+        self._reference_evaluated = evaluated and layer is not None
         self._pending_points_dir = None
+        SbaeMap._refresh_points_legend(self)
         if old_dir:
             shutil.rmtree(old_dir, ignore_errors=True)
+
+    def clear_reference_points(self):
+        """Take the reference-points layer off the map and reclaim its temp dir.
+
+        The inverse of the attach half of ``add_reference_points``: called when
+        the reference data is cleared (or is no longer renderable) so the map
+        layer doesn't outlive the data that produced it.
+        """
+        old_dir = self.reference_points_dir
+        self.reference_points_layer = None
+        self.reference_points_dir = None
+        self._reference_evaluated = False
+        # Remove by the stable "ref_pts" key rather than the tracked object: the
+        # map is shared and its widgets can be swapped out from under us (theme
+        # change / re-style), leaving the handle stale so an identity lookup would
+        # miss the still-visible layer and raise. none_ok: it may already be gone.
+        self.remove_layer("ref_pts", none_ok=True)
+        SbaeMap._refresh_points_legend(self)
+        if old_dir:
+            shutil.rmtree(old_dir, ignore_errors=True)
+
+    def _refresh_points_legend(self):
+        """Recompose the on-map points legend from the layers currently shown."""
+        legend = _compose_points_legend(
+            getattr(self, "sample_points_layer", None) is not None,
+            getattr(self, "reference_points_layer", None) is not None,
+            getattr(self, "_reference_evaluated", False),
+        )
+        SbaeMap._apply_points_legend(self, legend)
+
+    def _apply_points_legend(self, legend_dict):
+        """Add/update/remove the legend control; never let it break point render.
+
+        Best-effort: on a duck-typed map double (no ``add``/``remove``) or any
+        widget error it quietly no-ops -- the legend is secondary to the points.
+        """
+        if not (hasattr(self, "add") and hasattr(self, "remove")):
+            return
+        try:
+            current = getattr(self, "_points_legend", None)
+            if not legend_dict:
+                if current is not None:
+                    self.remove(current)
+                    self._points_legend = None
+                return
+            if current is None:
+                from pysepal.mapping.legend_control import LegendControl
+
+                self._points_legend = LegendControl(
+                    legend_dict, title="Points", position="bottomright"
+                )
+                self.add(self._points_legend)
+            else:
+                current.legend_dict = legend_dict
+        except Exception as e:
+            logger.debug("Points legend update skipped: %s", e)

@@ -361,9 +361,9 @@ def AnalysisPanel(sbae_map=None, theme_toggle=None):
 
     # Render the analysis reference points on their own map layer (distinct color
     # + name from the design sample), for every source, whenever the reference
-    # table and its x/y mapping are ready. Build + attach run off the UI thread
-    # (tippecanoe), mirroring the derivation's raster render.
-    def render_reference_points_worker():
+    # table and its x/y mapping are ready. Runs as a use_task: the build offloads
+    # tippecanoe off-thread (open_async) and the attach happens on the loop.
+    async def render_reference_points_worker():
         if sbae_map is None:
             return None
         df = app_state.analysis_reference_df.value
@@ -377,26 +377,35 @@ def AnalysisPanel(sbae_map=None, theme_toggle=None):
             or x not in df.columns
             or y not in df.columns
         ):
+            # Data cleared / not renderable: drop any stale reference layer so
+            # the map stays in sync with the reference table.
+            sbae_map.clear_reference_points()
             return None
-        points = pd.DataFrame(
-            {
-                "longitude": df[x],
-                "latitude": df[y],
-                "map_code": df["map_code"] if "map_code" in df.columns else 0,
-            }
-        )
-        sbae_map.add_reference_points(points)
+        data = {"longitude": df[x], "latitude": df[y]}
+        # map_code / ref_code decide correctness (green vs red). Include each only
+        # when actually known: the map class is absent until the classification
+        # raster is sampled (Calculate), so omitting it leaves the points neutral
+        # rather than falsely "incorrect" against a placeholder.
+        if "map_code" in df.columns:
+            data["map_code"] = df["map_code"]
+        ref_col = mapping.get("ref")
+        if "ref_code" in df.columns:
+            data["ref_code"] = df["ref_code"]
+        elif ref_col and ref_col in df.columns:
+            data["ref_code"] = df[ref_col]
+        points = pd.DataFrame(data)
+        await sbae_map.add_reference_points(points)
         return len(points)
 
     _mapping_now = app_state.analysis_column_mapping.value or {}
-    solara.use_thread(
+    # prefer_threaded defaults to True (non-GEE worker); see point_generation.
+    solara.lab.use_task(
         render_reference_points_worker,
         dependencies=[
             app_state.analysis_reference_df.value,
             _mapping_now.get("x"),
             _mapping_now.get("y"),
         ],
-        intrusive_cancel=False,
     )
 
     ref_df = app_state.analysis_reference_df.value
@@ -455,7 +464,7 @@ def AnalysisPanel(sbae_map=None, theme_toggle=None):
             _ColumnMappingCard(
                 list(ref_df.columns), app_state.analysis_area_source.value
             )
-            _AnalysisControls()
+            _AnalysisControls(sbae_map)
             _FilterCard(list(ref_df.columns))
 
             calc_running = calc_result.state in (
@@ -561,7 +570,7 @@ def _ColumnMappingCard(columns: list, area_source: str = "upload"):
 
 
 @solara.component
-def _AnalysisControls():
+def _AnalysisControls(sbae_map=None):
     """Area source, confidence level, unit, and optional filter controls."""
     with solara.Column(gap="8px"):
         Section("Options", "mdi-tune")
@@ -590,7 +599,7 @@ def _AnalysisControls():
         elif source == "upload":
             _AreaUpload()
         elif source == "map":
-            _ClassificationMapUpload()
+            _ClassificationMapUpload(sbae_map)
         solara.Select(
             label="Confidence level (%)",
             value=app_state.analysis_confidence_level.value,
@@ -772,16 +781,22 @@ def CurrentRasterDisplay(path: str, on_clear=None):
 
 
 @solara.component
-def _ClassificationMapUpload():
+def _ClassificationMapUpload(sbae_map=None):
     """Pick a classification GeoTIFF for the "map" area source.
 
     Only selects the file. The raster is sampled (map_code + per-class areas)
     and rendered when the user presses Calculate -- see ``derive_map_source`` /
-    ``run_calculation``. Clearing the path blanks the dashboard via the inputs
-    signature (the path is part of it), so no explicit reset is needed here.
+    ``run_calculation``. Clearing the path also drops the rendered raster layer
+    (``clas_an``) so it doesn't outlive the data that produced it.
     """
     path = app_state.analysis_classification_path
+
+    def clear_classification():
+        path.set(None)
+        if sbae_map is not None:
+            sbae_map.remove_layer("clas_an", none_ok=True)
+
     if path.value:
-        CurrentRasterDisplay(path.value, on_clear=lambda: path.set(None))
+        CurrentRasterDisplay(path.value, on_clear=clear_classification)
     else:
         FileInputComponent(extensions=[".tif", ".tiff"], on_value=lambda p: path.set(p))

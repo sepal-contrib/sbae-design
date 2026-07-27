@@ -8,6 +8,7 @@ import is confined to ``_default_client_factory`` -- the ONE seam that touches
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -18,6 +19,19 @@ import pandas as pd
 from component.scripts.logging_config import quiet_tile_server_logs
 
 logger = logging.getLogger("sbae.vector_tiles")
+
+# Point styling. Sample/reference points stay a single neutral colour with a
+# white halo so they read over a colourful classification map; analysis points
+# encode only agreement (green = map matches reference, red = it doesn't).
+SAMPLE_POINT_COLOR = "#000000"
+POINT_HALO_COLOR = "#ffffff"
+CORRECT_COLOR = "#2e7d32"
+INCORRECT_COLOR = "#c62828"
+REFERENCE_NEUTRAL_COLOR = "#607d8b"
+
+# Feature properties coerced to int for clean JSON *and* so protomaps-leaflet's
+# strict-equality ``==`` filter matches the numeric tile values.
+_INT_PROPS = ("map_code", "ref_code", "correct")
 
 
 def points_to_geojson(
@@ -30,7 +44,8 @@ def points_to_geojson(
 
     Coordinates are written ``[lon, lat]`` (GeoJSON order). Only the columns in
     ``props`` that are present in ``df`` are copied onto each feature; NaN
-    values are skipped. ``map_code`` is coerced to ``int`` for clean JSON.
+    values are skipped. Categorical fields (see ``_INT_PROPS``) are coerced to
+    ``int`` for clean JSON.
     """
     present = [p for p in props if p in df.columns]
     features = []
@@ -40,7 +55,7 @@ def points_to_geojson(
             value = row[p]
             if pd.isna(value):
                 continue
-            properties[p] = int(value) if p == "map_code" else value
+            properties[p] = int(value) if p in _INT_PROPS else value
         features.append(
             {
                 "type": "Feature",
@@ -54,6 +69,27 @@ def points_to_geojson(
     return {"type": "FeatureCollection", "features": features}
 
 
+def _circle_layer(
+    idx: int, source_layer: str, filt, *, fill, stroke, radius, stroke_width, opacity
+) -> dict:
+    layer = {
+        "id": f"sample-points-circle-{idx}",
+        "type": "circle",
+        "source": "pmtiles_source",
+        "source-layer": source_layer,
+        "paint": {
+            "circle-radius": radius,
+            "circle-color": fill,
+            "circle-stroke-color": stroke,
+            "circle-stroke-width": stroke_width,
+            "circle-opacity": opacity,
+        },
+    }
+    if filt is not None:
+        layer["filter"] = filt
+    return layer
+
+
 def build_point_style(
     pmtiles_url: str,
     class_colors: dict,
@@ -65,41 +101,52 @@ def build_point_style(
     stroke_color: str = "#ffffff",
     stroke_width: int = 1,
     opacity: float = 0.85,
+    categories: list | None = None,
 ) -> dict:
-    """Build a MapLibre style with one categorized ``circle`` layer.
+    """Build a MapLibre-style dict of flat-colour ``circle`` layers, one per class.
 
-    ``circle-color`` is a ``["match", ["get", color_field], code, hex, ...,
-    default]`` expression from ``class_colors``. Empty ``class_colors`` yields a
-    plain ``default_color`` (no match expression).
+    The PMTiles renderer (protomaps-leaflet, via ipyleaflet) does NOT evaluate
+    MapLibre data-driven expressions for colours -- ``circle-color`` must be a
+    plain colour string (or a JS function, which can't cross the JSON style
+    trait). An expression array is passed through untouched and the canvas falls
+    back to solid black. So categorical colouring is done the protomaps-leaflet
+    way: one flat-colour circle layer per category value, each behind a legacy
+    ``["==", color_field, code]`` filter (the only filter form protomaps-leaflet
+    understands).
+
+    ``categories`` lists the codes to emit, derived from the data actually
+    present. Empty ``class_colors`` yields a single unfiltered ``default_color``
+    layer -- the uniform look used for the design sample points.
     """
-    if class_colors:
-        circle_color = ["match", ["get", color_field]]
-        for code, hex_color in class_colors.items():
-            circle_color.extend([int(code), hex_color])
-        circle_color.append(default_color)
+    common = dict(radius=radius, stroke_width=stroke_width, opacity=opacity)
+    layers = []
+
+    if not class_colors:
+        layers.append(
+            _circle_layer(
+                0, source_layer, None, fill=default_color, stroke=stroke_color, **common
+            )
+        )
     else:
-        circle_color = default_color
+        codes = categories if categories is not None else list(class_colors)
+        for idx, code in enumerate(codes):
+            layers.append(
+                _circle_layer(
+                    idx,
+                    source_layer,
+                    ["==", color_field, int(code)],
+                    fill=class_colors.get(code, default_color),
+                    stroke=stroke_color,
+                    **common,
+                )
+            )
 
     return {
         "version": 8,
         "sources": {
             "pmtiles_source": {"type": "vector", "url": f"pmtiles://{pmtiles_url}"}
         },
-        "layers": [
-            {
-                "id": "sample-points-circle",
-                "type": "circle",
-                "source": "pmtiles_source",
-                "source-layer": source_layer,
-                "paint": {
-                    "circle-radius": radius,
-                    "circle-color": circle_color,
-                    "circle-stroke-color": stroke_color,
-                    "circle-stroke-width": stroke_width,
-                    "circle-opacity": opacity,
-                },
-            }
-        ],
+        "layers": layers,
     }
 
 
@@ -117,45 +164,72 @@ POINT_CONVERSION_OPTIONS = {
 }
 
 
-def _default_layer_factory(source, *, style, conversion_options, allowed_directories):
+async def _default_layer_factory(
+    source, *, style, conversion_options, allowed_directories
+):
     """The ONE seam where the tile-library is imported.
 
     ``vectortileserver`` (PyPI) is the only external tile dependency; nothing
     else in the codebase references it. A per-build ``TileWorkspace`` carries the
     temp ``dest_dir`` as an allowed directory so the shared tile server can serve
-    it. ``.open`` runs tippecanoe synchronously on the calling (worker) thread and
-    returns a layer that already knows its own ``.bounds``.
+    it. ``open_async`` offloads tippecanoe to a thread and builds the layer widget
+    on the event loop, returning a layer that already knows its own ``.bounds``.
     """
     import vectortileserver as vts
 
     workspace = vts.TileWorkspace(allowed_directories=allowed_directories)
-    return workspace.open(source, style=style, conversion_options=conversion_options)
+    return await workspace.open_async(
+        source, style=style, conversion_options=conversion_options
+    )
 
 
-def build_points_pmtiles_layer(
+def _point_categories(df: pd.DataFrame, color_field: str):
+    """Distinct ``color_field`` values present in ``df``, one flat layer each.
+
+    Coerced to ``int`` because protomaps-leaflet's ``==`` filter is strict
+    equality against the numeric tile properties. ``None`` when the field is
+    absent (nothing to categorize -> a single flat layer).
+    """
+    if color_field in df.columns:
+        return sorted(int(v) for v in df[color_field].dropna().unique())
+    return None
+
+
+async def build_points_pmtiles_layer(
     df: pd.DataFrame,
     class_colors: dict,
     *,
     dest_dir: str,
     color_field: str = "map_code",
     default_color: str = "#888888",
+    stroke_color: str = POINT_HALO_COLOR,
     layer_factory: Optional[Callable] = None,
+    radius: int = 5,
+    stroke_width: int = 1,
 ):
     """Convert points to PMTiles and return an ipyleaflet layer.
 
     Writes the GeoJSON into ``dest_dir``, opens it through ``vectortileserver``
-    (tippecanoe, with point-retention options) with a categorized ``circle``
-    style, and returns the layer -- which carries its own ``.bounds`` for
-    auto-zoom. Raises :class:`VectorTileError` on any failure (missing library,
-    tippecanoe error, no vector layers produced).
+    (tippecanoe, with point-retention options) with a per-class ``circle`` style,
+    and returns the layer -- which carries its own ``.bounds`` for auto-zoom.
+    Awaitable: the geojson write and the conversion both run off the event loop.
+    Raises :class:`VectorTileError` on any failure (missing library, tippecanoe
+    error, no vector layers produced). ``color_field`` rides along as a
+    tile-feature property so its per-class filters match.
     """
     if layer_factory is None:
         layer_factory = _default_layer_factory
 
     geojson_path = os.path.join(dest_dir, "sample_points.geojson")
-    try:
+    props = (color_field,)
+    categories = _point_categories(df, color_field)
+
+    def _write_geojson():
         with open(geojson_path, "w") as fh:
-            json.dump(points_to_geojson(df, props=(color_field,)), fh)
+            json.dump(points_to_geojson(df, props=props), fh)
+
+    try:
+        await asyncio.to_thread(_write_geojson)
     except (OSError, TypeError) as e:
         raise VectorTileError(f"Could not write points GeoJSON: {e}") from e
 
@@ -171,10 +245,14 @@ def build_points_pmtiles_layer(
             vector_layers[0]["id"],
             color_field=color_field,
             default_color=default_color,
+            stroke_color=stroke_color,
+            radius=radius,
+            stroke_width=stroke_width,
+            categories=categories,
         )
 
     try:
-        layer = layer_factory(
+        layer = await layer_factory(
             geojson_path,
             style=style_from,
             conversion_options=POINT_CONVERSION_OPTIONS,
@@ -190,19 +268,23 @@ def build_points_pmtiles_layer(
         raise VectorTileError(f"Could not build PMTiles point layer: {e}") from e
 
 
-def build_layer_or_notify(sbae_map, points_df, class_colors):
-    """Build the sample-points layer, notifying (not raising) on failure.
+async def build_layer_or_notify(sbae_map, points_df):
+    """Build the design sample-points layer, notifying (not raising) on failure.
 
     Returns the layer, or ``None`` when there is no map, no points, or the build
-    failed (an error is surfaced via ``app_state.add_error``). Safe to call from
-    a worker thread; the caller attaches the returned layer on the main thread.
+    failed (an error is surfaced via ``app_state.add_error``). Awaitable; the
+    caller attaches the returned layer on the event loop. Design points are a
+    single neutral colour (see ``SAMPLE_POINT_COLOR``) -- per-class colouring
+    only fights the classification map underneath.
     """
     if sbae_map is None or points_df is None or points_df.empty:
         return None
     from component.model import app_state
 
     try:
-        return sbae_map.build_sample_points_layer(points_df, class_colors)
+        return await sbae_map.build_sample_points_layer(
+            points_df, point_color=SAMPLE_POINT_COLOR
+        )
     except Exception as e:
         # Intentionally broad: this is a non-essential map-layer build, called
         # from the point-generation worker thread. Any failure here -- not just

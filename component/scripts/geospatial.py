@@ -194,6 +194,33 @@ def extract_raster_colormap(file_path: str) -> Dict[int, str]:
     return colors
 
 
+# ECharts default colors -- the categorical fallback palette.
+_DEFAULT_PALETTE = [
+    "#5470c6",
+    "#91cc75",
+    "#fac858",
+    "#ee6666",
+    "#73c0de",
+    "#3ba272",
+    "#fc8452",
+    "#9a60b4",
+    "#ea7ccc",
+]
+
+
+def palette_for_codes(class_codes: List[int]) -> Dict[int, str]:
+    """Assign a stable hex colour to each class code by sorted position.
+
+    Deterministic and file-free: the same set of codes always yields the same
+    colours (used when no real class palette exists, e.g. a reference CSV that
+    never touched a raster). Cycles the base palette when codes outnumber it.
+    """
+    return {
+        code: _DEFAULT_PALETTE[idx % len(_DEFAULT_PALETTE)]
+        for idx, code in enumerate(sorted(class_codes))
+    }
+
+
 def get_color_palette(file_path: str, class_codes: List[int]) -> Dict[int, str]:
     """Get color palette for given class codes, extracting from file if possible.
 
@@ -204,35 +231,16 @@ def get_color_palette(file_path: str, class_codes: List[int]) -> Dict[int, str]:
     Returns:
         Dictionary mapping class codes to hex color strings
     """
-    # Default color palette (ECharts default colors)
-    default_colors = [
-        "#5470c6",
-        "#91cc75",
-        "#fac858",
-        "#ee6666",
-        "#73c0de",
-        "#3ba272",
-        "#fc8452",
-        "#9a60b4",
-        "#ea7ccc",
-    ]
-
-    # Try to extract colors from raster file
     extracted_colors = {}
     if is_raster_file(file_path):
         extracted_colors = extract_raster_colormap(file_path)
 
-    # Build color mapping for each class code
-    color_map = {}
-    for idx, class_code in enumerate(sorted(class_codes)):
-        if class_code in extracted_colors:
-            # Use extracted color if available
-            color_map[class_code] = extracted_colors[class_code]
-        else:
-            # Fall back to default palette
-            color_map[class_code] = default_colors[idx % len(default_colors)]
-
-    return color_map
+    # Extracted colors win; anything the file doesn't cover falls back to the
+    # deterministic categorical palette (same sorted-index assignment).
+    fallback = palette_for_codes(class_codes)
+    return {
+        code: extracted_colors.get(code, fallback[code]) for code in sorted(class_codes)
+    }
 
 
 def compute_area_from_raster(file_path: str) -> pd.DataFrame:
