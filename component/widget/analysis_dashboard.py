@@ -57,23 +57,29 @@ def dashboard_kpis(results: dict) -> dict:
     }
 
 
-# Short (<= 3 lines) explanation shown under the dashboard KPI tiles.
-_DASHBOARD_EXPLANATION = (
+# One-line methodology note under the KPI row; each KPI's own meaning now lives
+# in its tile's info tooltip.
+_METHODOLOGY_NOTE = (
     "Error-adjusted area estimates and class accuracies from your reference "
-    "sample, following Olofsson et al. (2014). Overall accuracy is the share of "
-    "reference points classified correctly; the charts and tables below break it "
-    "down per class with confidence intervals."
+    "sample, following Olofsson et al. (2014)."
 )
 
 
 @solara.component
-def _KpiCard(label: str, value: str):
-    """A single dashboard stat tile: prominent value + muted label (no icon).
+def _KpiCard(label: str, value: str, hint: str):
+    """A single dashboard stat tile with a corner info button.
 
-    A plain theme-aware ``solara.Card`` (no custom background) so it reads as a
-    normal surface in both light and dark; ``flex: 1`` lets the four share one row.
+    Prominent value + muted label, plus a top-right info button whose tooltip
+    (``hint``) explains the metric. A plain theme-aware ``solara.Card`` (no
+    custom background) so it reads as a normal surface in both light and dark;
+    ``flex: 1`` lets the four share one row, and ``position: relative`` anchors
+    the corner info button.
     """
-    with solara.Card(margin=0, elevation=2, style="flex: 1 1 0; min-width: 0;"):
+    with solara.Card(
+        margin=0,
+        elevation=2,
+        style="flex: 1 1 0; min-width: 0; position: relative;",
+    ):
         with solara.Column(gap="2px", style="align-items: center;"):
             solara.Text(
                 value,
@@ -84,6 +90,18 @@ def _KpiCard(label: str, value: str):
                 classes=["caption"],
                 style="opacity: 0.7; line-height: 1.2; text-align: center;",
             )
+        with solara.Column(
+            gap="0px", style="position: absolute; top: 2px; right: 2px;"
+        ):
+            with solara.Tooltip(hint):
+                solara.v.Btn(
+                    icon=True,
+                    x_small=True,
+                    style_="opacity: 0.5;",
+                    children=[
+                        solara.v.Icon(small=True, children=["mdi-information-outline"])
+                    ],
+                )
 
 
 @solara.component
@@ -91,14 +109,30 @@ def _DashboardKpiCards(results: dict):
     """Overall accuracy / confidence / samples / classes as stat tiles, one row."""
     k = dashboard_kpis(results)
     items = [
-        ("Overall accuracy", f"{k['overall_accuracy_pct']:.1f}%"),
-        ("Confidence level", f"{k['confidence_level']:.0f}%"),
-        ("Reference samples", f"{k['n_samples']:,}"),
-        ("Classes", f"{k['n_classes']}"),
+        (
+            "Overall accuracy",
+            f"{k['overall_accuracy_pct']:.1f}%",
+            "Share of reference points classified correctly.",
+        ),
+        (
+            "Confidence level",
+            f"{k['confidence_level']:.0f}%",
+            "Probability that the ± intervals contain the true value.",
+        ),
+        (
+            "Reference samples",
+            f"{k['n_samples']:,}",
+            "Total reference points assessed.",
+        ),
+        (
+            "Classes",
+            f"{k['n_classes']}",
+            "Number of map classes evaluated.",
+        ),
     ]
     with solara.Row(gap="12px", style="flex-wrap: nowrap; margin-bottom: 8px;"):
-        for label, value in items:
-            _KpiCard(label, value)
+        for label, value, hint in items:
+            _KpiCard(label, value, hint)
 
 
 @solara.component
@@ -130,10 +164,10 @@ def AnalysisDashboardModal(open, theme_toggle=None):
                 solara.v.Html(tag="div", children=[resizer], style_="display: none;")
                 _DashboardKpiCards(results)
                 solara.Text(
-                    _DASHBOARD_EXPLANATION,
+                    _METHODOLOGY_NOTE,
                     style=(
-                        "display: block; text-align: center; opacity: 0.7; "
-                        "font-size: 13px; margin: 0 auto 16px; max-width: 720px;"
+                        "display: block; text-align: center; opacity: 0.6; "
+                        "font-size: 12px; margin: 0 auto 16px; max-width: 640px;"
                     ),
                 )
                 with solara.ColumnsResponsive(6, small=12):
