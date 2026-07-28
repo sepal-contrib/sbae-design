@@ -32,3 +32,5 @@ dependencies:
       - voila
       # local vector-tile server for the PMTiles map sample-points layer
       - vectortileserver>=0.2
+      # tile comm bridge (vectortileserver dep); pinned so it's never dropped
+      - jupyter-loopback[comm]>=0.3.3

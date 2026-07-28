@@ -1,15 +1,7 @@
-"""The tile comm-bridge mount enables jupyter_loopback when flagged.
+"""``_TileLoopbackBridge`` enables jupyter_loopback by default (opt out with =0).
 
-``_TileLoopbackBridge`` mounts jupyter_loopback's anywidget comm bridge so
-localtileserver's ``http://127.0.0.1:<port>`` tile URLs reach the browser when
-the app is served behind a reverse proxy (``run-solara --serve`` / SEPAL). It is
-gated on ``LOCALTILESERVER_COMM_BRIDGE`` so plain local runs keep direct-HTTP
-tiles. This is a Python-side smoke test: it confirms the component renders and
-enables the bridge when the flag is set (the actual browser interception is only
-observable in a live frontend).
-
-Runs in a subprocess (like ``test_app_page_render``) because enabling the bridge
-and rendering under a Solara kernel context mutate process-global singletons.
+Each case runs in a subprocess: enabling the bridge mutates process-global
+singletons that would otherwise leak across tests.
 """
 
 import subprocess
@@ -20,7 +12,11 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _RENDER_SCRIPT = """
 import os
-os.environ["LOCALTILESERVER_COMM_BRIDGE"] = "1"
+_flag = {flag!r}
+if _flag is None:
+    os.environ.pop("LOCALTILESERVER_COMM_BRIDGE", None)
+else:
+    os.environ["LOCALTILESERVER_COMM_BRIDGE"] = _flag
 
 import solara
 import solara.server.kernel_context as kc
@@ -34,18 +30,32 @@ import app
 import jupyter_loopback as jl
 
 solara.render(app._TileLoopbackBridge(), handle_error=False)
-assert jl.is_comm_bridge_enabled(), "comm bridge was not enabled with the flag set"
-print("BRIDGE_OK")
+print("ENABLED" if jl.is_comm_bridge_enabled() else "DISABLED")
 """
 
 
-def test_bridge_enables_when_flagged():
+def _bridge_enabled(flag) -> bool:
     result = subprocess.run(
-        [sys.executable, "-c", _RENDER_SCRIPT],
+        [sys.executable, "-c", _RENDER_SCRIPT.format(flag=flag)],
         cwd=str(_REPO_ROOT),
         capture_output=True,
         text=True,
         timeout=120,
     )
     assert result.returncode == 0, result.stderr[-3000:]
-    assert "BRIDGE_OK" in result.stdout
+    if "ENABLED" in result.stdout:
+        return True
+    if "DISABLED" in result.stdout:
+        return False
+    raise AssertionError(
+        f"unexpected output: {result.stdout!r}\n{result.stderr[-2000:]}"
+    )
+
+
+def test_bridge_enabled_by_default():
+    # the SEPAL case: flag unset, bridge must still mount
+    assert _bridge_enabled(None) is True
+
+
+def test_bridge_disabled_when_opted_out():
+    assert _bridge_enabled("0") is False
