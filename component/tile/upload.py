@@ -116,6 +116,29 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
         )
 
 
+def _upload_toast(*, has_file, is_raster, state, value, error):
+    """Decide the terminal upload toast: ``(level, message)`` or ``None``.
+
+    The raster success toast fires only when the optimization produced a real
+    result (``value``), never on the idle/no-op ``FINISHED`` state of the
+    prep thread's ``lambda: None`` branch. That ambiguity -- the thread rests at
+    ``FINISHED`` before the real run starts -- is what fired the "optimized"
+    toast twice.
+    """
+    if not has_file:
+        return None
+    if not is_raster:
+        return ("success", "File uploaded successfully.")
+    if state == solara.ResultState.ERROR:
+        return ("error", f"Error optimizing raster: {error}")
+    if state == solara.ResultState.FINISHED and value:
+        return (
+            "success",
+            "File uploaded and optimized — you can now edit class names.",
+        )
+    return None
+
+
 @solara.component
 def UploadTile(sbae_map: SbaeMap):
     """Step 1: File Upload Dialog."""
@@ -201,20 +224,21 @@ def UploadTile(sbae_map: SbaeMap):
 
     def announce_upload_state():
         """Toast the terminal upload/optimization state (progress stays inline)."""
-        if not has_file:
+        toast = _upload_toast(
+            has_file=has_file,
+            is_raster=is_raster_file(app_state.file_path.value or ""),
+            state=raster_prep_result.state,
+            value=raster_prep_result.value,
+            error=raster_prep_result.error,
+        )
+        if toast is None:
             return
-        if is_raster_file(app_state.file_path.value or ""):
-            if raster_prep_result.state == solara.ResultState.ERROR:
-                logger.error("Raster optimization failed: %s", raster_prep_result.error)
-                notifications.error(
-                    f"Error optimizing raster: {raster_prep_result.error}"
-                )
-            elif raster_prep_result.state == solara.ResultState.FINISHED:
-                notifications.success(
-                    "File uploaded and optimized — you can now edit class names."
-                )
+        level, message = toast
+        if level == "error":
+            logger.error("Raster optimization failed: %s", raster_prep_result.error)
+            notifications.error(message)
         else:
-            notifications.success("File uploaded successfully.")
+            notifications.success(message)
 
     solara.use_effect(announce_upload_state, [has_file, raster_prep_result.state])
 
