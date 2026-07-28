@@ -201,7 +201,13 @@ async def _default_layer_factory(
     # bin (where the conda tippecanoe sits) is on PATH before it runs.
     _ensure_tippecanoe_on_path()
 
-    workspace = vts.TileWorkspace(allowed_directories=allowed_directories)
+    # Bind the tile server to IPv4 loopback explicitly. The default "localhost"
+    # can resolve to IPv6 ::1, which some sandboxes (SEPAL) can't assign -> the
+    # server fails to bind and never starts. 127.0.0.1 is also the exact form
+    # jupyter_loopback's interceptor matches.
+    workspace = vts.TileWorkspace(
+        host="127.0.0.1", allowed_directories=allowed_directories
+    )
     return await workspace.open_async(
         source, style=style, conversion_options=conversion_options
     )
