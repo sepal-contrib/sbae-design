@@ -50,18 +50,18 @@ USE_GEE = False
 
 @solara.component
 def _TileLoopbackBridge():
-    """Tunnel localtileserver's localhost tile URLs over the widget comm.
+    """Mount jupyter_loopback's comm bridge so localhost tile fetches survive a proxy.
 
-    When the app is served behind a reverse proxy -- ``run-solara --serve``
-    (tailscale serve) or SEPAL -- the raster tile server's
-    ``http://127.0.0.1:<port>`` URL is unreachable from the browser, which only
-    sees the proxied app origin. This mounts jupyter_loopback's anywidget comm
-    bridge; its frontend reroutes those requests over the same websocket Solara
-    already uses (localtileserver's ``get_leaflet_tile_layer`` registers each
-    tile port via ``enable_for_port``). Gated on ``LOCALTILESERVER_COMM_BRIDGE``
-    so plain local runs keep the faster direct-HTTP tile path.
+    localtileserver + vectortileserver serve tiles on ``127.0.0.1:<port>``, which
+    the browser can't reach behind SEPAL / ``run-solara --serve`` (CSP forbids
+    connecting to localhost). The bridge reroutes those fetches over Solara's
+    websocket, but must be enabled BEFORE any tile client calls
+    ``intercept_localhost`` (on layer build) or that shim is a no-op -- hence
+    mounting it here at Page load. Default on; opt out with
+    ``LOCALTILESERVER_COMM_BRIDGE=0``.
     """
-    enabled = bool(os.environ.get("LOCALTILESERVER_COMM_BRIDGE"))
+    _flag = os.environ.get("LOCALTILESERVER_COMM_BRIDGE", "1").strip().lower()
+    enabled = _flag not in ("0", "false", "no", "off")
 
     def _enable():
         if not enabled:
@@ -72,9 +72,7 @@ def _TileLoopbackBridge():
 
     bridge = solara.use_memo(_enable, [])
     if bridge is not None:
-        # Mount the (invisible) bridge widget so its ESM loads and installs the
-        # window.__jupyter_loopback__ interceptor in the browser.
-        solara.display(bridge)
+        solara.display(bridge)  # its ESM installs the browser interceptor
 
 
 @solara.lab.on_kernel_start
