@@ -3,6 +3,8 @@ import os
 import shutil
 import tempfile
 
+import pandas as pd
+import solara
 from localtileserver import TileClient, get_leaflet_tile_layer
 from sepal_ui.mapping import SepalMap
 from sepal_ui.sepalwidgets.vue_app import ThemeToggle
@@ -20,7 +22,7 @@ from component.scripts.vector_tiles import (
 logger = logging.getLogger("sbae.map")
 
 # On-map legend entries (label -> hex). Composed from whichever point layers are
-# currently shown; see ``_points_legend_dict``.
+# currently shown; see ``_compose_points_legend``.
 _SAMPLE_LEGEND_LABEL = "Sample point"
 _CORRECT_LEGEND_LABEL = "Correct"
 _INCORRECT_LEGEND_LABEL = "Incorrect"
@@ -31,6 +33,22 @@ def _hex_to_rgb(hex_color: str) -> tuple:
     """Convert '#rrggbb' to an (r, g, b) tuple."""
     h = hex_color.lstrip("#")
     return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def _points_signature(df):
+    """Cheap content signature of a points DataFrame (``None`` when empty).
+
+    Lets ``add_reference_points`` skip the expensive tippecanoe rebuild when the
+    incoming points are unchanged -- switching to the Analysis tab remounts its
+    render task, which re-submits identical points on every entry.
+    """
+    if df is None or df.empty:
+        return None
+    return (
+        len(df),
+        tuple(str(c) for c in df.columns),
+        int(pd.util.hash_pandas_object(df, index=False).sum()),
+    )
 
 
 def _compose_points_legend(
@@ -84,7 +102,10 @@ class SbaeMap(SepalMap):
         # Whether the reference points are coloured by correctness (green/red)
         # vs a single neutral colour -- drives the legend entries.
         self._reference_evaluated = False
-        self._points_legend = None  # the LegendControl, added lazily
+        # Signature of the last-rendered reference points, to skip redundant
+        # rebuilds when the same points are re-submitted (e.g. Analysis-tab
+        # re-entry remounts the render task).
+        self._reference_points_sig = None
 
     def _optimize_for_tiles(self, path) -> str:
         """Return a tiling-optimized (cached COG with overviews) path.
@@ -320,6 +341,16 @@ class SbaeMap(SepalMap):
         """
         from component.model import app_state
 
+        # Unchanged points already on the map -> keep the existing layer and skip
+        # the tippecanoe rebuild (see _points_signature).
+        sig = _points_signature(points_data)
+        if (
+            sig is not None
+            and sig == getattr(self, "_reference_points_sig", None)
+            and self.reference_points_layer is not None
+        ):
+            return
+
         pts = points_data
         color_field = "map_code"
         class_colors = {}
@@ -359,6 +390,7 @@ class SbaeMap(SepalMap):
             self.add_layer(layer, key="ref_pts")
             self.reference_points_layer = layer
             self.reference_points_dir = getattr(self, "_pending_points_dir", None)
+            self._reference_points_sig = sig
             SbaeMap._zoom_to_points(self, layer)
         self._reference_evaluated = evaluated and layer is not None
         self._pending_points_dir = None
@@ -377,6 +409,7 @@ class SbaeMap(SepalMap):
         self.reference_points_layer = None
         self.reference_points_dir = None
         self._reference_evaluated = False
+        self._reference_points_sig = None
         # Remove by the stable "ref_pts" key rather than the tracked object: the
         # map is shared and its widgets can be swapped out from under us (theme
         # change / re-style), leaving the handle stale so an identity lookup would
@@ -387,37 +420,44 @@ class SbaeMap(SepalMap):
             shutil.rmtree(old_dir, ignore_errors=True)
 
     def _refresh_points_legend(self):
-        """Recompose the on-map points legend from the layers currently shown."""
-        legend = _compose_points_legend(
+        """Publish the on-map points legend to reactive state.
+
+        The legend is a declarative Solara overlay (``PointsLegend`` ->
+        pysepal ``LegendComponent``), so this just pushes ``{label: hex}`` to
+        ``app_state.points_legend``; the component re-renders itself. Safe to call
+        from the worker threads that mutate the map.
+        """
+        from component.model import app_state
+
+        app_state.points_legend.value = _compose_points_legend(
             getattr(self, "sample_points_layer", None) is not None,
             getattr(self, "reference_points_layer", None) is not None,
             getattr(self, "_reference_evaluated", False),
         )
-        SbaeMap._apply_points_legend(self, legend)
 
-    def _apply_points_legend(self, legend_dict):
-        """Add/update/remove the legend control; never let it break point render.
 
-        Best-effort: on a duck-typed map double (no ``add``/``remove``) or any
-        widget error it quietly no-ops -- the legend is secondary to the points.
-        """
-        if not (hasattr(self, "add") and hasattr(self, "remove")):
-            return
-        try:
-            current = getattr(self, "_points_legend", None)
-            if not legend_dict:
-                if current is not None:
-                    self.remove(current)
-                    self._points_legend = None
-                return
-            if current is None:
-                from pysepal.mapping.legend_control import LegendControl
+@solara.component
+def PointsLegend():
+    """Floating map legend for the sample/reference points.
 
-                self._points_legend = LegendControl(
-                    legend_dict, title="Points", position="bottomright"
-                )
-                self.add(self._points_legend)
-            else:
-                current.legend_dict = legend_dict
-        except Exception as e:
-            logger.debug("Points legend update skipped: %s", e)
+    Renders the modern pysepal ``LegendComponent`` overlay, driven by
+    ``app_state.points_legend`` ({label: hex}); hidden when there is nothing to
+    show. Place it once in the page alongside the map.
+    """
+    from dataclasses import asdict
+
+    from pysepal.solara.components.legend import (
+        DiscreteEntry,
+        LegendComponent,
+        LegendData,
+    )
+
+    from component.model import app_state
+
+    legend = app_state.points_legend.value or {}
+    data = LegendData(
+        items=[
+            DiscreteEntry(label=label, color=color) for label, color in legend.items()
+        ]
+    )
+    LegendComponent(legend_data=asdict(data), visible=bool(legend))

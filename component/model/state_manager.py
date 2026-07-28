@@ -35,6 +35,10 @@ class AppState:
         self.aoi_computing = solara.reactive(False)
         # Color palette extracted from raster or default
         self.class_colors = solara.reactive({})
+        # On-map points legend: {label: hex}, composed from the point layers
+        # shown (see SbaeMap._refresh_points_legend); rendered by PointsLegend.
+        # (Distinct from accuracy's map_legend/ref_legend class-code lists.)
+        self.points_legend = solara.reactive({})
         # Expected User's Accuracy per class (EUA)
         self.expected_user_accuracies = solara.reactive({})
         # Global high and low EUA values

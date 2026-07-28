@@ -259,6 +259,13 @@ def test_add_reference_points_colors_by_correctness(monkeypatch):
     assert captured["colors"] == {0: map_mod.INCORRECT_COLOR, 1: map_mod.CORRECT_COLOR}
     assert list(captured["df"]["correct"]) == [1, 0, 1]  # agree, disagree, agree
     assert m._reference_evaluated is True
+    # legend published to reactive state for the PointsLegend overlay
+    from component.model import app_state as real_app_state
+
+    assert real_app_state.points_legend.value == {
+        map_mod._CORRECT_LEGEND_LABEL: map_mod.CORRECT_COLOR,
+        map_mod._INCORRECT_LEGEND_LABEL: map_mod.INCORRECT_COLOR,
+    }
 
 
 def test_add_reference_points_neutral_without_map_code(monkeypatch):
@@ -283,3 +290,48 @@ def test_add_reference_points_neutral_without_map_code(monkeypatch):
     assert captured["colors"] == {}
     assert captured["default_color"] == map_mod.REFERENCE_NEUTRAL_COLOR
     assert m._reference_evaluated is False
+    from component.model import app_state as real_app_state
+
+    assert real_app_state.points_legend.value == {
+        map_mod._REFERENCE_LEGEND_LABEL: map_mod.REFERENCE_NEUTRAL_COLOR
+    }
+
+
+def test_add_reference_points_skips_rebuild_when_unchanged(monkeypatch):
+    """Re-submitting identical points must not rebuild (the tab-switch case)."""
+    calls = []
+
+    class _Layer:
+        pass
+
+    async def fake_build(df, colors, *, dest_dir, default_color="#888888", **kwargs):
+        calls.append(1)
+        return _Layer()
+
+    monkeypatch.setattr(map_mod, "build_points_pmtiles_layer", fake_build)
+    m = _FakeMap()
+    df = pd.DataFrame(
+        {
+            "longitude": [1.0, 2.0],
+            "latitude": [1.0, 2.0],
+            "map_code": [1, 2],
+            "ref_code": [1, 3],
+        }
+    )
+    asyncio.run(SbaeMap.add_reference_points(m, df))
+    assert len(calls) == 1
+
+    # same content, different object (a fresh worker build) -> no tippecanoe run
+    asyncio.run(SbaeMap.add_reference_points(m, df.copy()))
+    assert len(calls) == 1
+
+    # changed content -> rebuild
+    df2 = df.copy()
+    df2.loc[0, "ref_code"] = 9
+    asyncio.run(SbaeMap.add_reference_points(m, df2))
+    assert len(calls) == 2
+
+    # clearing resets the signature, so identical data rebuilds afterwards
+    SbaeMap.clear_reference_points(m)
+    asyncio.run(SbaeMap.add_reference_points(m, df.copy()))
+    assert len(calls) == 3

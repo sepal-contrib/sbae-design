@@ -31,7 +31,7 @@ from solara.lab.components.theming import theme
 
 from component.model.app_model import AppModel
 from component.tile.upload import RasterMapWatcher
-from component.widget.map import SbaeMap
+from component.widget.map import PointsLegend, SbaeMap
 from component.widget.notification_bridge import ErrorToastBridge
 from component.widget.sample_configuration import SampleConfiguration
 
@@ -108,6 +108,8 @@ def Page():
     sbae_map = SbaeMap(theme_toggle=theme_toggle, gee=USE_GEE)
 
     RasterMapWatcher(sbae_map)
+    # Floating legend overlay for the sample/reference points (bottom-center).
+    PointsLegend()
 
     steps_data = [
         {
