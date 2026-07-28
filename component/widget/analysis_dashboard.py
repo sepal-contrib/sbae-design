@@ -57,82 +57,59 @@ def dashboard_kpis(results: dict) -> dict:
     }
 
 
-# One-line methodology note under the KPI row; each KPI's own meaning now lives
-# in its tile's info tooltip.
-_METHODOLOGY_NOTE = (
-    "Error-adjusted area estimates and class accuracies from your reference "
-    "sample, following Olofsson et al. (2014)."
-)
-
-
 @solara.component
-def _KpiCard(label: str, value: str, hint: str):
-    """A single dashboard stat tile with a corner info button.
+def _KpiStat(icon: str, label: str, value: str, hint: str):
+    """One compact KPI: a primary icon, a faded label, and the value.
 
-    Prominent value + muted label, plus a top-right info button whose tooltip
-    (``hint``) explains the metric. A plain theme-aware ``solara.Card`` (no
-    custom background) so it reads as a normal surface in both light and dark;
-    ``flex: 1`` lets the four share one row, and ``position: relative`` anchors
-    the corner info button.
+    Mirrors the sepal-gee-bundle dashboard stat items (icon + caption label +
+    body value in a dense list item, no surrounding card). ``hint`` rides along
+    as a hover tooltip so each metric keeps its explanation without clutter.
     """
-    with solara.Card(
-        margin=0,
-        elevation=2,
-        style="flex: 1 1 0; min-width: 0; position: relative;",
-    ):
-        with solara.Column(gap="2px", style="align-items: center;"):
-            solara.Text(
-                value,
-                style="font-weight: 700; font-size: 22px; line-height: 1.15;",
-            )
-            solara.Text(
-                label,
-                classes=["caption"],
-                style="opacity: 0.7; line-height: 1.2; text-align: center;",
-            )
-        with solara.Column(
-            gap="0px", style="position: absolute; top: 2px; right: 2px;"
-        ):
-            with solara.Tooltip(hint):
-                solara.v.Btn(
-                    icon=True,
-                    x_small=True,
-                    style_="opacity: 0.5;",
-                    children=[
-                        solara.v.Icon(small=True, children=["mdi-information-outline"])
-                    ],
-                )
+    with solara.Tooltip(hint):
+        with solara.v.Col(cols="auto", class_="pa-0"):
+            with solara.v.ListItem(dense=True, class_="pa-0 pr-4"):
+                with solara.v.ListItemIcon(class_="mr-2 my-auto"):
+                    solara.v.Icon(small=True, color="primary", children=[icon])
+                with solara.v.ListItemContent(class_="py-1"):
+                    solara.v.ListItemTitle(
+                        class_="caption", style_="opacity: 0.6;", children=[label]
+                    )
+                    solara.v.ListItemSubtitle(class_="body-2", children=[value])
 
 
 @solara.component
 def _DashboardKpiCards(results: dict):
-    """Overall accuracy / confidence / samples / classes as stat tiles, one row."""
+    """Overall accuracy / confidence / samples / classes as compact stat items."""
     k = dashboard_kpis(results)
     items = [
         (
+            "mdi-target",
             "Overall accuracy",
             f"{k['overall_accuracy_pct']:.1f}%",
             "Share of reference points classified correctly.",
         ),
         (
+            "mdi-percent-outline",
             "Confidence level",
             f"{k['confidence_level']:.0f}%",
             "Probability that the ± intervals contain the true value.",
         ),
         (
+            "mdi-map-marker-multiple",
             "Reference samples",
             f"{k['n_samples']:,}",
             "Total reference points assessed.",
         ),
         (
+            "mdi-shape-outline",
             "Classes",
             f"{k['n_classes']}",
             "Number of map classes evaluated.",
         ),
     ]
-    with solara.Row(gap="12px", style="flex-wrap: nowrap; margin-bottom: 8px;"):
-        for label, value, hint in items:
-            _KpiCard(label, value, hint)
+    with solara.v.Row(dense=True, align="center", justify="center", class_="mb-3"):
+        for icon, label, value, hint in items:
+            _KpiStat(icon, label, value, hint)
 
 
 @solara.component
@@ -156,20 +133,13 @@ def AnalysisDashboardModal(open, theme_toggle=None):
     unit = app_state.analysis_area_unit.value
 
     with solara.v.Dialog(
-        v_model=open.value, on_v_model=open.set, max_width=1100, eager=True
+        v_model=open.value, on_v_model=open.set, max_width=1400, eager=True
     ):
         with solara.v.Card():
             solara.v.CardTitle(children=["Accuracy assessment results"])
             with solara.v.CardText(style="max-height: 80vh; overflow-y: auto;"):
                 solara.v.Html(tag="div", children=[resizer], style_="display: none;")
                 _DashboardKpiCards(results)
-                solara.Text(
-                    _METHODOLOGY_NOTE,
-                    style=(
-                        "display: block; text-align: center; opacity: 0.6; "
-                        "font-size: 12px; margin: 0 auto 16px; max-width: 640px;"
-                    ),
-                )
                 with solara.ColumnsResponsive(6, small=12):
                     ConfusionMatrixChart(results, theme_toggle=theme_toggle)
                     AccuracyByClassChart(results, theme_toggle=theme_toggle)
@@ -208,7 +178,9 @@ def AnalysisSummaryCard(theme_toggle=None):
                 solara.v.Chip(
                     small=True, label=True, outlined=True, children=[chip_text]
                 )
-        AreaProportionChart(results, theme_toggle=theme_toggle, legend_width=None)
+        AreaProportionChart(
+            results, theme_toggle=theme_toggle, legend_width=None, card=False
+        )
         solara.Button(
             "View dashboard",
             color="primary",

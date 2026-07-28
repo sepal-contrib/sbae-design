@@ -223,7 +223,7 @@ _PIE_FALLBACK = [
 
 @solara.component
 def AreaProportionChart(
-    results: dict, theme_toggle=None, legend_width: int | None = 480
+    results: dict, theme_toggle=None, legend_width: int | None = 480, card: bool = True
 ):
     rows = results.get("class_estimates", [])
     if not rows:
@@ -270,10 +270,18 @@ def AreaProportionChart(
         series=[pie],
         color=chart_colors,
     )
-    with solara.Card(margin=0):
+
+    def _body():
         _ChartTitle("Estimated area proportion")
         EChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
             theme_toggle=theme_toggle,
         )
+
+    # ``card=False`` drops the surface so it sits flush in the right panel.
+    if card:
+        with solara.Card(margin=0):
+            _body()
+    else:
+        _body()
