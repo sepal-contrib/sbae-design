@@ -1,4 +1,6 @@
 import asyncio
+import os
+import sys
 
 import pandas as pd
 import pytest
@@ -6,6 +8,7 @@ import pytest
 from component.scripts.vector_tiles import (
     POINT_CONVERSION_OPTIONS,
     VectorTileError,
+    _ensure_tippecanoe_on_path,
     build_layer_or_notify,
     build_point_style,
     build_points_pmtiles_layer,
@@ -47,6 +50,31 @@ def test_points_to_geojson_omits_absent_props():
 def test_points_to_geojson_empty_df():
     fc = points_to_geojson(pd.DataFrame({"longitude": [], "latitude": []}))
     assert fc["features"] == []
+
+
+def test_ensure_tippecanoe_on_path_prepends_bin(monkeypatch, tmp_path):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "tippecanoe").write_text("")  # pretend the binary is installed here
+    monkeypatch.setattr(sys, "executable", str(bindir / "python3"))
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    _ensure_tippecanoe_on_path()
+    parts = os.environ["PATH"].split(os.pathsep)
+    assert parts[0] == str(bindir)  # venv bin prepended so `tippecanoe` resolves
+    # idempotent: a second call must not duplicate the entry
+    _ensure_tippecanoe_on_path()
+    assert os.environ["PATH"].split(os.pathsep).count(str(bindir)) == 1
+
+
+def test_ensure_tippecanoe_on_path_noop_when_absent(monkeypatch, tmp_path):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()  # no tippecanoe sibling
+    monkeypatch.setattr(sys, "executable", str(bindir / "python3"))
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    _ensure_tippecanoe_on_path()
+    assert os.environ["PATH"] == "/usr/bin"  # untouched
 
 
 def test_build_point_style_emits_flat_layer_per_class():
