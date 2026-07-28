@@ -31,4 +31,4 @@ dependencies:
       - ipecharts>=1.0.0
       - voila
       # local vector-tile server for the PMTiles map sample-points layer
-      - vectortileserver>=0.1.0
+      - vectortileserver>=0.2
