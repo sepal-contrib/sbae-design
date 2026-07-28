@@ -175,8 +175,10 @@ def prepare_for_tiles(
     rep = analyze_tif(path)
     categorical = rep["categorical_guess"]
     resamp = "NEAREST" if categorical else "AVERAGE"
-    need_reproj = _needs_reproject(rio.open(path), 3857) if warp_to_3857 else False
-    good_enough = rep["tiled"] and _has_overviews(rio.open(path)) and not need_reproj
+    # Open once (context-managed) instead of leaking a handle per rio.open call.
+    with rio.open(path) as _ds:
+        need_reproj = _needs_reproject(_ds, 3857) if warp_to_3857 else False
+        good_enough = rep["tiled"] and _has_overviews(_ds) and not need_reproj
 
     if good_enough and not force:
         return {"path": path, "report": rep}

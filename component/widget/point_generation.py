@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Callable
@@ -5,7 +6,8 @@ from typing import Callable
 import solara
 
 from component.model import app_state
-from component.scripts.geospatial import generate_sample_points
+from component.scripts.geospatial import extract_map_codes, generate_sample_points
+from component.scripts.vector_tiles import build_layer_or_notify
 
 logger = logging.getLogger("sbae.point_generation")
 
@@ -87,11 +89,8 @@ def run_point_generation_request(request):
     return points_df
 
 
-def _result_is_generating(generation_result, generation_request) -> bool:
-    return generation_request.value is not None and generation_result.state in (
-        solara.ResultState.STARTING,
-        solara.ResultState.RUNNING,
-    )
+def _result_is_generating(generation_task, generation_request) -> bool:
+    return generation_request.value is not None and generation_task.pending
 
 
 def use_point_generation_task(sbae_map=None) -> PointGenerationController:
@@ -101,55 +100,80 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
     generation_request = solara.use_reactive(None)
     request_id_ref = solara.use_ref(0)
 
-    def generate_points_worker():
+    async def generate_points_worker():
         request = generation_request.value
         if request is None:
             return None
-        return run_point_generation_request(request)
+        points_df = await asyncio.to_thread(run_point_generation_request, request)
+        # Generation leaves map_code=0; sample the design's classification raster
+        # at each point to record its real map class (keep all points -- the
+        # sample is fixed, so unsampleable ones stay as generated).
+        raster = app_state.optimized_raster_path.value or app_state.file_path.value
+        if (
+            raster
+            and points_df is not None
+            and not points_df.empty
+            and "longitude" in points_df.columns
+        ):
+            try:
+                points_df, _ = await asyncio.to_thread(
+                    extract_map_codes,
+                    points_df,
+                    raster,
+                    "longitude",
+                    "latitude",
+                    drop_missing=False,
+                )
+            except Exception as e:
+                logger.warning("Could not sample map_code from design raster: %s", e)
+        layer = await build_layer_or_notify(sbae_map, points_df)
+        return (points_df, layer)
 
-    generation_result = solara.use_thread(
+    # prefer_threaded defaults to True: this worker is non-GEE (no loop-bound
+    # state), and prefer_threaded=False would need a running loop the sync
+    # solara.render() tests don't provide -- running in a worker thread is fine.
+    generation_task = solara.lab.use_task(
         generate_points_worker,
         dependencies=[generation_request.value],
-        intrusive_cancel=False,
+        raise_error=False,
     )
 
     def handle_generation_result():
         if generation_request.value is None:
             return
 
-        if generation_result.state in (
-            solara.ResultState.STARTING,
-            solara.ResultState.RUNNING,
-        ):
+        if generation_task.pending:
             app_state.points_generation_status.value = POINT_GENERATION_RUNNING
             app_state.set_processing_status("Generating sample points...")
-        elif generation_result.state == solara.ResultState.ERROR:
-            app_state.add_error(f"Error generating points: {generation_result.error}")
+        elif generation_task.error:
+            app_state.add_error(f"Error generating points: {generation_task.exception}")
             app_state.points_generation_status.value = POINT_GENERATION_ERROR
             app_state.set_processing_status("")
             generation_request.value = None
-        elif generation_result.state == solara.ResultState.FINISHED:
-            points_df = generation_result.value
+        elif generation_task.finished:
+            result = generation_task.value
+            points_df = result[0] if result is not None else None
+            layer = result[1] if result is not None else None
             if points_df is not None:
                 app_state.set_sample_points(points_df)
-
-                if sbae_map and not points_df.empty:
-                    logger.info("Adding sample points to map...")
-                    sbae_map.add_sample_points(points_df)
-                    logger.debug(points_df.head())
-
+                if sbae_map and layer is not None:
+                    logger.info("Attaching sample points layer to map...")
+                    sbae_map.attach_sample_points_layer(layer)
                 app_state.points_generation_status.value = POINT_GENERATION_FINISHED
 
             app_state.set_processing_status("")
             generation_request.value = None
 
-    solara.use_effect(handle_generation_result, [generation_result.state])
+    solara.use_effect(
+        handle_generation_result,
+        [generation_task.pending, generation_task.finished, generation_task.error],
+    )
 
     def handle_generate_points():
         """Trigger point generation."""
         if (
             app_state.points_generation_status.value == POINT_GENERATION_RUNNING
-            or _result_is_generating(generation_result, generation_request)
+            or _result_is_generating(generation_task, generation_request)
         ):
             return
 
@@ -180,7 +204,7 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
         custom_seed=custom_seed,
         is_generating=(
             app_state.points_generation_status.value == POINT_GENERATION_RUNNING
-            or _result_is_generating(generation_result, generation_request)
+            or _result_is_generating(generation_task, generation_request)
         ),
         trigger=handle_generate_points,
     )

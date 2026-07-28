@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.transform import xy
+from rasterio.warp import transform as warp_transform
 from rasterio.windows import Window
 from shapely.geometry import Point
 
@@ -182,7 +183,7 @@ def extract_raster_colormap(file_path: str) -> Dict[int, str]:
                 for class_code, rgba in colormap.items():
                     # Convert RGBA tuple to hex color
                     # rasterio returns values in 0-255 range
-                    r, g, b, a = rgba
+                    r, g, b, _ = rgba
                     hex_color = f"#{r:02x}{g:02x}{b:02x}"
                     colors[class_code] = hex_color
 
@@ -191,6 +192,33 @@ def extract_raster_colormap(file_path: str) -> Dict[int, str]:
         pass
 
     return colors
+
+
+# ECharts default colors -- the categorical fallback palette.
+_DEFAULT_PALETTE = [
+    "#5470c6",
+    "#91cc75",
+    "#fac858",
+    "#ee6666",
+    "#73c0de",
+    "#3ba272",
+    "#fc8452",
+    "#9a60b4",
+    "#ea7ccc",
+]
+
+
+def palette_for_codes(class_codes: List[int]) -> Dict[int, str]:
+    """Assign a stable hex colour to each class code by sorted position.
+
+    Deterministic and file-free: the same set of codes always yields the same
+    colours (used when no real class palette exists, e.g. a reference CSV that
+    never touched a raster). Cycles the base palette when codes outnumber it.
+    """
+    return {
+        code: _DEFAULT_PALETTE[idx % len(_DEFAULT_PALETTE)]
+        for idx, code in enumerate(sorted(class_codes))
+    }
 
 
 def get_color_palette(file_path: str, class_codes: List[int]) -> Dict[int, str]:
@@ -203,35 +231,16 @@ def get_color_palette(file_path: str, class_codes: List[int]) -> Dict[int, str]:
     Returns:
         Dictionary mapping class codes to hex color strings
     """
-    # Default color palette (ECharts default colors)
-    default_colors = [
-        "#5470c6",
-        "#91cc75",
-        "#fac858",
-        "#ee6666",
-        "#73c0de",
-        "#3ba272",
-        "#fc8452",
-        "#9a60b4",
-        "#ea7ccc",
-    ]
-
-    # Try to extract colors from raster file
     extracted_colors = {}
     if is_raster_file(file_path):
         extracted_colors = extract_raster_colormap(file_path)
 
-    # Build color mapping for each class code
-    color_map = {}
-    for idx, class_code in enumerate(sorted(class_codes)):
-        if class_code in extracted_colors:
-            # Use extracted color if available
-            color_map[class_code] = extracted_colors[class_code]
-        else:
-            # Fall back to default palette
-            color_map[class_code] = default_colors[idx % len(default_colors)]
-
-    return color_map
+    # Extracted colors win; anything the file doesn't cover falls back to the
+    # deterministic categorical palette (same sorted-index assignment).
+    fallback = palette_for_codes(class_codes)
+    return {
+        code: extracted_colors.get(code, fallback[code]) for code in sorted(class_codes)
+    }
 
 
 def compute_area_from_raster(file_path: str) -> pd.DataFrame:
@@ -1243,3 +1252,55 @@ def get_file_info(file_path: str) -> Dict:
         info["error"] = str(e)
 
     return info
+
+
+def extract_map_codes(
+    reference_df: pd.DataFrame,
+    raster_path: str,
+    x_col: str,
+    y_col: str,
+    points_crs: str = "EPSG:4326",
+    drop_missing: bool = True,
+) -> "tuple[pd.DataFrame, int]":
+    """Sample a classification raster at each reference point to fill map_code.
+
+    Reprojects the (x_col, y_col) points from points_crs to the raster CRS,
+    samples band 1, and returns (df_with_map_code, dropped_count). Points that
+    fall outside the raster footprint or on the nodata value are "missing".
+
+    ``drop_missing=True`` (default, the analysis path) drops those rows.
+    ``drop_missing=False`` (the design path, where the sample is fixed) keeps
+    every row and leaves missing points at their prior ``map_code`` (or 0).
+    In both cases ``dropped_count`` reports how many were missing.
+    """
+    df = reference_df.copy()
+    xs = df[x_col].astype(float).to_numpy()
+    ys = df[y_col].astype(float).to_numpy()
+    with rasterio.open(raster_path) as src:
+        if src.crs is not None and points_crs and str(src.crs) != str(points_crs):
+            rxs, rys = warp_transform(points_crs, src.crs, xs.tolist(), ys.tolist())
+        else:
+            rxs, rys = xs.tolist(), ys.tolist()
+        nodata = src.nodata
+        pts = list(zip(rxs, rys))
+        codes = []
+        for (x, y), val in zip(pts, src.sample(pts, indexes=1)):
+            row, col = src.index(x, y)
+            v = val[0]
+            inside = 0 <= row < src.height and 0 <= col < src.width
+            if inside and not (nodata is not None and v == nodata):
+                codes.append(int(v))
+            else:
+                codes.append(None)
+    df["map_code"] = codes
+    missing = df["map_code"].isna()
+    dropped = int(missing.sum())
+    if drop_missing:
+        df = df[~missing].copy()
+    else:
+        # Keep every point; unsampleable ones fall back to their prior map_code
+        # (0 for freshly-generated design points) instead of being dropped.
+        fallback = reference_df["map_code"] if "map_code" in reference_df.columns else 0
+        df["map_code"] = df["map_code"].where(~missing, fallback)
+    df["map_code"] = df["map_code"].astype(int)
+    return df, dropped

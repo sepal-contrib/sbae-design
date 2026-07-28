@@ -53,7 +53,7 @@ def statistics_summary(
         sample_points: Generated sample points
         sampling_method: Current sampling method
     """
-    with solara.Row(gap="4px", style="flex-wrap: wrap;"):
+    with solara.Row(gap="4px", justify="center", style="flex-wrap: wrap;"):
         # Show area based on sampling method
         if (
             sampling_method == "stratified"
