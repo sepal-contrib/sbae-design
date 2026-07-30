@@ -4,7 +4,6 @@ Contains functions for file I/O, area calculation, and point generation.
 """
 
 import os
-import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -12,6 +11,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+from pysepal.scripts.scratch import scratch_dir
 from rasterio.transform import xy
 from rasterio.warp import transform as warp_transform
 from rasterio.windows import Window
@@ -405,7 +405,7 @@ def save_uploaded_file(file_info, temp_dir: Optional[str] = None) -> str:
         Path to saved file
     """
     if temp_dir is None:
-        temp_dir = tempfile.mkdtemp()
+        temp_dir = str(scratch_dir(prefix="sbae_upload_"))
 
     file_path = os.path.join(temp_dir, file_info["name"])
 
