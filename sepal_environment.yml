@@ -24,15 +24,11 @@ dependencies:
   # tippecanoe builds the PMTiles vector tiles for the map sample-points layer.
   - tippecanoe>=2
   - pip:
-      # pysepal is the renamed sepal_ui; main has the notification system.
-      # The `sepal_ui` import path still works via a compatibility shim.
-      - git+https://github.com/openforis/pysepal.git
+      - pysepal>=3.8.1
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
       - ipecharts>=1.0.0
       - voila
-      # local vector-tile server for the PMTiles map sample-points layer.
-      # >=0.2.1 hands tippecanoe a --temporary-directory: without it tippecanoe
-      # scratches in /tmp, which is NFS here, and that dominates tile generation.
+      # local vector-tile server for the PMTiles map sample-points layer
       - vectortileserver>=0.2.1
       # tile comm bridge (vectortileserver dep); pinned so it's never dropped
       - jupyter-loopback[comm]>=0.3.3

@@ -245,8 +245,6 @@ class SbaeMap(SepalMap):
         """
         if points_data is None or points_data.empty:
             return None
-        # local disk, not the NFS /tmp: tippecanoe scratches alongside its output,
-        # so this directory decides how long the conversion takes
         dest_dir = str(scratch_dir(prefix="sbae_points_"))
         try:
             layer = await build_points_pmtiles_layer(
