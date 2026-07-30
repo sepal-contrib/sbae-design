@@ -41,6 +41,39 @@ def test_points_to_geojson_emits_multiple_code_props():
     assert props["ref_code"] == 4 and isinstance(props["ref_code"], int)
 
 
+def test_default_layer_factory_binds_ipv4_loopback(monkeypatch):
+    import types
+
+    from component.scripts import vector_tiles as vt
+
+    captured = {}
+
+    class _FakeWorkspace:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def open_async(self, source, *, style, conversion_options):
+            return "LAYER"
+
+    monkeypatch.setattr(vt, "_ensure_tippecanoe_on_path", lambda: None)
+    monkeypatch.setitem(
+        sys.modules,
+        "vectortileserver",
+        types.SimpleNamespace(TileWorkspace=_FakeWorkspace),
+    )
+    layer = asyncio.run(
+        vt._default_layer_factory(
+            "src.geojson",
+            style=lambda *a: {},
+            conversion_options={},
+            allowed_directories=["/tmp/x"],
+        )
+    )
+    assert layer == "LAYER"
+    # localhost can resolve to IPv6 ::1, unbindable in some sandboxes (SEPAL)
+    assert captured["host"] == "127.0.0.1"
+
+
 def test_points_to_geojson_omits_absent_props():
     df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0]})  # no map_code
     fc = points_to_geojson(df)
