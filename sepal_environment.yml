@@ -30,7 +30,9 @@ dependencies:
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
       - ipecharts>=1.0.0
       - voila
-      # local vector-tile server for the PMTiles map sample-points layer
-      - vectortileserver>=0.2
+      # local vector-tile server for the PMTiles map sample-points layer.
+      # >=0.2.1 hands tippecanoe a --temporary-directory: without it tippecanoe
+      # scratches in /tmp, which is NFS here, and that dominates tile generation.
+      - vectortileserver>=0.2.1
       # tile comm bridge (vectortileserver dep); pinned so it's never dropped
       - jupyter-loopback[comm]>=0.3.3
