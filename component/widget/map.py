@@ -1,11 +1,11 @@
 import logging
 import os
 import shutil
-import tempfile
 
 import pandas as pd
 import solara
 from localtileserver import TileClient, get_leaflet_tile_layer
+from pysepal.scripts.scratch import scratch_dir
 from sepal_ui.mapping import SepalMap
 from sepal_ui.sepalwidgets.vue_app import ThemeToggle
 
@@ -245,7 +245,7 @@ class SbaeMap(SepalMap):
         """
         if points_data is None or points_data.empty:
             return None
-        dest_dir = tempfile.mkdtemp(prefix="sbae_points_")
+        dest_dir = str(scratch_dir(prefix="sbae_points_"))
         try:
             layer = await build_points_pmtiles_layer(
                 points_data,

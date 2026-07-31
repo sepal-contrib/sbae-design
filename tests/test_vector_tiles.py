@@ -326,8 +326,8 @@ def test_build_layer_or_notify_failure_notifies(monkeypatch):
 
 class _MapNonVectorTileBoom:
     async def build_sample_points_layer(self, df, *args, **kwargs):
-        # e.g. tempfile.mkdtemp() failing with a raw OSError (disk full /
-        # quota) before build_points_pmtiles_layer -- and its VectorTileError
+        # e.g. scratch_dir() failing with a raw OSError (disk full / quota)
+        # before build_points_pmtiles_layer -- and its VectorTileError
         # wrapping -- is ever reached.
         raise OSError("disk full")
 

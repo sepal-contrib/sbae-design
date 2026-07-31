@@ -113,14 +113,14 @@ def test_attach_removes_previous_backing_dir(tmp_path):
 def test_build_cleans_dir_on_failure(monkeypatch, tmp_path):
     built_dir = tmp_path / "built"
 
-    def fake_mkdtemp(prefix=""):
+    def fake_scratch_dir(prefix=""):
         built_dir.mkdir()
-        return str(built_dir)
+        return built_dir
 
     async def boom(df, colors, *, dest_dir, default_color="#888888", **kwargs):
         raise VectorTileError("nope")
 
-    monkeypatch.setattr(map_mod.tempfile, "mkdtemp", fake_mkdtemp)
+    monkeypatch.setattr(map_mod, "scratch_dir", fake_scratch_dir)
     monkeypatch.setattr(map_mod, "build_points_pmtiles_layer", boom)
     df = pd.DataFrame({"longitude": [1.0], "latitude": [2.0], "map_code": [3]})
 

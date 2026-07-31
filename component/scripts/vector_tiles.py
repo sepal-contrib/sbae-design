@@ -320,8 +320,8 @@ async def build_layer_or_notify(sbae_map, points_df):
         # from the point-generation worker thread. Any failure here -- not just
         # VectorTileError -- must be swallowed and reported, never raised, or
         # the worker thread dies before it can hand the already-generated
-        # points back to the app (see build_sample_points_layer's mkdtemp call,
-        # which can raise a raw OSError outside build_points_pmtiles_layer's
+        # points back to the app (see build_sample_points_layer's scratch_dir
+        # call, which can raise a raw OSError outside build_points_pmtiles_layer's
         # own try/except).
         logger.warning("Sample points layer failed: %s", e)
         app_state.add_error(f"Could not render sample points on the map: {e}")

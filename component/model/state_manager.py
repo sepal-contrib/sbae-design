@@ -4,12 +4,12 @@ Contains reactive state management for the SBAE application.
 """
 
 import json
-import tempfile
 from typing import Dict, List
 
 import geopandas as gpd
 import pandas as pd
 import solara
+from pysepal.scripts.scratch import scratch_dir
 
 from component.scripts.precision import calculate_current_moe
 
@@ -20,7 +20,7 @@ class AppState:
     def __init__(self):
         # File handling
         self.uploaded_file_info = solara.reactive(None)
-        self.temp_dir = solara.reactive(tempfile.mkdtemp())
+        self.temp_dir = solara.reactive(str(scratch_dir(prefix="sbae_")))
         self.file_path = solara.reactive(None)
         self.file_error = solara.reactive(None)
 
