@@ -22,6 +22,7 @@ from sepal_ui.logger import setup_logging
 from sepal_ui.sepalwidgets.vue_app import MapApp, ThemeToggle
 from sepal_ui.solara import (
     ThemeState,
+    TileBridge,
     setup_sessions,
     setup_solara_server,
     setup_theme_colors,
@@ -48,33 +49,6 @@ setup_solara_server()
 USE_GEE = False
 
 
-@solara.component
-def _TileLoopbackBridge():
-    """Mount jupyter_loopback's comm bridge so localhost tile fetches survive a proxy.
-
-    localtileserver + vectortileserver serve tiles on ``127.0.0.1:<port>``, which
-    the browser can't reach behind SEPAL / ``run-solara --serve`` (CSP forbids
-    connecting to localhost). The bridge reroutes those fetches over Solara's
-    websocket, but must be enabled BEFORE any tile client calls
-    ``intercept_localhost`` (on layer build) or that shim is a no-op -- hence
-    mounting it here at Page load. Default on; opt out with
-    ``LOCALTILESERVER_COMM_BRIDGE=0``.
-    """
-    _flag = os.environ.get("LOCALTILESERVER_COMM_BRIDGE", "1").strip().lower()
-    enabled = _flag not in ("0", "false", "no", "off")
-
-    def _enable():
-        if not enabled:
-            return None
-        import jupyter_loopback
-
-        return jupyter_loopback.enable_comm_bridge(display=False)
-
-    bridge = solara.use_memo(_enable, [])
-    if bridge is not None:
-        solara.display(bridge)  # its ESM installs the browser interceptor
-
-
 @solara.lab.on_kernel_start
 def on_kernel_start():
     return setup_sessions()
@@ -96,7 +70,7 @@ def Page():
     # process-local default and the toasts/pill stay light under a dark app.
     NotificationProvider(theme_state=theme_state)
     ErrorToastBridge()
-    _TileLoopbackBridge()
+    TileBridge()
 
     app_model = AppModel()
 
