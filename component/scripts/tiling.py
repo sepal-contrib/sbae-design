@@ -4,6 +4,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 
 import rasterio as rio
 
@@ -17,12 +18,28 @@ def _hash_for_cache(path: str) -> str:
     return h.hexdigest()[:16]
 
 
+def _find_tool(name: str) -> str | None:
+    """Absolute path to a GDAL CLI tool, or ``None`` when it isn't installed.
+
+    A conda/micromamba env launched by absolute path (a Jupyter kernel, SEPAL)
+    keeps these binaries in ``bin/`` next to ``sys.executable`` while that
+    directory stays off PATH, so the bare-name lookup fails there and the COG
+    route is skipped for the slower rasterio fallback.
+    """
+    found = shutil.which(name)
+    if found:
+        return found
+    sibling = pathlib.Path(sys.executable).parent / name
+    return str(sibling) if sibling.exists() else None
+
+
+def _tool(name: str) -> str:
+    """Resolved tool path, falling back to the bare name so subprocess names it."""
+    return _find_tool(name) or name
+
+
 def _gdal_ok():
-    return (
-        shutil.which("gdalinfo")
-        and shutil.which("gdal_translate")
-        and shutil.which("gdaladdo")
-    )
+    return all(_find_tool(name) for name in ("gdalinfo", "gdal_translate", "gdaladdo"))
 
 
 def _is_categorical(ds: rio.io.DatasetReader) -> bool:
@@ -94,10 +111,11 @@ def _build_overviews_inplace(path: str, categorical: bool):
             ds.update_tags(ns="rio_overview", resampling=resamp.lower())
     except Exception:
         # fallback to gdaladdo if rasterio fails
-        if not shutil.which("gdaladdo"):
+        gdaladdo = _find_tool("gdaladdo")
+        if not gdaladdo:
             raise
         cmd = [
-            "gdaladdo",
+            gdaladdo,
             "-r",
             resamp,
             "--config",
@@ -114,7 +132,7 @@ def _build_overviews_inplace(path: str, categorical: bool):
 
 def _translate_to_cog(src: str, dst: str, resampling: str, block=512):
     cmd = [
-        "gdal_translate",
+        _tool("gdal_translate"),
         src,
         dst,
         "-of",
@@ -137,7 +155,7 @@ def _translate_to_cog(src: str, dst: str, resampling: str, block=512):
 
 def _warp_to_epsg(src: str, dst: str, epsg: int, resampling: str, block=512):
     cmd = [
-        "gdalwarp",
+        _tool("gdalwarp"),
         "-overwrite",
         "-t_srs",
         f"EPSG:{epsg}",

@@ -12,7 +12,6 @@ import asyncio
 import json
 import logging
 import os
-import sys
 from typing import Callable, Optional
 
 import pandas as pd
@@ -20,24 +19,6 @@ import pandas as pd
 from component.scripts.logging_config import quiet_tile_server_logs
 
 logger = logging.getLogger("sbae.vector_tiles")
-
-
-def _ensure_tippecanoe_on_path() -> None:
-    """Put the interpreter's own ``bin/`` on PATH so tippecanoe is found.
-
-    ``vectortileserver`` invokes ``tippecanoe`` by bare name via subprocess, so
-    it relies on PATH. Under SEPAL the app runs from a micromamba venv launched
-    by absolute path, so that venv's ``bin/`` -- where the conda-forge tippecanoe
-    lives, right next to ``sys.executable`` -- is NOT on PATH and the lookup
-    fails. Prepend it when the binary is actually there; idempotent, and a
-    harmless no-op when tippecanoe isn't a sibling of the interpreter.
-    """
-    bindir = os.path.dirname(sys.executable)
-    if not bindir or not os.path.exists(os.path.join(bindir, "tippecanoe")):
-        return
-    parts = os.environ.get("PATH", "").split(os.pathsep)
-    if bindir not in parts:
-        os.environ["PATH"] = os.pathsep.join([bindir, *parts])
 
 
 # Point styling. Sample/reference points stay a single neutral colour with a
@@ -197,17 +178,7 @@ async def _default_layer_factory(
     """
     import vectortileserver as vts
 
-    # vectortileserver shells out to `tippecanoe` by name -> ensure the venv's
-    # bin (where the conda tippecanoe sits) is on PATH before it runs.
-    _ensure_tippecanoe_on_path()
-
-    # Bind the tile server to IPv4 loopback explicitly. The default "localhost"
-    # can resolve to IPv6 ::1, which some sandboxes (SEPAL) can't assign -> the
-    # server fails to bind and never starts. 127.0.0.1 is also the exact form
-    # jupyter_loopback's interceptor matches.
-    workspace = vts.TileWorkspace(
-        host="127.0.0.1", allowed_directories=allowed_directories
-    )
+    workspace = vts.TileWorkspace(allowed_directories=allowed_directories)
     return await workspace.open_async(
         source, style=style, conversion_options=conversion_options
     )

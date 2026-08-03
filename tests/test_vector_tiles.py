@@ -1,5 +1,4 @@
 import asyncio
-import os
 import sys
 
 import pandas as pd
@@ -8,7 +7,6 @@ import pytest
 from component.scripts.vector_tiles import (
     POINT_CONVERSION_OPTIONS,
     VectorTileError,
-    _ensure_tippecanoe_on_path,
     build_layer_or_notify,
     build_point_style,
     build_points_pmtiles_layer,
@@ -41,7 +39,7 @@ def test_points_to_geojson_emits_multiple_code_props():
     assert props["ref_code"] == 4 and isinstance(props["ref_code"], int)
 
 
-def test_default_layer_factory_binds_ipv4_loopback(monkeypatch):
+def test_default_layer_factory_opens_a_workspace_for_the_dest_dir(monkeypatch):
     import types
 
     from component.scripts import vector_tiles as vt
@@ -55,7 +53,6 @@ def test_default_layer_factory_binds_ipv4_loopback(monkeypatch):
         async def open_async(self, source, *, style, conversion_options):
             return "LAYER"
 
-    monkeypatch.setattr(vt, "_ensure_tippecanoe_on_path", lambda: None)
     monkeypatch.setitem(
         sys.modules,
         "vectortileserver",
@@ -70,8 +67,10 @@ def test_default_layer_factory_binds_ipv4_loopback(monkeypatch):
         )
     )
     assert layer == "LAYER"
-    # localhost can resolve to IPv6 ::1, unbindable in some sandboxes (SEPAL)
-    assert captured["host"] == "127.0.0.1"
+    assert captured["allowed_directories"] == ["/tmp/x"]
+    # The IPv4 bind is vectortileserver's own default from 0.2.2 on. Passing a
+    # host here again would put the band-aid back in the app layer.
+    assert "host" not in captured
 
 
 def test_points_to_geojson_omits_absent_props():
@@ -83,31 +82,6 @@ def test_points_to_geojson_omits_absent_props():
 def test_points_to_geojson_empty_df():
     fc = points_to_geojson(pd.DataFrame({"longitude": [], "latitude": []}))
     assert fc["features"] == []
-
-
-def test_ensure_tippecanoe_on_path_prepends_bin(monkeypatch, tmp_path):
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    (bindir / "tippecanoe").write_text("")  # pretend the binary is installed here
-    monkeypatch.setattr(sys, "executable", str(bindir / "python3"))
-    monkeypatch.setenv("PATH", "/usr/bin")
-
-    _ensure_tippecanoe_on_path()
-    parts = os.environ["PATH"].split(os.pathsep)
-    assert parts[0] == str(bindir)  # venv bin prepended so `tippecanoe` resolves
-    # idempotent: a second call must not duplicate the entry
-    _ensure_tippecanoe_on_path()
-    assert os.environ["PATH"].split(os.pathsep).count(str(bindir)) == 1
-
-
-def test_ensure_tippecanoe_on_path_noop_when_absent(monkeypatch, tmp_path):
-    bindir = tmp_path / "bin"
-    bindir.mkdir()  # no tippecanoe sibling
-    monkeypatch.setattr(sys, "executable", str(bindir / "python3"))
-    monkeypatch.setenv("PATH", "/usr/bin")
-
-    _ensure_tippecanoe_on_path()
-    assert os.environ["PATH"] == "/usr/bin"  # untouched
 
 
 def test_build_point_style_emits_flat_layer_per_class():

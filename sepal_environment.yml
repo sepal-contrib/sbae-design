@@ -29,5 +29,7 @@ dependencies:
       - git+https://github.com/SerafiniJose/jupyter-loopback.git@fix/voila-localhost-proxy-probe
       - ipecharts>=1.0.0
       - voila
-      # local vector-tile server for the PMTiles map sample-points layer
-      - vectortileserver>=0.2.1
+      # local vector-tile server for the PMTiles map sample-points layer.
+      # 0.2.2 is the first release that binds 127.0.0.1 and resolves tippecanoe
+      # next to the interpreter, which sbae used to patch around locally.
+      - vectortileserver>=0.2.2
