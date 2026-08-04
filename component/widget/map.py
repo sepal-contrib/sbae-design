@@ -1,15 +1,12 @@
 import logging
-import os
 import shutil
 
 import pandas as pd
 import solara
-from localtileserver import TileClient, get_leaflet_tile_layer
 from pysepal.scripts.scratch import scratch_dir
 from sepal_ui.mapping import SepalMap
 from sepal_ui.sepalwidgets.vue_app import ThemeToggle
 
-from component.scripts.logging_config import quiet_tile_server_logs
 from component.scripts.vector_tiles import (
     CORRECT_COLOR,
     INCORRECT_COLOR,
@@ -27,12 +24,6 @@ _SAMPLE_LEGEND_LABEL = "Sample point"
 _CORRECT_LEGEND_LABEL = "Correct"
 _INCORRECT_LEGEND_LABEL = "Incorrect"
 _REFERENCE_LEGEND_LABEL = "Reference point"
-
-
-def _hex_to_rgb(hex_color: str) -> tuple:
-    """Convert '#rrggbb' to an (r, g, b) tuple."""
-    h = hex_color.lstrip("#")
-    return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
 
 
 def _points_signature(df):
@@ -71,20 +62,6 @@ def _compose_points_legend(
     return legend
 
 
-def _build_class_colormap(class_colors: dict) -> dict:
-    """Build a discrete {pixel_value: (r, g, b, a)} LUT for a categorical raster.
-
-    Every class present in ``class_colors`` is rendered opaque, including code 0
-    and codes above 255 -- area calculation treats those as valid, sampleable
-    classes, so they must be visible on the map. Values not in ``class_colors``
-    render transparent (background).
-    """
-    colormap = {i: (0, 0, 0, 0) for i in range(256)}
-    for code, hex_color in class_colors.items():
-        colormap[int(code)] = (*_hex_to_rgb(hex_color), 255)
-    return colormap
-
-
 class SbaeMap(SepalMap):
     """SBAE Map class extending SepalMap for map visualization and interactions."""
 
@@ -93,7 +70,6 @@ class SbaeMap(SepalMap):
             fullscreen=True, theme_toggle=theme_toggle, gee=gee, min_zoom=min_zoom
         )
 
-        self.classification_layer = None
         self.sample_points_layer = None
         self.sample_points_dir = None
         self._pending_points_dir = None
@@ -108,123 +84,6 @@ class SbaeMap(SepalMap):
         # rebuilds when the same points are re-submitted (e.g. Analysis-tab
         # re-entry remounts the render task).
         self._reference_points_sig = None
-
-    def _optimize_for_tiles(self, path) -> str:
-        """Return a tiling-optimized (cached COG with overviews) path.
-
-        rio-tiler reads full-resolution pixels -- and warns ``NoOverviewWarning``
-        -- for every tile when the source has no overviews, so low-zoom tiles are
-        slow. ``prepare_for_tiles`` is a fast no-op when ``path`` is already a
-        tiled COG with overviews (the design step pre-optimizes off-thread); it
-        only does real work for raw rasters such as the analysis classification
-        map, which are added off the UI thread. Best-effort: on failure, serve the
-        raw raster (tiling still works, just slower).
-        """
-        from component.scripts.tiling import prepare_for_tiles
-
-        try:
-            return prepare_for_tiles(str(path))["path"]
-        except Exception as e:
-            logger.warning(
-                "Tiling optimization failed for %s (%s); serving the raw raster.",
-                path,
-                e,
-            )
-            return str(path)
-
-    def add_class_raster(
-        self,
-        path,
-        class_colors,
-        layer_name: str = "Classification Map",
-        key: str = "clas",
-        opacity: float = 1.0,
-        fit_bounds: bool = True,
-    ):
-        """Add a categorical raster with exact per-class colors.
-
-        Unlike ``add_raster`` (which applies a continuous inferno colormap
-        stretched across the value range and renders sparse/low-value class
-        maps as black), this builds a discrete lookup table so each class
-        value gets its own color. Any value not in ``class_colors`` is rendered
-        transparent (background); classes 0 and > 255 are colored like any other.
-
-        Args:
-            path: path to the (optimized) raster file.
-            class_colors: mapping of class code -> '#rrggbb' hex color.
-            layer_name: display name of the layer.
-            key: unequivocal key of the layer (for later removal).
-            opacity: layer opacity, default 1.0.
-            fit_bounds: whether to recenter/zoom onto the raster.
-        """
-        # Build (or reuse a cached) COG with overviews before tiling: rio-tiler
-        # otherwise reads full-res pixels and logs NoOverviewWarning per tile.
-        tile_path = self._optimize_for_tiles(path)
-
-        if not class_colors:
-            logger.warning(
-                "add_class_raster called without class_colors; "
-                "falling back to add_raster for %s",
-                path,
-            )
-            return self.add_raster(
-                tile_path,
-                layer_name=layer_name,
-                key=key,
-                opacity=opacity,
-                fit_bounds=fit_bounds,
-            )
-
-        # Discrete LUT: transparent everywhere unless it's a known class. Every
-        # class in class_colors is colored, including code 0 and codes > 255.
-        colormap = _build_class_colormap(class_colors)
-
-        # localtileserver won't accept a raw {value: rgba} dict as `colormap`;
-        # it must be registered server-side first, which yields a "custom:<hash>"
-        # key. This is the only path that preserves per-class alpha (the
-        # matplotlib-Colormap path forces alpha=1, losing transparency).
-        try:
-            from localtileserver.tiler.palettes import register_colormap
-
-            colormap_arg = register_colormap(colormap)
-        except Exception:
-            logger.warning(
-                "localtileserver register_colormap unavailable; falling back "
-                "to add_raster (classes may render dark) for %s",
-                path,
-            )
-            return self.add_raster(
-                tile_path,
-                layer_name=layer_name,
-                key=key,
-                opacity=opacity,
-                fit_bounds=fit_bounds,
-            )
-
-        # Bind the tile server to a reachable interface when serving the app
-        # over the network (e.g. Solara --host over Tailscale). Defaults to
-        # loopback for local dev; set LOCALTILESERVER_HOST=0.0.0.0 (or the
-        # tailnet IP) plus LOCALTILESERVER_CLIENT_HOST for remote access.
-        client = TileClient(
-            tile_path, host=os.environ.get("LOCALTILESERVER_HOST", "127.0.0.1")
-        )
-        quiet_tile_server_logs()
-        layer = get_leaflet_tile_layer(
-            client,
-            colormap=colormap_arg,
-            name=layer_name,
-            opacity=opacity,
-            max_zoom=20,
-        )
-        self.add_layer(layer, key=key)
-        self.classification_layer = layer
-        layer.raster = str(path)
-
-        if fit_bounds:
-            self.center = client.center()
-            self.zoom = client.default_zoom
-
-        return layer
 
     async def build_sample_points_layer(
         self,
@@ -289,7 +148,7 @@ class SbaeMap(SepalMap):
 
         Mutates the map, so the main thread is preferred. ``add_sample_points``
         deliberately calls this off the UI thread anyway, matching the
-        pre-existing off-thread ``add_class_raster`` mutation in
+        pre-existing off-thread ``add_raster`` mutation in
         ``analysis_tab.py``.
         """
         old_dir = getattr(self, "sample_points_dir", None)

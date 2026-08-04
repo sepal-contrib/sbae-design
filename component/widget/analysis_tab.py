@@ -164,7 +164,7 @@ def derive_map_source(state, sbae_map=None):
     state.analysis_reference_df.value = ref_out
 
     # Standalone mode never runs the design-step upload that populates
-    # class_colors, so it's empty here -- without this, add_class_raster falls
+    # class_colors, so it's empty here -- without this, add_raster falls
     # back to a continuous colormap and the map renders near-black. Derive it
     # from the raster; guarded so a real design-step palette is kept.
     if not state.class_colors.value:
@@ -176,11 +176,11 @@ def derive_map_source(state, sbae_map=None):
 
     if sbae_map is not None:
         try:
-            sbae_map.add_class_raster(
+            sbae_map.add_raster(
                 raster,
-                state.class_colors.value or {},
-                "Classification (analysis)",
-                "clas_an",
+                layer_name="Classification (analysis)",
+                key="clas_an",
+                class_colors=state.class_colors.value or {},
             )
             # Reference points are drawn by the panel's render thread (from
             # analysis_reference_df, for every source) on their own layer.

@@ -17,7 +17,7 @@ import warnings
 
 # rio-tiler emits ``NoOverviewWarning`` once per tile when a source raster has no
 # overviews. The raster-add paths now build overviews up front
-# (``SbaeMap.add_class_raster`` -> ``prepare_for_tiles``), so this warning is
+# (``SepalMap.add_raster`` -> ``prepare_for_tiles``), so this warning is
 # non-actionable noise here; silence it so any raster that still slips through a
 # fallback path cannot flood the logs with hundreds of identical lines.
 try:

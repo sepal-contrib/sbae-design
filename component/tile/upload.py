@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import solara
+from pysepal.mapping import prepare_for_tiles
 from sepal_ui.sepalwidgets.file_input import FileInputComponent
 from sepal_ui.solara.notifications import use_notifications
 
@@ -14,7 +15,6 @@ from component.scripts.geospatial import (
     get_file_info,
     is_raster_file,
 )
-from component.scripts.tiling import prepare_for_tiles
 from component.widget.map import SbaeMap
 
 logger = logging.getLogger("sbae.upload")
@@ -34,11 +34,11 @@ def RasterMapWatcher(sbae_map: SbaeMap):
             and status == "adding_to_map"
             and sampling_method == "stratified"
         ):
-            sbae_map.add_class_raster(
+            sbae_map.add_raster(
                 optimized_path,
-                app_state.class_colors.value,
                 layer_name="Classification Map",
                 key="clas",
+                class_colors=app_state.class_colors.value,
             )
             app_state.raster_optimization_status.value = "finished"
 

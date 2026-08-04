@@ -246,17 +246,17 @@ def test_analysis_panel_accepts_sbae_map():
 
 
 class _FakeSbaeMap:
-    """Records add_class_raster/add_sample_points calls instead of a real map."""
+    """Records add_raster/add_sample_points calls instead of a real map."""
 
     def __init__(self):
         self.class_raster_calls = []
         self.sample_points_calls = []
         self.reference_points_calls = []
 
-    def add_class_raster(self, path, class_colors, layer_name, key):
+    def add_raster(self, image, layer_name=None, key=None, class_colors=None, **kwargs):
         self.class_raster_calls.append(
             {
-                "path": path,
+                "path": image,
                 "class_colors": class_colors,
                 "layer_name": layer_name,
                 "key": key,
