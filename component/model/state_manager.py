@@ -532,6 +532,9 @@ class AppState:
         self.raster_optimization_status.value = "idle"
         self.raster_optimization_error.value = None
         self.optimized_raster_path.value = None
+        # the map layer is gated on this being non-empty, so a stale palette
+        # would let the next file render in the previous file's colours
+        self.class_colors.value = {}
 
     def clear_aoi_data(self):
         """Clear all AOI-related data (for simple/systematic sampling).

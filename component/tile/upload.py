@@ -28,17 +28,23 @@ def RasterMapWatcher(sbae_map: SbaeMap):
         optimized_path = app_state.optimized_raster_path.value
         status = app_state.raster_optimization_status.value
         sampling_method = app_state.sampling_method.value
+        class_colors = app_state.class_colors.value
 
+        # The palette and the tiled COG are produced by two independent async
+        # paths, so wait for the palette: adding the raster without it renders
+        # every class down the dark end of the default continuous ramp. Holding
+        # the status here is what re-runs this effect once the palette lands.
         if (
             optimized_path
             and status == "adding_to_map"
             and sampling_method == "stratified"
+            and class_colors
         ):
             sbae_map.add_raster(
                 optimized_path,
                 layer_name="Classification Map",
                 key="clas",
-                class_colors=app_state.class_colors.value,
+                class_colors=class_colors,
             )
             app_state.raster_optimization_status.value = "finished"
 
