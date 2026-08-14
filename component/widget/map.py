@@ -7,6 +7,7 @@ from pysepal.mapping import SepalMap
 from pysepal.scripts.scratch import scratch_dir
 from pysepal.solara import ThemeState
 
+from component.message import get_translator, use_translator
 from component.scripts.vector_tiles import (
     CORRECT_COLOR,
     INCORRECT_COLOR,
@@ -18,12 +19,14 @@ from component.scripts.vector_tiles import (
 
 logger = logging.getLogger("sbae.map")
 
-# On-map legend entries (label -> hex). Composed from whichever point layers are
-# currently shown; see ``_compose_points_legend``.
-_SAMPLE_LEGEND_LABEL = "Sample point"
-_CORRECT_LEGEND_LABEL = "Correct"
-_INCORRECT_LEGEND_LABEL = "Incorrect"
-_REFERENCE_LEGEND_LABEL = "Reference point"
+# Identifiers for the on-map legend entries, matching the ``map.legend`` catalog
+# keys. The legend is composed in worker threads, where no translator hook is
+# available, so ``PointsLegend`` resolves these to text at render time -- which
+# also lets a language change relabel a legend that is already on screen.
+_SAMPLE_LEGEND_KEY = "sample"
+_CORRECT_LEGEND_KEY = "correct"
+_INCORRECT_LEGEND_KEY = "incorrect"
+_REFERENCE_LEGEND_KEY = "reference"
 
 
 def _points_signature(df):
@@ -45,20 +48,20 @@ def _points_signature(df):
 def _compose_points_legend(
     has_sample: bool, has_reference: bool, reference_evaluated: bool
 ) -> dict:
-    """Legend entries (label -> hex) for the point layers currently shown.
+    """Legend entries (catalog key -> hex) for the point layers currently shown.
 
     Sample points contribute one neutral entry; reference points contribute the
     green/red correctness key once evaluated, else a single neutral entry.
     """
     legend = {}
     if has_sample:
-        legend[_SAMPLE_LEGEND_LABEL] = SAMPLE_POINT_COLOR
+        legend[_SAMPLE_LEGEND_KEY] = SAMPLE_POINT_COLOR
     if has_reference:
         if reference_evaluated:
-            legend[_CORRECT_LEGEND_LABEL] = CORRECT_COLOR
-            legend[_INCORRECT_LEGEND_LABEL] = INCORRECT_COLOR
+            legend[_CORRECT_LEGEND_KEY] = CORRECT_COLOR
+            legend[_INCORRECT_LEGEND_KEY] = INCORRECT_COLOR
         else:
-            legend[_REFERENCE_LEGEND_LABEL] = REFERENCE_NEUTRAL_COLOR
+            legend[_REFERENCE_LEGEND_KEY] = REFERENCE_NEUTRAL_COLOR
     return legend
 
 
@@ -186,11 +189,13 @@ class SbaeMap(SepalMap):
             )
         except VectorTileError as e:
             logger.warning("Sample points layer failed: %s", e)
-            app_state.add_error(f"Could not render sample points on the map: {e}")
+            app_state.add_error(
+                get_translator().map.error.sample_points_failed.format(e)
+            )
             return
         SbaeMap.attach_sample_points_layer(self, layer)
 
-    async def add_reference_points(self, points_data, *, layer_name="Reference points"):
+    async def add_reference_points(self, points_data, *, layer_name=None):
         """Render the analysis reference points on their own layer, by agreement.
 
         Kept separate from the design sample (``add_sample_points`` / the
@@ -201,6 +206,9 @@ class SbaeMap(SepalMap):
         UI thread; on failure, notify and skip.
         """
         from component.model import app_state
+
+        ms = get_translator()
+        layer_name = layer_name or ms.map.reference_layer_name
 
         # Unchanged points already on the map -> keep the existing layer and skip
         # the tippecanoe rebuild (see _points_signature).
@@ -236,7 +244,7 @@ class SbaeMap(SepalMap):
             )
         except VectorTileError as e:
             logger.warning("Reference points layer failed: %s", e)
-            app_state.add_error(f"Could not render reference points on the map: {e}")
+            app_state.add_error(ms.map.error.reference_points_failed.format(e))
             return
         old_dir = self.reference_points_dir
         if self.reference_points_layer is not None:
@@ -284,9 +292,10 @@ class SbaeMap(SepalMap):
         """Publish the on-map points legend to reactive state.
 
         The legend is a declarative Solara overlay (``PointsLegend`` ->
-        pysepal ``LegendComponent``), so this just pushes ``{label: hex}`` to
-        ``app_state.points_legend``; the component re-renders itself. Safe to call
-        from the worker threads that mutate the map.
+        pysepal ``LegendComponent``), so this just pushes ``{key: hex}`` to
+        ``app_state.points_legend``; the component translates the keys and
+        re-renders itself. Safe to call from the worker threads that mutate the
+        map.
         """
         from component.model import app_state
 
@@ -302,8 +311,8 @@ def PointsLegend():
     """Floating map legend for the sample/reference points.
 
     Renders the modern pysepal ``LegendComponent`` overlay, driven by
-    ``app_state.points_legend`` ({label: hex}); hidden when there is nothing to
-    show. Place it once in the page alongside the map.
+    ``app_state.points_legend`` ({catalog key: hex}); hidden when there is
+    nothing to show. Place it once in the page alongside the map.
     """
     from dataclasses import asdict
 
@@ -315,10 +324,12 @@ def PointsLegend():
 
     from component.model import app_state
 
+    ms = use_translator()
     legend = app_state.points_legend.value or {}
     data = LegendData(
         items=[
-            DiscreteEntry(label=label, color=color) for label, color in legend.items()
+            DiscreteEntry(label=ms.map.legend[key], color=color)
+            for key, color in legend.items()
         ]
     )
     LegendComponent(legend_data=asdict(data), visible=bool(legend))

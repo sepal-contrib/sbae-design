@@ -3,6 +3,7 @@ import asyncio
 import pandas as pd
 import pytest
 
+from component.message import get_translator
 from component.scripts.vector_tiles import VectorTileError
 from component.widget import map as map_mod
 from component.widget.map import SbaeMap
@@ -205,23 +206,36 @@ def test_compose_points_legend():
     compose = map_mod._compose_points_legend
     assert compose(False, False, False) == {}
     assert compose(True, False, False) == {
-        map_mod._SAMPLE_LEGEND_LABEL: map_mod.SAMPLE_POINT_COLOR
+        map_mod._SAMPLE_LEGEND_KEY: map_mod.SAMPLE_POINT_COLOR
     }
     # reference evaluated -> green/red correctness key
     assert compose(False, True, True) == {
-        map_mod._CORRECT_LEGEND_LABEL: map_mod.CORRECT_COLOR,
-        map_mod._INCORRECT_LEGEND_LABEL: map_mod.INCORRECT_COLOR,
+        map_mod._CORRECT_LEGEND_KEY: map_mod.CORRECT_COLOR,
+        map_mod._INCORRECT_LEGEND_KEY: map_mod.INCORRECT_COLOR,
     }
     # reference not yet evaluated -> single neutral entry
     assert compose(False, True, False) == {
-        map_mod._REFERENCE_LEGEND_LABEL: map_mod.REFERENCE_NEUTRAL_COLOR
+        map_mod._REFERENCE_LEGEND_KEY: map_mod.REFERENCE_NEUTRAL_COLOR
     }
     # both layers -> sample + correctness
     assert set(compose(True, True, True)) == {
-        map_mod._SAMPLE_LEGEND_LABEL,
-        map_mod._CORRECT_LEGEND_LABEL,
-        map_mod._INCORRECT_LEGEND_LABEL,
+        map_mod._SAMPLE_LEGEND_KEY,
+        map_mod._CORRECT_LEGEND_KEY,
+        map_mod._INCORRECT_LEGEND_KEY,
     }
+
+
+def test_composed_legend_keys_all_resolve_in_the_catalog():
+    """Every key the composer can emit must have a ``map.legend`` message.
+
+    ``PointsLegend`` looks each one up by key, so a composer key with no
+    catalog entry would raise while rendering the overlay.
+    """
+    ms = get_translator()
+    for key in map_mod._compose_points_legend(True, True, True):
+        assert ms.map.legend[key]
+    for key in map_mod._compose_points_legend(True, True, False):
+        assert ms.map.legend[key]
 
 
 def test_add_reference_points_colors_by_correctness(monkeypatch):
@@ -263,8 +277,8 @@ def test_add_reference_points_colors_by_correctness(monkeypatch):
     from component.model import app_state as real_app_state
 
     assert real_app_state.points_legend.value == {
-        map_mod._CORRECT_LEGEND_LABEL: map_mod.CORRECT_COLOR,
-        map_mod._INCORRECT_LEGEND_LABEL: map_mod.INCORRECT_COLOR,
+        map_mod._CORRECT_LEGEND_KEY: map_mod.CORRECT_COLOR,
+        map_mod._INCORRECT_LEGEND_KEY: map_mod.INCORRECT_COLOR,
     }
 
 
@@ -293,7 +307,7 @@ def test_add_reference_points_neutral_without_map_code(monkeypatch):
     from component.model import app_state as real_app_state
 
     assert real_app_state.points_legend.value == {
-        map_mod._REFERENCE_LEGEND_LABEL: map_mod.REFERENCE_NEUTRAL_COLOR
+        map_mod._REFERENCE_LEGEND_KEY: map_mod.REFERENCE_NEUTRAL_COLOR
     }
 
 

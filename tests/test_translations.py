@@ -6,14 +6,19 @@ two halves: every shipped catalog must load, and a language change must reach a
 mounted component.
 """
 
+import ast
+from pathlib import Path
+
 import ipyvuetify as v
 import pytest
 import solara
-from box import BoxKeyError
+from box import Box, BoxKeyError
 from pysepal.solara import get_current_locale_state
 
 from component.message import MESSAGE_DIR, available_locales, get_translator
 from component.widget.aoi_upload_selector import UploadDialogCard
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(autouse=True)
@@ -80,3 +85,74 @@ def test_language_change_re_renders_a_mounted_component():
     get_current_locale_state().set_locale("es")
 
     assert "Cerrar" in _button_labels(rc)
+
+
+def _catalog_chains(tree):
+    """Every ``ms.a.b.c`` attribute chain in a module, as tuples of names.
+
+    Also follows one level of aliasing (``tables = ms.analysis.tables``), which
+    the widgets use heavily to keep call sites short.
+    """
+    aliases = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        chain = _chain_of(node.value, aliases)
+        if isinstance(target, ast.Name) and chain:
+            aliases[target.id] = chain
+
+    chains = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and not isinstance(
+            getattr(node, "parent", None), ast.Attribute
+        ):
+            chain = _chain_of(node, aliases)
+            if chain:
+                chains.add(chain)
+    return chains
+
+
+def _chain_of(node, aliases):
+    """Resolve an attribute node to a catalog chain, or ``None``."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    root = node.id
+    if root == "ms":
+        return tuple(reversed(parts))
+    if root in aliases:
+        return aliases[root] + tuple(reversed(parts))
+    return None
+
+
+def test_every_catalog_key_used_in_the_app_exists():
+    """Guards typo'd ``ms.`` paths that only a rarely-rendered branch would hit.
+
+    The catalog raises on a missing key, so an unrendered screen (the sample
+    calculation tile, an error branch) would carry the break to production.
+    """
+    ms = get_translator()
+    sources = [*(_REPO_ROOT / "component").rglob("*.py"), _REPO_ROOT / "app.py"]
+    missing = set()
+    for path in sources:
+        tree = ast.parse(path.read_text())
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                child.parent = parent
+        for chain in _catalog_chains(tree):
+            node = ms
+            for i, part in enumerate(chain):
+                if isinstance(node, str):
+                    break  # the rest is a str method, e.g. .format
+                if not isinstance(node, Box) or part not in node:
+                    missing.add(f"{path.name}: ms.{'.'.join(chain[: i + 1])}")
+                    break
+                node = node[part]
+
+    assert not missing, "catalog keys referenced but not defined: " + ", ".join(
+        sorted(missing)
+    )
