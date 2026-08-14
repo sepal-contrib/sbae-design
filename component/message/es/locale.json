@@ -1,0 +1,22 @@
+{
+    "common": {
+        "close": "Cerrar",
+        "or_divider": "o",
+        "row_singular": "fila",
+        "row_plural": "filas",
+        "column_singular": "columna",
+        "column_plural": "columnas",
+        "class_singular": "clase",
+        "class_plural": "clases"
+    },
+    "design": {
+        "tab": "Diseño"
+    },
+    "analysis": {
+        "tab": "Análisis"
+    },
+    "upload": {
+        "button": "Cargar mapa",
+        "confirm": "Usar este archivo"
+    }
+}

@@ -9,6 +9,7 @@ import solara
 from pysepal.solara.components.inputs import FileInputComponent
 
 from component.analysis.service import AnalysisService
+from component.message import get_translator, use_translator
 from component.model import app_state
 from component.widget.analysis_results import AnalysisResultsView  # Task 9/10
 from component.widget.custom_widgets import Section
@@ -16,53 +17,15 @@ from component.widget.sample_configuration import MethodologyHelpButton
 
 logger = logging.getLogger("sbae.analysis.ui")
 
-# Short intro shown inline in the Analysis tab (mirrors AA_DESIGN_INTRO).
-AA_ANALYSIS_INTRO = (
-    "**Accuracy assessment analysis** — error-adjusted area estimates and class "
-    "accuracies from your reference sample, following Olofsson et al. (2014)."
-)
-
-# Detailed methodology, shown in the "?" help popup.
-AA_ANALYSIS_HELP = (
-    "Estimates **error-adjusted areas** and accuracies from a collected "
-    "**reference / validation sample** using the **Olofsson et al. (2014)** "
-    "good-practice estimators.\n\n"
-    "**Inputs:** the reference table (mapped class vs. reference class per "
-    "sample) and the mapped class areas — taken from your classification "
-    "(design step) or a separate area / strata CSV.\n\n"
-    "**Outputs:** the error matrix, error-adjusted area per class with "
-    "confidence intervals, and user's / producer's / overall accuracies."
-)
-
-# Short inline help shown under each section header (kept to 2-3 lines).
-_COLUMN_MAPPING_HELP = (
-    "Match each CSV column to its role. Every reference point needs its "
-    "**mapped class** (`map_code` -- what the classification assigned) and its "
-    "**reference class** (`ref_code` -- the interpreted truth); those two build "
-    "the error matrix. X/Y are required only when the class is read from an "
-    "uploaded map. Fields marked \\* are required."
-)
-_OPTIONS_HELP = (
-    "Where the per-class **areas** (the stratum weights) come from -- the design "
-    "step's classification, a separate area/strata CSV, or a classification map "
-    "you upload here -- plus the **confidence level** for the error-adjusted "
-    "intervals and the **display unit**."
-)
-_FILTER_HELP = (
-    "Optional: restrict the assessment to a subset of reference points -- pick a "
-    "column and keep only the values you choose (e.g. one region, tile, or "
-    "campaign). Leave empty to use every row."
-)
-
-# Friendly labels for the area/strata source. The internal keys stay
-# "design" / "map" / "upload"; only the dropdown display changes.
-_AREA_SOURCE_LABELS = {
-    "design": "From the design map",
-    "map": "Upload a classification map",
-    "upload": "From an area / strata CSV",
-}
+# The internal area/strata keys stay "design" / "map" / "upload"; only the
+# dropdown display is translated.
 _AREA_SOURCE_ORDER = ["design", "map", "upload"]
-_AREA_SOURCE_BY_LABEL = {label: key for key, label in _AREA_SOURCE_LABELS.items()}
+
+
+def area_source_labels(ms) -> dict:
+    """Display label per area/strata source key, in presentation order."""
+    return {key: ms.analysis.area_source[key] for key in _AREA_SOURCE_ORDER}
+
 
 # Bundled example dataset (collected reference + strata for the aa_test_congo map).
 _EXAMPLE_DIR = (
@@ -80,21 +43,22 @@ _EXAMPLE_COLUMN_MAPPING = {
 }
 
 
-def load_example_analysis_data(state) -> None:
+def load_example_analysis_data(state, ms=None) -> None:
     """Load the bundled example reference + strata into the analysis state.
 
     Self-contained: uses the "upload" area source so it never overwrites the
     design tab's ``area_data``. Loads inputs only -- the dashboard stays blank
     until the user presses Calculate (results are only computed on that action).
     """
+    ms = ms if ms is not None else get_translator()
     if not _EXAMPLE_REFERENCE_CSV.exists() or not _EXAMPLE_AREA_CSV.exists():
-        state.add_error(f"Example analysis data not found in {_EXAMPLE_DIR}")
+        state.add_error(ms.analysis.error.example_not_found.format(_EXAMPLE_DIR))
         return
     try:
         ref_df = pd.read_csv(_EXAMPLE_REFERENCE_CSV)
         area_df = pd.read_csv(_EXAMPLE_AREA_CSV)
     except Exception as e:  # pragma: no cover - defensive
-        state.add_error(f"Could not load example analysis data: {e!s}")
+        state.add_error(ms.analysis.error.example_failed.format(e))
         return
     state.analysis_reference_df.value = ref_df
     state.analysis_reference_name.value = _EXAMPLE_REFERENCE_CSV.name
@@ -129,7 +93,7 @@ def guess_column_mapping(columns: list) -> dict:
     return mapping
 
 
-def derive_map_source(state, sbae_map=None):
+def derive_map_source(state, sbae_map=None, ms=None):
     """Sample the classification raster for the "map" area source.
 
     Fills ``map_code`` on the reference table by sampling the raster at each
@@ -143,6 +107,7 @@ def derive_map_source(state, sbae_map=None):
     Called from the Calculate action (``run_calculation``), off the UI thread,
     so it may block on raster I/O and call the map methods directly.
     """
+    ms = ms if ms is not None else get_translator()
     raster = state.analysis_classification_path.value
     ref = state.analysis_reference_df.value
     if not raster or ref is None or ref.empty:
@@ -154,7 +119,7 @@ def derive_map_source(state, sbae_map=None):
             ref, state.analysis_column_mapping.value or {}, raster
         )
     except Exception as e:  # surface, don't crash the Calculate task
-        state.add_error(f"Classification-map analysis failed: {e}")
+        state.add_error(ms.analysis.error.classification_failed.format(e))
         return None
 
     mapping = dict(state.analysis_column_mapping.value or {})
@@ -178,21 +143,18 @@ def derive_map_source(state, sbae_map=None):
         try:
             sbae_map.add_raster(
                 raster,
-                layer_name="Classification (analysis)",
+                layer_name=ms.analysis.classification_map.layer_name,
                 key="clas_an",
                 class_colors=state.class_colors.value or {},
             )
             # Reference points are drawn by the panel's render thread (from
             # analysis_reference_df, for every source) on their own layer.
         except Exception as e:  # results are valid; only the map layer failed
-            state.add_error(
-                "Analysis ran, but the classification map could not be "
-                f"rendered on the map: {e}"
-            )
+            state.add_error(ms.analysis.error.raster_render_failed.format(e))
     return dropped
 
 
-def run_calculation(state, sbae_map=None):
+def run_calculation(state, sbae_map=None, ms=None):
     """Run the explicit Calculate action for the analysis tab.
 
     Derives the map source (if selected), runs the accuracy assessment, and
@@ -201,16 +163,15 @@ def run_calculation(state, sbae_map=None):
     ``state.add_error`` and leave the dashboard blank. Runs off the UI thread
     (the map source samples a raster), so callers wrap it in ``to_thread``.
     """
+    ms = ms if ms is not None else get_translator()
     if state.analysis_area_source.value == "map":
-        derive_map_source(state, sbae_map)
+        derive_map_source(state, sbae_map, ms)
 
     if not AnalysisService.is_ready(state):
         state.set_analysis_results(None)
         errors = AnalysisService.get_validation_errors(state)
         state.add_error(
-            "; ".join(errors)
-            if errors
-            else "Provide the required inputs before calculating."
+            "; ".join(errors) if errors else ms.analysis.error.missing_inputs
         )
         return
 
@@ -220,15 +181,12 @@ def run_calculation(state, sbae_map=None):
             results.to_dict(), signature=AnalysisService.inputs_signature(state)
         )
         if set(results.map_legend) != set(results.ref_legend):
-            note = (
-                "Note: map and reference legends differ; classes present in "
-                "only one are shown with zero-filled values."
-            )
+            note = ms.analysis.note.legend_mismatch
             if note not in state.error_messages.value:
                 state.add_error(note)
     else:
         state.set_analysis_results(None)
-        state.add_error(results.error_message or "Analysis failed")
+        state.add_error(results.error_message or ms.analysis.error.failed)
 
 
 def _results_are_fresh(state) -> bool:
@@ -248,9 +206,10 @@ def _results_are_fresh(state) -> bool:
 @solara.component
 def ExampleDataButton():
     """One-click loader for the bundled example analysis dataset."""
+    ms = use_translator()
     solara.Button(
-        "Use example data",
-        on_click=lambda: load_example_analysis_data(app_state),
+        ms.analysis.reference.example_button,
+        on_click=lambda: load_example_analysis_data(app_state, ms),
         color="default",
         text=True,
         small=True,
@@ -264,12 +223,13 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
     Mirrors ``CurrentFileDisplay`` from the design tab: once a CSV is loaded we
     show its name and shape with a clear button instead of the file picker.
     """
+    ms = use_translator()
     if df is None or df.empty:
         return
 
     n_rows, n_cols = df.shape
-    row_word = "row" if n_rows == 1 else "rows"
-    col_word = "column" if n_cols == 1 else "columns"
+    row_word = ms.common.row_singular if n_rows == 1 else ms.common.row_plural
+    col_word = ms.common.column_singular if n_cols == 1 else ms.common.column_plural
 
     with solara.Card(classes=["mb-2"]):
         with solara.Row(justify="space-between", style={"align-items": "center"}):
@@ -296,6 +256,7 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
 @solara.component
 def AnalysisPanel(sbae_map=None, theme_state=None):
     """Full analysis panel filling the Analysis tab."""
+    ms = use_translator()
     reading = solara.use_reactive(False)
     ref_path = solara.use_reactive(None)
     show_ref_modal = solara.use_reactive(False)
@@ -313,11 +274,13 @@ def AnalysisPanel(sbae_map=None, theme_state=None):
     def handle_read_result():
         if read_result.state == solara.ResultState.RUNNING:
             reading.value = True
-            app_state.analysis_status.value = "Reading reference file..."
+            app_state.analysis_status.value = ms.analysis.reference.reading
         elif read_result.state == solara.ResultState.ERROR:
             reading.value = False
             app_state.analysis_status.value = ""
-            app_state.add_error(f"Could not read reference file: {read_result.error}")
+            app_state.add_error(
+                ms.analysis.error.reference_read_failed.format(read_result.error)
+            )
         elif read_result.state == solara.ResultState.FINISHED and (
             read_result.value is not None
         ):
@@ -352,7 +315,7 @@ def AnalysisPanel(sbae_map=None, theme_state=None):
     def _calc_worker():
         if calc_trigger.value == 0:
             return None  # don't compute on mount
-        run_calculation(app_state, sbae_map)
+        run_calculation(app_state, sbae_map, ms)
         return calc_trigger.value
 
     calc_result = solara.use_thread(
@@ -437,23 +400,23 @@ def AnalysisPanel(sbae_map=None, theme_state=None):
     with solara.Column(style="gap: 12px;"):
         with solara.Row(style="align-items: center; gap: 4px;"):
             with solara.Column(style="flex: 1;"):
-                solara.Markdown(AA_ANALYSIS_INTRO)
+                solara.Markdown(ms.analysis.intro)
             MethodologyHelpButton(
-                title="Accuracy assessment — methodology",
-                content=AA_ANALYSIS_HELP,
+                title=ms.analysis.help.title,
+                content=ms.analysis.help.body,
             )
 
         # Reference upload sits directly under the intro (no subtitle).
         if ref_loaded:
             CurrentTableDisplay(
-                "Reference table",
+                ms.analysis.reference.table_title,
                 ref_df,
                 name=app_state.analysis_reference_name.value,
                 on_clear=clear_reference,
             )
         else:
             solara.Button(
-                "Upload reference data",
+                ms.analysis.reference.upload_button,
                 on_click=lambda: show_ref_modal.set(True),
                 color="primary",
                 block=True,
@@ -472,7 +435,7 @@ def AnalysisPanel(sbae_map=None, theme_state=None):
                 solara.ResultState.RUNNING,
             )
             solara.Button(
-                "Calculate accuracy assessment",
+                ms.analysis.calculate,
                 on_click=lambda: calc_trigger.set(calc_trigger.value + 1),
                 color="primary",
                 block=True,
@@ -488,15 +451,9 @@ def AnalysisPanel(sbae_map=None, theme_state=None):
         if _results_are_fresh(app_state):
             AnalysisResultsView(theme_state=theme_state)
         elif not ref_loaded:
-            solara.Info(
-                "Upload a reference table (or load the example data) to run the "
-                "accuracy assessment."
-            )
+            solara.Info(ms.analysis.empty.no_reference)
         else:
-            solara.Info(
-                "Set the area source and column mapping, then press "
-                "**Calculate** to run the accuracy assessment."
-            )
+            solara.Info(ms.analysis.empty.not_calculated)
 
     # Rendered outside the Column so state changes don't unmount it mid-flow.
     if show_ref_modal.value:
@@ -516,26 +473,26 @@ def _ReferenceUploadDialog(ref_path, on_close=None):
     Same styling as ``UploadDialogCard``: a titled card with the file picker and
     example-data shortcut inside, and a right-aligned Close button.
     """
+    ms = use_translator()
     with solara.v.Card():
-        solara.v.CardTitle(children=["Upload reference data"])
+        solara.v.CardTitle(children=[ms.analysis.reference.dialog_title])
         with solara.v.CardText(style="max-height: 70vh; overflow-y: auto;"):
-            solara.Markdown(
-                "Upload the collected **reference / validation** table (CSV)."
-            )
+            solara.Markdown(ms.analysis.reference.dialog_body)
             FileInputComponent(extensions=[".csv"], on_value=lambda p: ref_path.set(p))
             if app_state.analysis_status.value:
                 solara.Info(app_state.analysis_status.value)
             with solara.Row(justify="center", classes=["mt-2"]):
-                solara.Text("or")
+                solara.Text(ms.common.or_divider)
                 ExampleDataButton()
         with solara.v.CardActions():
             solara.v.Spacer()
-            solara.Button("Close", text=True, small=True, on_click=on_close)
+            solara.Button(ms.common.close, text=True, small=True, on_click=on_close)
 
 
 @solara.component
 def _ColumnMappingCard(columns: list, area_source: str = "upload"):
     """Dropdowns mapping CSV columns to analysis roles."""
+    ms = use_translator()
     mapping = app_state.analysis_column_mapping.value
     options = [None, *list(columns)]
 
@@ -548,18 +505,19 @@ def _ColumnMappingCard(columns: list, area_source: str = "upload"):
         return _set
 
     map_source = area_source == "map"
+    role = ms.analysis.column_mapping.role
     labels = {
-        "map": "Map / predicted class *",
-        "ref": "Reference class *",
-        "x": "X / longitude *" if map_source else "X / longitude",
-        "y": "Y / latitude *" if map_source else "Y / latitude",
-        "sample_area": "Per-sample area (optional)",
+        "map": f"{role.map} *",
+        "ref": f"{role.ref} *",
+        "x": f"{role.x} *" if map_source else role.x,
+        "y": f"{role.y} *" if map_source else role.y,
+        "sample_area": role.sample_area,
     }
     if map_source:
         del labels["map"]  # map_code is derived from the raster
     with solara.Column(gap="4px"):
-        Section("Column mapping", "mdi-swap-horizontal")
-        solara.Markdown(_COLUMN_MAPPING_HELP)
+        Section(ms.analysis.column_mapping.title, "mdi-swap-horizontal")
+        solara.Markdown(ms.analysis.column_mapping.help)
         for role, label in labels.items():
             solara.Select(
                 label=label,
@@ -572,42 +530,40 @@ def _ColumnMappingCard(columns: list, area_source: str = "upload"):
 @solara.component
 def _AnalysisControls(sbae_map=None):
     """Area source, confidence level, unit, and optional filter controls."""
+    ms = use_translator()
+    labels = area_source_labels(ms)
+    by_label = {label: key for key, label in labels.items()}
     with solara.Column(gap="8px"):
-        Section("Options", "mdi-tune")
-        solara.Markdown(_OPTIONS_HELP)
+        Section(ms.analysis.options.title, "mdi-tune")
+        solara.Markdown(ms.analysis.options.help)
         source = app_state.analysis_area_source.value
         has_design_area = (
             app_state.area_data.value is not None
             and not app_state.area_data.value.empty
         )
         solara.Select(
-            label="Area / strata source",
-            value=_AREA_SOURCE_LABELS[source],
-            values=[_AREA_SOURCE_LABELS[k] for k in _AREA_SOURCE_ORDER],
-            on_value=lambda label: app_state.analysis_area_source.set(
-                _AREA_SOURCE_BY_LABEL[label]
-            ),
+            label=ms.analysis.options.area_source,
+            value=labels[source],
+            values=[labels[k] for k in _AREA_SOURCE_ORDER],
+            on_value=lambda label: app_state.analysis_area_source.set(by_label[label]),
         )
         if source == "design":
             if has_design_area:
                 DesignClassificationCard()
             else:
-                solara.Warning(
-                    "No classification is loaded from the design step. Switch to "
-                    "'Upload a classification map' or 'From an area / strata CSV'."
-                )
+                solara.Warning(ms.analysis.design_map.missing)
         elif source == "upload":
             _AreaUpload()
         elif source == "map":
             _ClassificationMapUpload(sbae_map)
         solara.Select(
-            label="Confidence level (%)",
+            label=ms.analysis.options.confidence_level,
             value=app_state.analysis_confidence_level.value,
             values=[90.0, 95.0, 99.0],
             on_value=lambda v: app_state.analysis_confidence_level.set(float(v)),
         )
         solara.Select(
-            label="Display unit",
+            label=ms.analysis.options.display_unit,
             value=app_state.analysis_area_unit.value,
             values=["ha", "m2"],
             on_value=lambda v: app_state.analysis_area_unit.set(v),
@@ -617,6 +573,7 @@ def _AnalysisControls(sbae_map=None):
 @solara.component
 def _FilterCard(columns: list):
     """Optional row filter: keep only reference rows whose column is in selected values."""
+    ms = use_translator()
     current = app_state.analysis_filter.value or {}
     col = current.get("column")
 
@@ -631,10 +588,10 @@ def _FilterCard(columns: list):
             app_state.analysis_filter.value = {"column": col, "include_values": values}
 
     with solara.Column(gap="4px"):
-        Section("Filter (optional)", "mdi-filter-variant")
-        solara.Markdown(_FILTER_HELP)
+        Section(ms.analysis.filter.title, "mdi-filter-variant")
+        solara.Markdown(ms.analysis.filter.help)
         solara.Select(
-            label="Filter column",
+            label=ms.analysis.filter.column,
             value=col,
             values=[None, *list(columns)],
             on_value=set_column,
@@ -645,7 +602,7 @@ def _FilterCard(columns: list):
                 key=str,
             )
             solara.SelectMultiple(
-                label="Keep values",
+                label=ms.analysis.filter.keep_values,
                 values=current.get("include_values", []),
                 all_values=[str(v) for v in all_values],
                 on_value=set_values,
@@ -655,6 +612,7 @@ def _FilterCard(columns: list):
 @solara.component
 def _AreaUpload():
     """Upload + read a separate area/strata CSV (standalone mode)."""
+    ms = use_translator()
     area_path = solara.use_reactive(None)
 
     def read_area_worker():
@@ -670,7 +628,7 @@ def _AreaUpload():
             if area_path.value:
                 app_state.analysis_area_name.value = Path(area_path.value).name
         elif result.state == solara.ResultState.ERROR:
-            app_state.add_error(f"Could not read area file: {result.error}")
+            app_state.add_error(ms.analysis.error.area_read_failed.format(result.error))
 
     solara.use_effect(handle, [result.state])
 
@@ -683,7 +641,7 @@ def _AreaUpload():
     area_df = app_state.analysis_area_df.value
     if area_df is not None and not area_df.empty:
         CurrentTableDisplay(
-            "Area / strata table",
+            ms.analysis.area_table.title,
             area_df,
             name=app_state.analysis_area_name.value,
             on_clear=clear_area,
@@ -708,13 +666,13 @@ def _AreaUpload():
             return _set
 
         solara.Select(
-            label="Area file: class column",
+            label=ms.analysis.area_table.class_column,
             value=mapping.get("area_class"),
             values=[None, *cols],
             on_value=set_area_role("area_class"),
         )
         solara.Select(
-            label="Area file: area column",
+            label=ms.analysis.area_table.area_column,
             value=mapping.get("area_value"),
             values=[None, *cols],
             on_value=set_area_role("area_value"),
@@ -728,18 +686,22 @@ def DesignClassificationCard():
     Mirrors the design tab's ``CurrentFileDisplay`` minus the clear button --
     the design step owns that file.
     """
+    ms = use_translator()
     file_path = app_state.file_path.value
     area = app_state.area_data.value
-    name = Path(file_path).name if file_path else "design classification"
+    name = Path(file_path).name if file_path else ms.analysis.design_map.fallback_name
     n_classes = 0 if area is None or area.empty else int(area["map_code"].nunique())
-    class_word = "class" if n_classes == 1 else "classes"
+    class_word = ms.common.class_singular if n_classes == 1 else ms.common.class_plural
     with solara.Card(classes=["mb-2"]):
         with solara.Column(gap="0px"):
             with solara.Row(gap="6px", style="align-items: baseline;"):
-                solara.Text("Design map:", style="font-weight: 600; font-size: 14px;")
+                solara.Text(
+                    ms.analysis.design_map.title,
+                    style="font-weight: 600; font-size: 14px;",
+                )
                 solara.Text(name, style="font-size: 14px;")
             solara.Text(
-                f"{n_classes} {class_word} from the design step",
+                ms.analysis.design_map.detail.format(n_classes, class_word),
                 style="font-size: 12px;",
             )
 
@@ -751,6 +713,7 @@ def CurrentRasterDisplay(path: str, on_clear=None):
     Mirrors ``CurrentFileDisplay``: name + type/size and a clear button, instead
     of a bare filename row.
     """
+    ms = use_translator()
     if not path:
         return
     name = Path(path).name
@@ -763,11 +726,14 @@ def CurrentRasterDisplay(path: str, on_clear=None):
             with solara.Column(gap="0px"):
                 with solara.Row(gap="6px", style="align-items: baseline;"):
                     solara.Text(
-                        "Classification map:",
+                        ms.analysis.classification_map.title,
                         style="font-weight: 600; font-size: 14px;",
                     )
                     solara.Text(name, style="font-size: 14px;")
-                solara.Text(f"GeoTIFF | {size_mb:.1f} MB", style="font-size: 12px;")
+                solara.Text(
+                    ms.analysis.classification_map.detail.format(f"{size_mb:.1f}"),
+                    style="font-size: 12px;",
+                )
             if on_clear is not None:
                 solara.Button(
                     label="",

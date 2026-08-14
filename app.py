@@ -40,6 +40,7 @@ from pysepal.solara import (
     setup_theme_colors,
 )
 
+from component.message import available_locales, get_translator, use_translator
 from component.model.app_model import AppModel
 from component.tile.upload import RasterMapWatcher
 from component.widget.map import PointsLegend, SbaeMap
@@ -69,6 +70,7 @@ def on_kernel_start():
 def Page():
     """Main SBAE application page using MapApp layout."""
     theme_state = get_current_theme_state()
+    ms = use_translator()
 
     # Notification system (pysepal): mount the provider once at the app root,
     # before any component that calls use_notifications(). Kept in the same page
@@ -90,7 +92,7 @@ def Page():
     steps_data = [
         {
             "id": 4,
-            "name": "Sample design",
+            "name": ms.app.step_sample_design,
             "icon": "mdi-tune",
             "display": "step",
             "content": [],
@@ -100,7 +102,7 @@ def Page():
 
     # Right panel configuration
     right_panel_config = {
-        "title": "Sample design tools",
+        "title": ms.app.right_panel_title,
         "icon": "mdi-tools",
         "width": 450,
         "toggle_icon": "mdi-chevron-left",
@@ -119,8 +121,9 @@ def Page():
 
     # Create the MapApp with the shared map instance
     MapApp.element(
-        app_title="SBAE - Sampling-Based Area Estimation",
+        app_title=ms.app.title,
         app_icon="mdi-map-marker-radius",
+        locales=available_locales(),
         main_map=[sbae_map],
         steps_data=steps_data,
         initial_step=4,
@@ -136,7 +139,8 @@ def Page():
     )
 
 
-# Routes for the application
+# Routes for the application. The label is read once at import, outside any
+# render, so it stays in the default locale.
 routes = [
-    solara.Route(path="/", component=Page, label="SBAE Tool"),
+    solara.Route(path="/", component=Page, label=get_translator().app.route_label),
 ]

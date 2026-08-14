@@ -3,6 +3,7 @@ import logging
 import solara
 from pysepal.solara.components.aoi.aoi_view import AoiView
 
+from component.message import use_translator
 from component.model import app_state
 from component.tile.upload import CurrentFileDisplay, UploadTile
 from component.widget.map import SbaeMap
@@ -13,6 +14,7 @@ logger = logging.getLogger("sbae.aoi_upload_selector")
 @solara.component
 def AoiUploadSelector(sbae_map: SbaeMap = None):
     """Component that renders AOI selector or Upload button based on sampling method."""
+    ms = use_translator()
     show_upload_modal = solara.use_reactive(False)
     sampling_method = app_state.sampling_method.value
     has_uploaded_file = (
@@ -76,7 +78,7 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
 
             solara.HTML(
                 tag="div",
-                unsafe_innerHTML="<strong>Select Area of Interest</strong>",
+                unsafe_innerHTML=f"<strong>{ms.aoi.title}</strong>",
                 style="font-size: 16px; margin-bottom: 8px;",
             )
 
@@ -88,7 +90,7 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             )
 
             if app_state.aoi_computing.value:
-                solara.Info("Computing AOI boundaries...")
+                solara.Info(ms.aoi.computing)
 
         elif sampling_method == "stratified":
 
@@ -97,7 +99,7 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             else:
                 with solara.Row(justify="center", style={"margin-top": "16px"}):
                     solara.Button(
-                        label="Upload Map",
+                        label=ms.upload.button,
                         icon_name="mdi-upload",
                         on_click=open_upload_modal,
                         color="primary",
@@ -124,10 +126,11 @@ def UploadDialogCard(sbae_map: SbaeMap = None, on_close=None):
     cards) with the content in a scrollable ``CardText`` and the Close button
     right-aligned in the actions row.
     """
+    ms = use_translator()
     with solara.v.Card():
-        solara.v.CardTitle(children=["Upload classification map"])
+        solara.v.CardTitle(children=[ms.upload.dialog_title])
         with solara.v.CardText(style="max-height: 70vh; overflow-y: auto;"):
             UploadTile(sbae_map)
         with solara.v.CardActions():
             solara.v.Spacer()
-            solara.Button("Close", text=True, on_click=on_close)
+            solara.Button(ms.common.close, text=True, on_click=on_close)

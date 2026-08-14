@@ -1,0 +1,178 @@
+{
+    "app": {
+        "title": "SBAE - Sampling-Based Area Estimation",
+        "route_label": "SBAE Tool",
+        "step_sample_design": "Sample design",
+        "right_panel_title": "Sample design tools"
+    },
+    "common": {
+        "close": "Close",
+        "or_divider": "or",
+        "row_singular": "row",
+        "row_plural": "rows",
+        "column_singular": "column",
+        "column_plural": "columns",
+        "class_singular": "class",
+        "class_plural": "classes"
+    },
+    "design": {
+        "tab": "Design",
+        "intro": "**Accuracy assessment design** — stratified sample size and allocation following Olofsson et al. (2014) good practices.",
+        "help": {
+            "title": "Olofsson AA design — methodology",
+            "body": "Sample size and allocation follow **Olofsson et al. (2014)**, *Good practices for estimating area and assessing accuracy of land change*.\n\n**Inputs:** Expected User's Accuracy (EUA) per class (High / Low confidence), target standard error, and minimum samples per class.\n\n**Total sample size:** `n = ( sum(Wi*Si) / SE )^2`, with `Si = sqrt(EUAi*(1-EUAi))` and `Wi` the area share.\n\n**Allocation (adjusted proportional):** start from area-proportional samples, raise any class below the minimum up to it, then redistribute the rest proportionally. Edit any class's sample count to override."
+        },
+        "workflow": {
+            "title": "Sample Design Workflow",
+            "aa_design": "Olofsson AA Design",
+            "advanced": "Sampling",
+            "invalid": "Invalid sample design workflow: {}"
+        },
+        "class_editor": {
+            "button": "Edit classes & EUA",
+            "dialog_title": "Edit Classes and Expected User's Accuracy",
+            "dialog_title_with_samples": "Edit Classes, EUA & Samples"
+        },
+        "parameters": {
+            "sampling_method": "Sampling Method",
+            "total_sample_size": "Total Sample Size",
+            "confidence_level": "Confidence Level",
+            "expected_accuracy": "Expected Overall Accuracy (%)",
+            "target_error": "Target Standard Error (%)",
+            "target_error_hint": "Standard error of expected overall accuracy",
+            "min_samples": "Minimum Samples per Class",
+            "min_samples_hint": "Safety minimum for small/rare classes"
+        },
+        "outputs": {
+            "summary": "Summary",
+            "generate_points": "Generate Points",
+            "generate_points_description": "Generate sample points based on calculated sample sizes.",
+            "export": "Export Results",
+            "export_description": "Download the generated sample points (CSV / GeoJSON)."
+        },
+        "error": {
+            "calculation_failed": "Calculation failed",
+            "calculating": "Error calculating samples: {}",
+            "invalid_method": "Invalid sampling method: {}",
+            "invalid_total": "Invalid sample total: {}",
+            "invalid_confidence": "Invalid confidence level: {}",
+            "invalid_expected_accuracy": "Invalid expected accuracy: {}",
+            "invalid_target_error": "Invalid target error: {}",
+            "invalid_min_samples": "Invalid minimum samples: {}"
+        }
+    },
+    "aoi": {
+        "title": "Select Area of Interest",
+        "computing": "Computing AOI boundaries..."
+    },
+    "upload": {
+        "button": "Upload Map",
+        "dialog_title": "Upload classification map",
+        "instructions": "Upload your land cover classification map as a raster file. Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio.",
+        "confirm": "Use This File",
+        "sample_map": "Use Sample Map",
+        "layer_name": "Classification Map",
+        "current_file": "Current File:",
+        "current_file_details": "Type: {} | Size: {} MB",
+        "optimizing": "Optimizing raster for display... this may take a moment for large files.",
+        "computing_areas": "Computing class areas...",
+        "loading_sample": "Loading sample map...",
+        "preview": {
+            "title": "File selected",
+            "type": "Type",
+            "size": "Size",
+            "features": "Features",
+            "crs": "CRS",
+            "crs_missing": "Not specified"
+        },
+        "toast": {
+            "uploaded": "File uploaded successfully.",
+            "optimized": "File uploaded and optimized — you can now edit class names.",
+            "optimization_failed": "Error optimizing raster: {}"
+        },
+        "error": {
+            "not_a_raster": "Unsupported file format. The classification map must be a raster (GeoTIFF, ERDAS Imagine, or another format rasterio can open).",
+            "sample_not_found": "Sample file not found: {}",
+            "sample_failed": "Error loading sample map: {}"
+        }
+    },
+    "analysis": {
+        "tab": "Analysis",
+        "intro": "**Accuracy assessment analysis** — error-adjusted area estimates and class accuracies from your reference sample, following Olofsson et al. (2014).",
+        "help": {
+            "title": "Accuracy assessment — methodology",
+            "body": "Estimates **error-adjusted areas** and accuracies from a collected **reference / validation sample** using the **Olofsson et al. (2014)** good-practice estimators.\n\n**Inputs:** the reference table (mapped class vs. reference class per sample) and the mapped class areas — taken from your classification (design step) or a separate area / strata CSV.\n\n**Outputs:** the error matrix, error-adjusted area per class with confidence intervals, and user's / producer's / overall accuracies."
+        },
+        "reference": {
+            "upload_button": "Upload reference data",
+            "dialog_title": "Upload reference data",
+            "dialog_body": "Upload the collected **reference / validation** table (CSV).",
+            "example_button": "Use example data",
+            "table_title": "Reference table",
+            "reading": "Reading reference file..."
+        },
+        "column_mapping": {
+            "title": "Column mapping",
+            "help": "Match each CSV column to its role. Every reference point needs its **mapped class** (`map_code` -- what the classification assigned) and its **reference class** (`ref_code` -- the interpreted truth); those two build the error matrix. X/Y are required only when the class is read from an uploaded map. Fields marked \\* are required.",
+            "role": {
+                "map": "Map / predicted class",
+                "ref": "Reference class",
+                "x": "X / longitude",
+                "y": "Y / latitude",
+                "sample_area": "Per-sample area (optional)"
+            }
+        },
+        "options": {
+            "title": "Options",
+            "help": "Where the per-class **areas** (the stratum weights) come from -- the design step's classification, a separate area/strata CSV, or a classification map you upload here -- plus the **confidence level** for the error-adjusted intervals and the **display unit**.",
+            "area_source": "Area / strata source",
+            "confidence_level": "Confidence level (%)",
+            "display_unit": "Display unit"
+        },
+        "area_source": {
+            "design": "From the design map",
+            "map": "Upload a classification map",
+            "upload": "From an area / strata CSV"
+        },
+        "design_map": {
+            "title": "Design map:",
+            "fallback_name": "design classification",
+            "detail": "{} {} from the design step",
+            "missing": "No classification is loaded from the design step. Switch to 'Upload a classification map' or 'From an area / strata CSV'."
+        },
+        "classification_map": {
+            "title": "Classification map:",
+            "detail": "GeoTIFF | {} MB",
+            "layer_name": "Classification (analysis)"
+        },
+        "area_table": {
+            "title": "Area / strata table",
+            "class_column": "Area file: class column",
+            "area_column": "Area file: area column"
+        },
+        "filter": {
+            "title": "Filter (optional)",
+            "help": "Optional: restrict the assessment to a subset of reference points -- pick a column and keep only the values you choose (e.g. one region, tile, or campaign). Leave empty to use every row.",
+            "column": "Filter column",
+            "keep_values": "Keep values"
+        },
+        "calculate": "Calculate accuracy assessment",
+        "empty": {
+            "no_reference": "Upload a reference table (or load the example data) to run the accuracy assessment.",
+            "not_calculated": "Set the area source and column mapping, then press **Calculate** to run the accuracy assessment."
+        },
+        "note": {
+            "legend_mismatch": "Note: map and reference legends differ; classes present in only one are shown with zero-filled values."
+        },
+        "error": {
+            "example_not_found": "Example analysis data not found in {}",
+            "example_failed": "Could not load example analysis data: {}",
+            "reference_read_failed": "Could not read reference file: {}",
+            "area_read_failed": "Could not read area file: {}",
+            "classification_failed": "Classification-map analysis failed: {}",
+            "raster_render_failed": "Analysis ran, but the classification map could not be rendered on the map: {}",
+            "missing_inputs": "Provide the required inputs before calculating.",
+            "failed": "Analysis failed"
+        }
+    }
+}

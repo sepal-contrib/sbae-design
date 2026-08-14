@@ -1,0 +1,19 @@
+{
+    "common": {
+        "close": "Fermer",
+        "or_divider": "ou",
+        "row_singular": "ligne",
+        "row_plural": "lignes",
+        "column_singular": "colonne",
+        "column_plural": "colonnes",
+        "class_singular": "classe",
+        "class_plural": "classes"
+    },
+    "analysis": {
+        "tab": "Analyse"
+    },
+    "upload": {
+        "button": "Charger la carte",
+        "confirm": "Utiliser ce fichier"
+    }
+}

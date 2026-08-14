@@ -8,6 +8,7 @@ from pysepal.mapping import prepare_for_tiles
 from pysepal.solara import use_notifications
 from pysepal.solara.components.inputs import FileInputComponent
 
+from component.message import get_translator, use_translator
 from component.model import app_state
 from component.scripts.geospatial import (
     compute_file_areas,
@@ -23,6 +24,7 @@ logger = logging.getLogger("sbae.upload")
 @solara.component
 def RasterMapWatcher(sbae_map: SbaeMap):
     """Watches for optimized raster and adds it to map. Must stay mounted."""
+    ms = use_translator()
 
     def add_optimized_raster_to_map():
         optimized_path = app_state.optimized_raster_path.value
@@ -42,7 +44,7 @@ def RasterMapWatcher(sbae_map: SbaeMap):
         ):
             sbae_map.add_raster(
                 optimized_path,
-                layer_name="Classification Map",
+                layer_name=ms.upload.layer_name,
                 key="clas",
                 class_colors=class_colors,
             )
@@ -62,6 +64,7 @@ def RasterMapWatcher(sbae_map: SbaeMap):
 @solara.component
 def CurrentFileDisplay(sbae_map: SbaeMap = None):
     """Display the currently selected file with option to clear it."""
+    ms = use_translator()
 
     def clear_file():
         """Clear the current file and reset related state."""
@@ -96,14 +99,18 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
             with solara.Column(gap="0px"):
                 solara.HTML(
                     tag="div",
-                    unsafe_innerHTML=f"<strong>Current File:</strong> {file_name}",
+                    unsafe_innerHTML=(
+                        f"<strong>{ms.upload.current_file}</strong> {file_name}"
+                    ),
                     style="font-size: 14px;",
                 )
                 file_type = file_info.get("file_type", "unknown").title()
                 size_mb = file_info.get("size_mb", 0)
                 solara.HTML(
                     tag="div",
-                    unsafe_innerHTML=f"Type: {file_type} | Size: {size_mb:.1f} MB",
+                    unsafe_innerHTML=ms.upload.current_file_details.format(
+                        file_type, f"{size_mb:.1f}"
+                    ),
                     style="font-size: 12px; margin-top: 4px;",
                 )
 
@@ -122,24 +129,22 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
         )
 
 
-def _reject_reason(file_info: dict) -> Optional[str]:
+def _reject_reason(file_info: dict, ms=None) -> Optional[str]:
     """Why this file cannot serve as the classification map, or ``None``.
 
     Raster only: the map is served as tiles and the stratified design reads its
     classes per pixel, so a vector carries neither. ``get_file_info`` reports
     ``"vector"`` for one and ``"unknown"`` for anything it could not open.
     """
+    ms = ms if ms is not None else get_translator()
     if "error" in file_info:
         return file_info["error"]
     if file_info.get("file_type") != "raster":
-        return (
-            "Unsupported file format. The classification map must be a raster "
-            "(GeoTIFF, ERDAS Imagine, or another format rasterio can open)."
-        )
+        return ms.upload.error.not_a_raster
     return None
 
 
-def _upload_toast(*, has_file, is_raster, state, value, error):
+def _upload_toast(*, has_file, is_raster, state, value, error, ms=None):
     """Decide the terminal upload toast: ``(level, message)`` or ``None``.
 
     The raster success toast fires only when the optimization produced a real
@@ -148,23 +153,22 @@ def _upload_toast(*, has_file, is_raster, state, value, error):
     ``FINISHED`` before the real run starts -- is what fired the "optimized"
     toast twice.
     """
+    ms = ms if ms is not None else get_translator()
     if not has_file:
         return None
     if not is_raster:
-        return ("success", "File uploaded successfully.")
+        return ("success", ms.upload.toast.uploaded)
     if state == solara.ResultState.ERROR:
-        return ("error", f"Error optimizing raster: {error}")
+        return ("error", ms.upload.toast.optimization_failed.format(error))
     if state == solara.ResultState.FINISHED and value:
-        return (
-            "success",
-            "File uploaded and optimized — you can now edit class names.",
-        )
+        return ("success", ms.upload.toast.optimized)
     return None
 
 
 @solara.component
 def UploadTile(sbae_map: SbaeMap):
     """Step 1: File Upload Dialog."""
+    ms = use_translator()
     is_loading = solara.use_reactive(False)
 
     has_file = (
@@ -248,6 +252,7 @@ def UploadTile(sbae_map: SbaeMap):
             state=raster_prep_result.state,
             value=raster_prep_result.value,
             error=raster_prep_result.error,
+            ms=ms,
         )
         if toast is None:
             return
@@ -271,7 +276,7 @@ def UploadTile(sbae_map: SbaeMap):
             and raster_prep_result.state == solara.ResultState.RUNNING
         ):
             solara.Text(
-                "Optimizing raster for display... this may take a moment for large files.",
+                ms.upload.optimizing,
                 style="font-size: 13px; opacity: 0.8;",
             )
             solara.ProgressLinear(value=True)
@@ -280,6 +285,7 @@ def UploadTile(sbae_map: SbaeMap):
 @solara.component
 def SampleMapButton(is_loading: solara.Reactive[bool]):
     """Button to load sample map for testing."""
+    ms = use_translator()
 
     def load_sample_map():
         """Load the sample map for testing."""
@@ -292,13 +298,13 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
 
         is_loading.value = True
         app_state.error_messages.value = []  # Clear errors directly
-        app_state.processing_status.value = "Loading sample map..."
+        app_state.processing_status.value = ms.upload.loading_sample
 
         try:
             # Check if file exists
             if not os.path.exists(sample_file_path):
                 app_state.error_messages.value = [
-                    f"Sample file not found: {sample_file_path}"
+                    ms.upload.error.sample_not_found.format(sample_file_path)
                 ]
                 return
 
@@ -328,13 +334,13 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
             app_state.current_step.value = max(app_state.current_step.value, 2)
 
         except Exception as e:
-            app_state.error_messages.value = [f"Error loading sample map: {e!s}"]
+            app_state.error_messages.value = [ms.upload.error.sample_failed.format(e)]
         finally:
             app_state.processing_status.value = ""
             is_loading.value = False
 
     solara.Button(
-        "Use Sample Map",
+        ms.upload.sample_map,
         on_click=load_sample_map,
         color="default",
         text=True,
@@ -346,6 +352,7 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
 @solara.component
 def FileUploadSection(is_loading: solara.Reactive[bool]):
     """File upload component for classification maps."""
+    ms = use_translator()
     selected_file_path = solara.use_reactive(None)
     selected_file_info_preview = solara.use_reactive(None)
     is_valid_file = solara.use_reactive(False)
@@ -371,7 +378,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         try:
             file_info_dict = get_file_info(file_path)
 
-            rejection = _reject_reason(file_info_dict)
+            rejection = _reject_reason(file_info_dict, ms)
             if rejection:
                 app_state.file_error.value = rejection
                 selected_file_path.value = None
@@ -410,7 +417,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
     def handle_area_result():
         if area_result.state == solara.ResultState.RUNNING:
             is_loading.value = True
-            app_state.processing_status.value = "Computing class areas..."
+            app_state.processing_status.value = ms.upload.computing_areas
         elif area_result.state == solara.ResultState.ERROR:
             app_state.file_error.value = str(area_result.error)
             app_state.processing_status.value = ""
@@ -482,7 +489,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
 
         if not app_state.uploaded_file_info.value:
             solara.Button(
-                "Use This File",
+                ms.upload.confirm,
                 on_click=confirm_file_upload,
                 color="primary",
                 block=True,
@@ -491,17 +498,15 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
             )
 
         with solara.Row(justify="center", classes=["mt-4"]):
-            solara.Text("or")
+            solara.Text(ms.common.or_divider)
             SampleMapButton(is_loading=is_loading)
 
 
 @solara.component
 def FileUploadInstructions():
     """Instructions for file upload formats."""
-    solara.Text(
-        "Upload your land cover classification map as a raster file. "
-        "Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio."
-    )
+    ms = use_translator()
+    solara.Text(ms.upload.instructions)
 
 
 @solara.component
@@ -510,11 +515,12 @@ def FilePreview(file_info: Dict[str, Any]):
 
     A neutral, theme-aware panel (subtle border, no colored alert background).
     """
+    ms = use_translator()
     rows = [
-        ("Type", file_info.get("file_type", "unknown").title()),
-        ("Size", f"{file_info.get('size_mb', 0):.1f} MB"),
-        ("Features", f"{file_info.get('feature_count', 0):,}"),
-        ("CRS", file_info.get("crs", "Not specified")),
+        (ms.upload.preview.type, file_info.get("file_type", "unknown").title()),
+        (ms.upload.preview.size, f"{file_info.get('size_mb', 0):.1f} MB"),
+        (ms.upload.preview.features, f"{file_info.get('feature_count', 0):,}"),
+        (ms.upload.preview.crs, file_info.get("crs", ms.upload.preview.crs_missing)),
     ]
     with solara.Column(
         gap="2px",
@@ -523,7 +529,9 @@ def FilePreview(file_info: Dict[str, Any]):
             "border: 1px solid var(--v-divider-base, rgba(0, 0, 0, 0.12));"
         ),
     ):
-        solara.Text("File selected", style="font-weight: 600; margin-bottom: 4px;")
+        solara.Text(
+            ms.upload.preview.title, style="font-weight: 600; margin-bottom: 4px;"
+        )
         for label, value in rows:
             with solara.Row(gap="8px"):
                 solara.Text(f"{label}:", style="min-width: 72px;")
