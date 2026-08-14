@@ -7,6 +7,7 @@ mounted component.
 """
 
 import ast
+import json
 from pathlib import Path
 
 import ipyvuetify as v
@@ -14,11 +15,29 @@ import pytest
 import solara
 from box import Box, BoxKeyError
 from pysepal.solara import get_current_locale_state
+from pysepal.translator import Translator
 
 from component.message import MESSAGE_DIR, available_locales, get_translator
 from component.widget.aoi_upload_selector import UploadDialogCard
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+_TRANSLATED_LOCALES = ("es", "fr")
+
+
+def _leaves(node, prefix=""):
+    """Flatten a catalog to ``{dotted key: message}``."""
+    flat = {}
+    for key, value in node.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            flat.update(_leaves(value, path))
+        else:
+            flat[path] = value
+    return flat
+
+
+def _catalog(locale):
+    return _leaves(json.loads((MESSAGE_DIR / locale / "locale.json").read_text()))
 
 
 @pytest.fixture(autouse=True)
@@ -49,11 +68,51 @@ def test_available_locales_are_the_catalog_folders_only():
     assert (MESSAGE_DIR / "en" / "locale.json").exists()
 
 
-def test_untranslated_key_falls_back_to_english():
-    """The es/fr catalogs are partial on purpose; missing keys use English."""
-    assert (
-        get_translator("es").analysis.calculate == get_translator().analysis.calculate
+def test_untranslated_key_falls_back_to_english(tmp_path):
+    """A key a target catalog omits still renders, in English.
+
+    Built against a synthetic catalog rather than the shipped ones so it keeps
+    guarding the fallback once es/fr are complete.
+    """
+    (tmp_path / "en").mkdir()
+    (tmp_path / "xx").mkdir()
+    (tmp_path / "en" / "locale.json").write_text(
+        json.dumps({"a": {"translated": "one", "untranslated": "two"}})
     )
+    (tmp_path / "xx" / "locale.json").write_text(
+        json.dumps({"a": {"translated": "uno"}})
+    )
+
+    ms = Translator(tmp_path, target="xx")
+
+    assert ms.a.translated == "uno"
+    assert ms.a.untranslated == "two"
+
+
+@pytest.mark.parametrize("locale", _TRANSLATED_LOCALES)
+def test_translated_catalog_has_the_same_keys_as_english(locale):
+    """Missing keys silently fall back; orphans silently rot. Neither is visible."""
+    english, translated = set(_catalog("en")), set(_catalog(locale))
+
+    assert not english - translated, f"{locale} is missing keys"
+    assert not translated - english, f"{locale} has keys English no longer defines"
+
+
+@pytest.mark.parametrize("locale", _TRANSLATED_LOCALES)
+def test_translated_placeholders_match_english(locale):
+    """A dropped or added ``{}`` is an IndexError at render time, not a typo.
+
+    Many of these messages reach ``str.format`` with a fixed argument count, so
+    a translator rewording one has to carry every placeholder across.
+    """
+    english, translated = _catalog("en"), _catalog(locale)
+    mismatched = {
+        key: (value.count("{}"), translated[key].count("{}"))
+        for key, value in english.items()
+        if value.count("{}") != translated[key].count("{}")
+    }
+
+    assert not mismatched, f"{locale} placeholder counts differ: {mismatched}"
 
 
 def test_browser_locale_variant_resolves_to_a_shipped_catalog():

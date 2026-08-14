@@ -1,7 +1,16 @@
 {
+    "app": {
+        "title": "SBAE - Estimation de superficie par échantillonnage",
+        "route_label": "Outil SBAE",
+        "step_sample_design": "Plan d'échantillonnage",
+        "right_panel_title": "Outils de plan d'échantillonnage"
+    },
     "common": {
         "close": "Fermer",
+        "download": "Télécharger",
         "or_divider": "ou",
+        "unknown": "Inconnu",
+        "class_code": "Classe {}",
         "row_singular": "ligne",
         "row_plural": "lignes",
         "column_singular": "colonne",
@@ -9,11 +18,360 @@
         "class_singular": "classe",
         "class_plural": "classes"
     },
-    "analysis": {
-        "tab": "Analyse"
+    "landing": {
+        "title": "Estimation de superficie par échantillonnage",
+        "step_design": "Conception",
+        "step_analyze": "Analyser"
+    },
+    "map": {
+        "legend": {
+            "sample": "Point d'échantillonnage",
+            "correct": "Correct",
+            "incorrect": "Incorrect",
+            "reference": "Point de référence"
+        },
+        "reference_layer_name": "Points de référence",
+        "error": {
+            "sample_points_failed": "Impossible d'afficher les points d'échantillonnage sur la carte : {}",
+            "reference_points_failed": "Impossible d'afficher les points de référence sur la carte : {}"
+        }
+    },
+    "design": {
+        "tab": "Conception",
+        "intro": "**Plan d'évaluation de l'exactitude** — taille et répartition de l'échantillon stratifié selon les bonnes pratiques d'Olofsson et al. (2014).",
+        "help": {
+            "title": "Plan AA d'Olofsson — méthodologie",
+            "body": "La taille et la répartition de l'échantillon suivent **Olofsson et al. (2014)**, *Good practices for estimating area and assessing accuracy of land change*.\n\n**Entrées :** exactitude attendue de l'utilisateur (EUA) par classe (confiance haute / basse), erreur type visée et minimum d'échantillons par classe.\n\n**Taille totale de l'échantillon :** `n = ( sum(Wi*Si) / SE )^2`, avec `Si = sqrt(EUAi*(1-EUAi))` et `Wi` la part de superficie.\n\n**Répartition (proportionnelle ajustée) :** partir d'un échantillon proportionnel à la superficie, relever au minimum toute classe en dessous, puis répartir le reste proportionnellement. Modifiez le nombre d'échantillons d'une classe pour l'écraser."
+        },
+        "workflow": {
+            "title": "Flux de travail d'échantillonnage",
+            "aa_design": "Plan AA Olofsson",
+            "advanced": "Échantillonnage",
+            "invalid": "Flux de plan d'échantillonnage non valide : {}"
+        },
+        "class_editor": {
+            "button": "Modifier les classes et l'EUA",
+            "dialog_title": "Modifier les classes et l'exactitude attendue de l'utilisateur",
+            "dialog_title_with_samples": "Modifier les classes, l'EUA et les échantillons",
+            "no_area_data": "Aucune donnée de superficie disponible.",
+            "eua_card_title": "Exactitude attendue de l'utilisateur (EUA)",
+            "high_eua": "EUA élevée (%)",
+            "high_eua_hint": "Pour les classes stables et faciles à identifier (p. ex. 85-95%)",
+            "low_eua": "EUA faible (%)",
+            "low_eua_hint": "Pour les classes difficiles, la détection des changements et les classes rares (p. ex. 65-75%)",
+            "code": "Code {}",
+            "class_name": "Nom de la classe",
+            "mode_high": "Élevée",
+            "mode_low": "Faible",
+            "mode_custom": "Personnalisée",
+            "custom_eua": "EUA (%)",
+            "samples": "Échantillons",
+            "area_share": "{} ha ({}%)"
+        },
+        "point_generation": {
+            "calculate_first": "Calculez d'abord les tailles d'échantillon.",
+            "use_custom_seed": "Utiliser une graine personnalisée",
+            "seed": "Graine",
+            "generate": "Générer les points",
+            "generating": "Génération des points d'échantillonnage... Cela peut prendre un moment pour les grands jeux de données.",
+            "generating_status": "Génération des points d'échantillonnage...",
+            "allocation_changed": "La répartition de l'échantillon a changé ! Les points affichés sur la carte ne correspondent pas à la répartition actuelle. Veuillez régénérer les points.",
+            "need_aoi": "Sélectionnez une zone d'intérêt avant de générer les points.",
+            "need_map": "Téléversez une carte de classification avant de générer les points.",
+            "error": {
+                "generating": "Erreur lors de la génération des points : {}",
+                "not_ready_stratified": "Veuillez d'abord téléverser une carte de classification et terminer le calcul de la taille d'échantillon.",
+                "not_ready_aoi": "Veuillez d'abord sélectionner une zone d'intérêt et terminer le calcul de la taille d'échantillon."
+            }
+        },
+        "export_files": {
+            "empty": "Générez d'abord les points d'échantillonnage pour activer l'export.",
+            "csv": "Points d'échantillonnage (CSV)",
+            "geojson": "Points d'échantillonnage (GeoJSON)"
+        },
+        "stats": {
+            "area_ha": "{} ha",
+            "class_count": "{} classes",
+            "sample_count": "n={}",
+            "target_se": "ET visée : {}%",
+            "target_se_tooltip": "Erreur type (ET) visée de l'exactitude globale attendue, utilisée pour calculer la taille de l'échantillon stratifié.",
+            "moe": "MOE : {}%",
+            "moe_tooltip": "Marge d'erreur (MOE) : plage d'incertitude de l'estimation de l'exactitude globale au niveau de confiance indiqué. Une MOE plus faible indique une meilleure précision.",
+            "empty": "Définissez une zone d'intérêt, ou chargez une carte de classification pour l'échantillonnage stratifié, afin de calculer le plan d'échantillonnage."
+        },
+        "charts": {
+            "precision_curve_title": "Courbe de précision",
+            "precision_curve_series": "MOE selon la taille d'échantillon",
+            "precision_curve_current": "Plan actuel (n={})",
+            "sample_size_axis": "Taille d'échantillon",
+            "moe_axis": "MOE (%)",
+            "current_design_chip": "n={}, MOE=±{}%",
+            "per_class_title": "Précision par classe",
+            "max_moe_chip": "MOE max. : {} (±{}%)",
+            "area_proportion_title": "Proportion par superficie"
+        },
+        "parameters": {
+            "sampling_method": "Méthode d'échantillonnage",
+            "total_sample_size": "Taille totale de l'échantillon",
+            "confidence_level": "Niveau de confiance",
+            "expected_accuracy": "Exactitude globale attendue (%)",
+            "target_error": "Erreur type visée (%)",
+            "target_error_hint": "Erreur type de l'exactitude globale attendue",
+            "min_samples": "Minimum d'échantillons par classe",
+            "min_samples_hint": "Minimum de sécurité pour les classes petites ou rares"
+        },
+        "outputs": {
+            "summary": "Résumé",
+            "generate_points": "Générer les points",
+            "generate_points_description": "Générez des points d'échantillonnage à partir des tailles d'échantillon calculées.",
+            "export": "Exporter les résultats",
+            "export_description": "Téléchargez les points d'échantillonnage générés (CSV / GeoJSON)."
+        },
+        "error": {
+            "calculation_failed": "Échec du calcul",
+            "calculating": "Erreur lors du calcul des échantillons : {}",
+            "invalid_method": "Méthode d'échantillonnage non valide : {}",
+            "invalid_total": "Total d'échantillons non valide : {}",
+            "invalid_confidence": "Niveau de confiance non valide : {}",
+            "invalid_expected_accuracy": "Exactitude attendue non valide : {}",
+            "invalid_target_error": "Erreur visée non valide : {}",
+            "invalid_min_samples": "Minimum d'échantillons non valide : {}"
+        }
+    },
+    "aoi": {
+        "title": "Sélectionner la zone d'intérêt (AOI)",
+        "computing": "Calcul des limites de l'AOI..."
     },
     "upload": {
-        "button": "Charger la carte",
-        "confirm": "Utiliser ce fichier"
+        "button": "Téléverser la carte",
+        "dialog_title": "Téléverser la carte de classification",
+        "instructions": "Téléversez votre carte de classification de l'occupation du sol sous forme de fichier raster. Les formats pris en charge comprennent GeoTIFF, ERDAS Imagine et les autres formats raster gérés par rasterio.",
+        "confirm": "Utiliser ce fichier",
+        "sample_map": "Utiliser la carte d'exemple",
+        "layer_name": "Carte de classification",
+        "current_file": "Fichier actuel :",
+        "current_file_details": "Type : {} | Taille : {} Mo",
+        "optimizing": "Optimisation du raster pour l'affichage... cela peut prendre un moment pour les fichiers volumineux.",
+        "computing_areas": "Calcul des superficies par classe...",
+        "loading_sample": "Chargement de la carte d'exemple...",
+        "preview": {
+            "title": "Fichier sélectionné",
+            "type": "Type",
+            "size": "Taille",
+            "features": "Entités",
+            "crs": "SCR",
+            "crs_missing": "Non spécifié"
+        },
+        "toast": {
+            "uploaded": "Fichier téléversé avec succès.",
+            "optimized": "Fichier téléversé et optimisé — vous pouvez maintenant modifier les noms des classes.",
+            "optimization_failed": "Erreur lors de l'optimisation du raster : {}"
+        },
+        "error": {
+            "not_a_raster": "Format de fichier non pris en charge. La carte de classification doit être un raster (GeoTIFF, ERDAS Imagine ou un autre format que rasterio peut ouvrir).",
+            "sample_not_found": "Fichier d'exemple introuvable : {}",
+            "sample_failed": "Erreur lors du chargement de la carte d'exemple : {}"
+        }
+    },
+    "analysis": {
+        "tab": "Analyse",
+        "intro": "**Analyse de l'évaluation de l'exactitude** — estimations de superficie ajustées pour l'erreur et exactitudes par classe à partir de votre échantillon de référence, selon Olofsson et al. (2014).",
+        "help": {
+            "title": "Évaluation de l'exactitude — méthodologie",
+            "body": "Estime des **superficies ajustées pour l'erreur** et des exactitudes à partir d'un **échantillon de référence / validation** collecté, à l'aide des estimateurs de bonnes pratiques d'**Olofsson et al. (2014)**.\n\n**Entrées :** la table de référence (classe cartographiée par rapport à la classe de référence pour chaque échantillon) et les superficies par classe cartographiée — issues de votre classification (étape de conception) ou d'un CSV distinct de superficies / strates.\n\n**Sorties :** la matrice d'erreur, la superficie ajustée pour l'erreur de chaque classe avec ses intervalles de confiance, et les exactitudes de l'utilisateur / du producteur / globale."
+        },
+        "reference": {
+            "upload_button": "Téléverser les données de référence",
+            "dialog_title": "Téléverser les données de référence",
+            "dialog_body": "Téléversez la table de **référence / validation** collectée (CSV).",
+            "example_button": "Utiliser les données d'exemple",
+            "table_title": "Table de référence",
+            "reading": "Lecture du fichier de référence..."
+        },
+        "column_mapping": {
+            "title": "Correspondance des colonnes",
+            "help": "Associez chaque colonne du CSV à son rôle. Chaque point de référence a besoin de sa **classe cartographiée** (`map_code` -- ce que la classification a attribué) et de sa **classe de référence** (`ref_code` -- la vérité interprétée) ; ces deux-là construisent la matrice d'erreur. X/Y ne sont requis que lorsque la classe est lue depuis une carte téléversée. Les champs marqués \\* sont obligatoires.",
+            "role": {
+                "map": "Classe cartographiée / prédite",
+                "ref": "Classe de référence",
+                "x": "X / longitude",
+                "y": "Y / latitude",
+                "sample_area": "Superficie par échantillon (facultatif)"
+            }
+        },
+        "options": {
+            "title": "Options",
+            "help": "D'où proviennent les **superficies** par classe (les poids des strates) -- la classification de l'étape de conception, un CSV distinct de superficies/strates, ou une carte de classification téléversée ici -- ainsi que le **niveau de confiance** des intervalles ajustés pour l'erreur et l'**unité d'affichage**.",
+            "area_source": "Source des superficies / strates",
+            "confidence_level": "Niveau de confiance (%)",
+            "display_unit": "Unité d'affichage"
+        },
+        "area_source": {
+            "design": "À partir de la carte de conception",
+            "map": "Téléverser une carte de classification",
+            "upload": "À partir d'un CSV de superficies / strates"
+        },
+        "design_map": {
+            "title": "Carte de conception :",
+            "fallback_name": "classification de conception",
+            "detail": "{} {} de l'étape de conception",
+            "missing": "Aucune classification n'est chargée depuis l'étape de conception. Basculez sur « Téléverser une carte de classification » ou « À partir d'un CSV de superficies / strates »."
+        },
+        "classification_map": {
+            "title": "Carte de classification :",
+            "detail": "GeoTIFF | {} Mo",
+            "layer_name": "Classification (analyse)"
+        },
+        "area_table": {
+            "title": "Table des superficies / strates",
+            "class_column": "Fichier de superficies : colonne de classe",
+            "area_column": "Fichier de superficies : colonne de superficie"
+        },
+        "filter": {
+            "title": "Filtre (facultatif)",
+            "help": "Facultatif : limitez l'évaluation à un sous-ensemble de points de référence -- choisissez une colonne et ne conservez que les valeurs souhaitées (p. ex. une région, une tuile ou une campagne). Laissez vide pour utiliser toutes les lignes.",
+            "column": "Colonne de filtre",
+            "keep_values": "Valeurs à conserver"
+        },
+        "calculate": "Calculer l'évaluation de l'exactitude",
+        "empty": {
+            "no_reference": "Téléversez une table de référence (ou chargez les données d'exemple) pour lancer l'évaluation de l'exactitude.",
+            "not_calculated": "Définissez la source des superficies et la correspondance des colonnes, puis appuyez sur **Calculer** pour lancer l'évaluation de l'exactitude."
+        },
+        "note": {
+            "legend_mismatch": "Remarque : les légendes de la carte et de la référence diffèrent ; les classes présentes dans une seule sont affichées avec des valeurs à zéro."
+        },
+        "error": {
+            "example_not_found": "Données d'analyse d'exemple introuvables dans {}",
+            "example_failed": "Impossible de charger les données d'analyse d'exemple : {}",
+            "reference_read_failed": "Impossible de lire le fichier de référence : {}",
+            "area_read_failed": "Impossible de lire le fichier de superficies : {}",
+            "classification_failed": "Échec de l'analyse de la carte de classification : {}",
+            "raster_render_failed": "L'analyse s'est exécutée, mais la carte de classification n'a pas pu être affichée sur la carte : {}",
+            "missing_inputs": "Fournissez les entrées requises avant de calculer.",
+            "failed": "Échec de l'analyse"
+        },
+        "tables": {
+            "confusion_title": "Matrice d'erreur",
+            "confusion_description": "lignes = carte, col. = référence",
+            "confusion_corner": "carte\\réf",
+            "area_title": "Estimations de superficie",
+            "area_description": "Ajustées pour l'erreur (Olofsson 2014)",
+            "accuracy_title": "Exactitude par classe",
+            "class_header": "Classe",
+            "samples_header": "Échantillons",
+            "map_area_header": "Superficie cartographiée ({})",
+            "adjusted_area_header": "Superficie ajust. ({})",
+            "confidence_interval_header": "± IC ({})",
+            "srs_area_header": "Superficie SRS ({})",
+            "users_header": "Utilisateur",
+            "producers_header": "Producteur",
+            "weighted_producers_header": "EP pondérée"
+        },
+        "downloads": {
+            "title": "Téléchargements",
+            "confusion": "Matrice d'erreur",
+            "area": "Estimations de superficie",
+            "accuracy": "Table d'exactitude",
+            "reference": "Données de référence en entrée"
+        },
+        "charts": {
+            "area_estimate_title": "Superficie ajustée pour l'erreur par classe ({})",
+            "adjusted_area_series": "Superficie ajustée ({})",
+            "confidence_interval_series": "IC",
+            "area_axis": "Superficie ({})",
+            "confusion_title": "Matrice de confusion (carte → référence)",
+            "confusion_reference_axis": "référence",
+            "confusion_map_axis": "carte",
+            "accuracy_title": "Exactitude par classe",
+            "users_series": "Utilisateur",
+            "producers_series": "Producteur",
+            "area_proportion_title": "Proportion de superficie estimée"
+        },
+        "dashboard": {
+            "title": "Résultats de l'évaluation de l'exactitude",
+            "tables": "Tables",
+            "open": "Voir le tableau de bord",
+            "overall_accuracy": "Exactitude globale",
+            "overall_accuracy_hint": "Part des points de référence classés correctement.",
+            "confidence_level": "Niveau de confiance",
+            "confidence_level_hint": "Probabilité que les intervalles ± contiennent la valeur vraie.",
+            "reference_samples": "Échantillons de référence",
+            "reference_samples_hint": "Nombre total de points de référence évalués.",
+            "classes": "Classes",
+            "classes_hint": "Nombre de classes cartographiées évaluées.",
+            "overall_chip": "Globale {}%",
+            "confidence_chip": "NC {}%",
+            "samples_chip": "n={}",
+            "classes_chip": "{} classes"
+        }
+    },
+    "calculator": {
+        "title": "Calculer la taille d'échantillon",
+        "intro": "Configurez les paramètres d'échantillonnage et calculez la taille d'échantillon nécessaire à votre évaluation de l'exactitude selon des méthodes statistiques.",
+        "parameters_title": "Paramètres :",
+        "parameter_accuracy": "• Exactitude globale visée : niveau d'exactitude souhaité (p. ex. 85%)",
+        "parameter_confidence": "• Niveau de confiance : confiance statistique (généralement 95%)",
+        "parameter_minimum": "• Taille minimale d'échantillon : minimum de sécurité pour les petites classes",
+        "complete": "Configuration de l'échantillon terminée ! Prêt à générer les points.",
+        "card_intro": "Configurez les paramètres d'échantillonnage pour déterminer la taille d'échantillon nécessaire à votre évaluation de l'exactitude.",
+        "upload_first": "Téléversez et configurez d'abord votre carte.",
+        "target_moe": "Marge d'erreur visée (%)",
+        "calculating": "Calcul des tailles d'échantillon...",
+        "needs_map": "Veuillez d'abord téléverser une carte de classification.",
+        "simple_results_title": "Configuration de la taille d'échantillon :",
+        "sampling_method": "Méthode d'échantillonnage : {}",
+        "total_samples": "Échantillons au total : {}",
+        "confidence_level": "Niveau de confiance : {}%",
+        "distribution_note": "Les échantillons seront répartis {} sur l'ensemble de la zone d'étude.",
+        "distribution_random": "aléatoirement",
+        "distribution_systematic": "selon une grille systématique",
+        "stratified_results_title": "Résultats du calcul de la taille d'échantillon :",
+        "total_samples_needed": "Échantillons nécessaires au total : {}",
+        "allocation_method": "Méthode de répartition : {}",
+        "current_moe": "Marge d'erreur actuelle : {}%",
+        "samples_per_class": "Échantillons par classe :",
+        "class_samples": "• {} : {}",
+        "allocation": {
+            "title": "Répartition de l'échantillon",
+            "empty": "Aucune donnée de répartition disponible",
+            "manual_title": "Modification manuelle de la répartition :",
+            "samples": "Échantillons"
+        },
+        "per_class": {
+            "title": "Précision par classe (selon la répartition actuelle)",
+            "subtitle": "Marge d'erreur (MOE) par classe",
+            "description": "Ce graphique montre la précision attendue de chaque classe selon votre répartition actuelle de l'échantillon. Les classes dont la barre de MOE est plus grande sont sous-échantillonnées et leurs estimations sont moins précises.",
+            "formula_title": "Formule (approximation normale binomiale) :",
+            "where": "Où :",
+            "term_n": "• n_h : échantillons attribués à la classe",
+            "term_p": "• p_h : exactitude attendue (0.5 utilisé comme valeur conservatrice par défaut)",
+            "term_z": "• Z : score Z selon le niveau de confiance",
+            "term_population": "• N_h : taille de population finie (facultatif, 1 utilisé si inconnue)",
+            "term_deff": "• DEFF : effet de plan (≈1.0 pour un échantillon spatialement équilibré ; >1 en cas de grappes)",
+            "analysis_title": "Analyse de la répartition actuelle :",
+            "highest_moe": "MOE la plus élevée : {} (±{}%, n={})",
+            "lowest_moe": "MOE la plus faible : {} (±{}%, n={})",
+            "advice": "Les classes dont la MOE est élevée peuvent nécessiter davantage d'échantillons pour gagner en précision.",
+            "moe_axis": "Marge d'erreur (%)",
+            "interpretation": "**Interprétation** : les barres montrent la marge d'erreur de l'estimation d'exactitude de l'utilisateur pour chaque classe. Des barres plus grandes indiquent des estimations moins précises. Si vous sur-échantillonnez les classes rares, ce graphique aide à vérifier que la précision par classe visée est atteinte."
+        },
+        "curve": {
+            "title": "Analyse de la courbe de précision",
+            "subtitle": "Comment la marge d'erreur (MOE) évolue avec la taille d'échantillon",
+            "description": "La courbe de précision montre la relation inverse entre la taille d'échantillon et la marge d'erreur. Lorsque la taille totale de l'échantillon (n) augmente, la marge d'erreur diminue selon la formule :",
+            "where": "Où :",
+            "term_z": "• Z = score Z selon le niveau de confiance",
+            "term_oa": "• OA = exactitude globale (attendue)",
+            "term_n": "• n = taille totale de l'échantillon",
+            "current_title": "Votre plan actuel :",
+            "current_size": "Taille d'échantillon : {}",
+            "current_moe": "Marge d'erreur : ±{}%",
+            "series": "MOE selon la taille d'échantillon",
+            "current_series": "Votre plan (n={})",
+            "sample_size_axis": "Taille d'échantillon (n)",
+            "moe_axis": "Marge d'erreur (%)",
+            "insight": "**Point clé** : remarquez que la MOE diminue rapidement au début, mais que l'amélioration ralentit à mesure que la taille d'échantillon augmente. C'est l'effet de « rendements décroissants » : doubler la taille de l'échantillon ne réduit pas l'erreur de moitié."
+        }
     }
 }
