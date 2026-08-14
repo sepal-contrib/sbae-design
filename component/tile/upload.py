@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import solara
 from pysepal.mapping import prepare_for_tiles
@@ -122,6 +122,23 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
         )
 
 
+def _reject_reason(file_info: dict) -> Optional[str]:
+    """Why this file cannot serve as the classification map, or ``None``.
+
+    Raster only: the map is served as tiles and the stratified design reads its
+    classes per pixel, so a vector carries neither. ``get_file_info`` reports
+    ``"vector"`` for one and ``"unknown"`` for anything it could not open.
+    """
+    if "error" in file_info:
+        return file_info["error"]
+    if file_info.get("file_type") != "raster":
+        return (
+            "Unsupported file format. The classification map must be a raster "
+            "(GeoTIFF, ERDAS Imagine, or another format rasterio can open)."
+        )
+    return None
+
+
 def _upload_toast(*, has_file, is_raster, state, value, error):
     """Decide the terminal upload toast: ``(level, message)`` or ``None``.
 
@@ -198,27 +215,22 @@ def UploadTile(sbae_map: SbaeMap):
         intrusive_cancel=False,
     )
 
-    def handle_non_raster_and_layer_removal():
-        """Handle non-raster files and layer removal when needed."""
+    def handle_layer_removal():
+        """Take the classification layer off the map when it no longer applies.
+
+        Adding it is ``RasterMapWatcher``'s job, once the tiled COG and the
+        class palette are both ready.
+        """
         if sbae_map is None:
             return
         sampling_method = app_state.sampling_method.value
         should_show_layer = has_file and sampling_method == "stratified"
 
-        if should_show_layer:
-            file_path = app_state.file_path.value
-            is_raster = is_raster_file(file_path)
-
-            if not is_raster:
-                app_state.raster_optimization_status.value = "idle"
-                sbae_map.add_raster(
-                    file_path, layer_name="Classification Map", key="clas"
-                )
-        else:
+        if not should_show_layer:
             sbae_map.remove_layer("clas", none_ok=True)
 
     solara.use_effect(
-        handle_non_raster_and_layer_removal,
+        handle_layer_removal,
         [
             has_file,
             app_state.file_path.value,
@@ -359,15 +371,9 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         try:
             file_info_dict = get_file_info(file_path)
 
-            if "error" in file_info_dict:
-                app_state.file_error.value = file_info_dict["error"]
-                selected_file_path.value = None
-                selected_file_info_preview.value = None
-                is_valid_file.value = False
-                return
-
-            if file_info_dict.get("file_type") == "unknown":
-                app_state.file_error.value = "Unsupported file format. Please select a valid geospatial file (GeoTIFF, Shapefile, GeoJSON, or GeoPackage)."
+            rejection = _reject_reason(file_info_dict)
+            if rejection:
+                app_state.file_error.value = rejection
                 selected_file_path.value = None
                 selected_file_info_preview.value = None
                 is_valid_file.value = False
