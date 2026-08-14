@@ -14,7 +14,7 @@ from component.widget.echarts import EChartsWidget
 
 
 @solara.component
-def SampleCalculationTile(theme_toggle=None):
+def SampleCalculationTile(theme_state=None):
     """Step 3: Calculate Sample Size Dialog."""
     with solara.Column():
         solara.HTML(tag="h2", unsafe_innerHTML="Calculate Sample Size")
@@ -43,15 +43,17 @@ def SampleCalculationTile(theme_toggle=None):
             if sampling_method == "stratified":
                 sample_allocation_table()
                 if app_state.sample_results.value.get("precision_curve"):
-                    per_class_precision_chart(theme_toggle=theme_toggle)
+                    per_class_precision_chart(theme_state=theme_state)
 
-            solara.Success("✅ Sample configuration complete! Ready to generate points.")
+            solara.Success(
+                "✅ Sample configuration complete! Ready to generate points."
+            )
 
         # Display precision curve for all methods
         if app_state.sample_results.value and app_state.sample_results.value.get(
             "precision_curve"
         ):
-            precision_curve_info(theme_toggle=theme_toggle)
+            precision_curve_info(theme_state=theme_state)
 
 
 def sample_size_calculator() -> None:
@@ -165,7 +167,7 @@ def sample_size_calculator() -> None:
             app_state.set_processing_status("")
 
         except Exception as e:
-            app_state.add_error(f"Error calculating samples: {str(e)}")
+            app_state.add_error(f"Error calculating samples: {e!s}")
             app_state.set_processing_status("")
 
     with solara.Card("Calculate Sample Size"):
@@ -333,7 +335,7 @@ def sample_allocation_table() -> None:
                 )
 
 
-def per_class_precision_chart(theme_toggle=None):
+def per_class_precision_chart(theme_state=None):
     """Display per-class precision (MOE) given current allocation."""
     sample_results = app_state.sample_results.value
     if not sample_results:
@@ -464,20 +466,18 @@ def per_class_precision_chart(theme_toggle=None):
         EChartsWidget.element(
             option=option,
             style={"height": "500px", "width": "100%"},
-            theme_toggle=theme_toggle,
+            theme_state=theme_state,
         )
 
-        solara.Info(
-            """
+        solara.Info("""
             💡 **Interpretation**: The bars show the margin of error for each class's 
             user accuracy estimate. Larger bars indicate less precise estimates. 
             If you oversample rare classes, this chart helps verify you achieved 
             the desired per-class precision.
-            """
-        )
+            """)
 
 
-def precision_curve_info(theme_toggle=None) -> None:
+def precision_curve_info(theme_state=None) -> None:
     """Display precision curve information showing MOE vs sample size relationship."""
     sample_results = app_state.sample_results.value
     if not sample_results:
@@ -574,14 +574,12 @@ def precision_curve_info(theme_toggle=None) -> None:
         EChartsWidget.element(
             option=option,
             style={"height": "500px", "width": "100%"},
-            theme_toggle=theme_toggle,
+            theme_state=theme_state,
         )
 
-        solara.Info(
-            """
+        solara.Info("""
             💡 **Key Insight**: Notice how the MOE decreases rapidly at first, 
             but the improvement slows as sample size increases. This is the 
             "diminishing returns" effect - doubling the sample size doesn't 
             halve the error.
-            """
-        )
+            """)

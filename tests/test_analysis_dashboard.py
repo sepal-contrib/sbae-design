@@ -42,7 +42,7 @@ def test_modal_renders_all_charts_when_open():
     }
     open_r = solara.reactive(True)
     _, rc = solara.render(
-        AnalysisDashboardModal(open_r, theme_toggle=None), handle_error=False
+        AnalysisDashboardModal(open_r, theme_state=None), handle_error=False
     )
     # 3 typed charts (accuracy, area, pie) + 1 raw (heatmap)
     assert len(rc.find(EChartsWidget).widgets) == 3
@@ -55,7 +55,7 @@ def test_summary_card_shows_kpis_and_button():
         "overall_accuracy": 0.85,
         "confidence_level": 95.0,
     }
-    _, rc = solara.render(AnalysisResultsView(theme_toggle=None), handle_error=False)
+    _, rc = solara.render(AnalysisResultsView(theme_state=None), handle_error=False)
     # the summary shows the KPI values as chips ("Overall 85.0%", ...)
     text = " ".join(str(c) for w in rc.find(v.Chip).widgets for c in (w.children or []))
     assert "85.0%" in text

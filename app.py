@@ -15,19 +15,29 @@ proj_data = os.path.join(env_prefix, "share", "proj")
 if os.path.exists(proj_data):
     os.environ["PROJ_DATA"] = proj_data
 
+# Both tile servers bind 127.0.0.1 inside the kernel, so the browser needs a route
+# that reaches them. SEPAL sets LOCALTILESERVER_CLIENT_PREFIX to a
+# jupyter-server-proxy route that forwards any port in the sandbox, so it carries
+# PMTiles as well as raster tiles -- but vectortileserver never autodetects one,
+# and left alone its layers keep a URL the browser cannot reach, so the points
+# silently never arrive. Only borrow a generic route: localtileserver's own
+# autodetected prefix is namespaced to itself and would not serve a vector port.
+_raster_prefix = os.environ.get("LOCALTILESERVER_CLIENT_PREFIX")
+if _raster_prefix and "localtileserver-proxy" not in _raster_prefix:
+    os.environ.setdefault("VECTORTILESERVER_CLIENT_PREFIX", _raster_prefix)
+
 import logging
 
 import solara
-from sepal_ui.logger import setup_logging
-from sepal_ui.sepalwidgets.vue_app import MapApp, ThemeToggle
-from sepal_ui.solara import (
-    ThemeState,
+from pysepal.logger import setup_logging
+from pysepal.sepalwidgets.vue_app import MapApp
+from pysepal.solara import (
+    NotificationProvider,
+    get_current_theme_state,
     setup_sessions,
     setup_solara_server,
     setup_theme_colors,
 )
-from sepal_ui.solara.notifications import NotificationProvider
-from solara.lab.components.theming import theme
 
 from component.model.app_model import AppModel
 from component.tile.upload import RasterMapWatcher
@@ -48,33 +58,6 @@ setup_solara_server()
 USE_GEE = False
 
 
-@solara.component
-def _TileLoopbackBridge():
-    """Mount jupyter_loopback's comm bridge so localhost tile fetches survive a proxy.
-
-    localtileserver + vectortileserver serve tiles on ``127.0.0.1:<port>``, which
-    the browser can't reach behind SEPAL / ``run-solara --serve`` (CSP forbids
-    connecting to localhost). The bridge reroutes those fetches over Solara's
-    websocket, but must be enabled BEFORE any tile client calls
-    ``intercept_localhost`` (on layer build) or that shim is a no-op -- hence
-    mounting it here at Page load. Default on; opt out with
-    ``LOCALTILESERVER_COMM_BRIDGE=0``.
-    """
-    _flag = os.environ.get("LOCALTILESERVER_COMM_BRIDGE", "1").strip().lower()
-    enabled = _flag not in ("0", "false", "no", "off")
-
-    def _enable():
-        if not enabled:
-            return None
-        import jupyter_loopback
-
-        return jupyter_loopback.enable_comm_bridge(display=False)
-
-    bridge = solara.use_memo(_enable, [])
-    if bridge is not None:
-        solara.display(bridge)  # its ESM installs the browser interceptor
-
-
 @solara.lab.on_kernel_start
 def on_kernel_start():
     return setup_sessions()
@@ -84,10 +67,7 @@ def on_kernel_start():
 # @with_sepal_sessions(module_name="sbae_app")
 def Page():
     """Main SBAE application page using MapApp layout."""
-    # pysepal's MapApp requires a per-kernel ThemeState. In a local (non-SEPAL)
-    # run the session manager is active but has no theme_state component, so
-    # get_current_theme_state() would raise; provide an explicit one instead.
-    theme_state = solara.use_memo(ThemeState, [])
+    theme_state = get_current_theme_state()
 
     # Notification system (pysepal): mount the provider once at the app root,
     # before any component that calls use_notifications(). Kept in the same page
@@ -96,14 +76,11 @@ def Page():
     # process-local default and the toasts/pill stay light under a dark app.
     NotificationProvider(theme_state=theme_state)
     ErrorToastBridge()
-    _TileLoopbackBridge()
 
     app_model = AppModel()
 
     setup_theme_colors()
-    theme_toggle = ThemeToggle()
-    theme_toggle.observe(lambda e: setattr(theme, "dark", e["new"]), "dark")
-    sbae_map = SbaeMap(theme_toggle=theme_toggle, gee=USE_GEE)
+    sbae_map = SbaeMap(theme_state=theme_state, gee=USE_GEE)
 
     RasterMapWatcher(sbae_map)
     # Floating legend overlay for the sample/reference points (bottom-center).
@@ -135,7 +112,7 @@ def Page():
     # longer appear while the user is on the Analysis tab.
     right_panel_content = [
         {
-            "content": [SampleConfiguration(sbae_map, theme_toggle=theme_toggle)],
+            "content": [SampleConfiguration(sbae_map, theme_state=theme_state)],
         },
     ]
 
@@ -146,7 +123,6 @@ def Page():
         main_map=[sbae_map],
         steps_data=steps_data,
         initial_step=4,
-        theme_toggle=[theme_toggle],
         theme_state=theme_state,
         dialog_width=900,
         right_panel_config=right_panel_config,

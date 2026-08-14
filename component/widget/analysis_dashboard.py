@@ -113,7 +113,7 @@ def _DashboardKpiCards(results: dict):
 
 
 @solara.component
-def AnalysisDashboardModal(open, theme_toggle=None):
+def AnalysisDashboardModal(open, theme_state=None):
     # Hooks must run unconditionally, before the early return, for hook-order
     # stability across renders (see solara's rules-of-hooks).
     #
@@ -141,10 +141,10 @@ def AnalysisDashboardModal(open, theme_toggle=None):
                 solara.v.Html(tag="div", children=[resizer], style_="display: none;")
                 _DashboardKpiCards(results)
                 with solara.ColumnsResponsive(6, small=12):
-                    ConfusionMatrixChart(results, theme_toggle=theme_toggle)
-                    AccuracyByClassChart(results, theme_toggle=theme_toggle)
-                    AreaEstimateChart(results, unit, theme_toggle=theme_toggle)
-                    AreaProportionChart(results, theme_toggle=theme_toggle)
+                    ConfusionMatrixChart(results, theme_state=theme_state)
+                    AccuracyByClassChart(results, theme_state=theme_state)
+                    AreaEstimateChart(results, unit, theme_state=theme_state)
+                    AreaProportionChart(results, theme_state=theme_state)
                 with solara.Details("Tables"):
                     # Space the three tables apart so they don't read as one block.
                     with solara.Column(style="gap: 28px; padding-top: 8px;"):
@@ -157,7 +157,7 @@ def AnalysisDashboardModal(open, theme_toggle=None):
 
 
 @solara.component
-def AnalysisSummaryCard(theme_toggle=None):
+def AnalysisSummaryCard(theme_state=None):
     results = app_state.analysis_results.value
     # Hook must run unconditionally, before the early return, for hook-order
     # stability across renders (see solara's rules-of-hooks).
@@ -179,7 +179,7 @@ def AnalysisSummaryCard(theme_toggle=None):
                     small=True, label=True, outlined=True, children=[chip_text]
                 )
         AreaProportionChart(
-            results, theme_toggle=theme_toggle, legend_width=None, card=False
+            results, theme_state=theme_state, legend_width=None, card=False
         )
         solara.Button(
             "View dashboard",
@@ -189,4 +189,4 @@ def AnalysisSummaryCard(theme_toggle=None):
             on_click=lambda: open_modal.set(True),
         )
         _Downloads()
-    AnalysisDashboardModal(open_modal, theme_toggle=theme_toggle)
+    AnalysisDashboardModal(open_modal, theme_state=theme_state)

@@ -78,7 +78,7 @@ def apply_sample_design_workflow(state, workflow: str):
 
 
 @solara.component
-def SampleConfiguration(sbae_map=None, theme_toggle=None):
+def SampleConfiguration(sbae_map=None, theme_state=None):
     """Sample configuration widget for the right panel."""
     # Use use_ref to persist value across renders without re-initializing
     prev_method_ref = solara.use_ref(app_state.sampling_method.value)
@@ -153,11 +153,11 @@ def SampleConfiguration(sbae_map=None, theme_toggle=None):
         if active_tab.value == 0:
             DesignTab(
                 sbae_map,
-                theme_toggle=theme_toggle,
+                theme_state=theme_state,
                 point_generation_controller=point_generation_controller,
             )
         else:
-            AnalysisTab(sbae_map=sbae_map, theme_toggle=theme_toggle)
+            AnalysisTab(sbae_map=sbae_map, theme_state=theme_state)
 
 
 @solara.component
@@ -191,7 +191,7 @@ def MethodologyHelpButton(
 
 
 @solara.component
-def DesignTab(sbae_map=None, theme_toggle=None, point_generation_controller=None):
+def DesignTab(sbae_map=None, theme_state=None, point_generation_controller=None):
     """Olofsson accuracy-assessment sample design."""
     with solara.Row(style="align-items: center; gap: 4px;"):
         with solara.Column(style="flex: 1;"):
@@ -221,13 +221,13 @@ def DesignTab(sbae_map=None, theme_toggle=None, point_generation_controller=None
     # Design tab so they no longer leak onto the Analysis tab.
     DesignOutputs(
         sbae_map,
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
         point_generation_controller=point_generation_controller,
     )
 
 
 @solara.component
-def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=None):
+def DesignOutputs(sbae_map=None, theme_state=None, point_generation_controller=None):
     """Design-phase outputs, relocated from standalone right-panel sections.
 
     Renders the sample-design summary, point generation and export blocks using
@@ -236,7 +236,7 @@ def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=
     renders without a map).
     """
     Section("Summary", "mdi-progress-check")
-    Summary(theme_toggle=theme_toggle)
+    Summary(theme_state=theme_state)
 
     Section(
         "Generate Points",
@@ -257,11 +257,11 @@ def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=
 
 
 @solara.component
-def AnalysisTab(sbae_map=None, theme_toggle=None):
+def AnalysisTab(sbae_map=None, theme_state=None):
     """Accuracy-assessment analysis (area estimation + accuracies)."""
     from component.widget.analysis_tab import AnalysisPanel
 
-    AnalysisPanel(sbae_map=sbae_map, theme_toggle=theme_toggle)
+    AnalysisPanel(sbae_map=sbae_map, theme_state=theme_state)
 
 
 @solara.component

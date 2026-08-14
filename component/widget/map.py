@@ -3,9 +3,9 @@ import shutil
 
 import pandas as pd
 import solara
+from pysepal.mapping import SepalMap
 from pysepal.scripts.scratch import scratch_dir
-from sepal_ui.mapping import SepalMap
-from sepal_ui.sepalwidgets.vue_app import ThemeToggle
+from pysepal.solara import ThemeState
 
 from component.scripts.vector_tiles import (
     CORRECT_COLOR,
@@ -65,9 +65,9 @@ def _compose_points_legend(
 class SbaeMap(SepalMap):
     """SBAE Map class extending SepalMap for map visualization and interactions."""
 
-    def __init__(self, theme_toggle: ThemeToggle, gee: bool = False, min_zoom: int = 5):
+    def __init__(self, theme_state: ThemeState, gee: bool = False, min_zoom: int = 5):
         super().__init__(
-            fullscreen=True, theme_toggle=theme_toggle, gee=gee, min_zoom=min_zoom
+            fullscreen=True, theme_state=theme_state, gee=gee, min_zoom=min_zoom
         )
 
         self.sample_points_layer = None

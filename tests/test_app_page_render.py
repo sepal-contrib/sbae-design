@@ -19,7 +19,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _RENDER_SCRIPT = """
 import solara
 import solara.server.kernel_context as kc
-from sepal_ui.solara import setup_sessions
+from pysepal.solara import setup_sessions
 
 ctx = kc.create_dummy_context()
 kc.set_current_context(ctx)

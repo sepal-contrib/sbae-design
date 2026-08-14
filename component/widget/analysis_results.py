@@ -12,13 +12,13 @@ def _unit_label(unit: str) -> str:
 
 
 @solara.component
-def AnalysisResultsView(theme_toggle=None):
+def AnalysisResultsView(theme_state=None):
     results = app_state.analysis_results.value
     if not results:
         return
     from component.widget.analysis_dashboard import AnalysisSummaryCard
 
-    AnalysisSummaryCard(theme_toggle=theme_toggle)
+    AnalysisSummaryCard(theme_state=theme_state)
 
 
 @solara.component

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import solara
-from sepal_ui.sepalwidgets.file_input import FileInputComponent
+from pysepal.solara.components.inputs import FileInputComponent
 
 from component.analysis.service import AnalysisService
 from component.model import app_state
@@ -294,7 +294,7 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
 
 
 @solara.component
-def AnalysisPanel(sbae_map=None, theme_toggle=None):
+def AnalysisPanel(sbae_map=None, theme_state=None):
     """Full analysis panel filling the Analysis tab."""
     reading = solara.use_reactive(False)
     ref_path = solara.use_reactive(None)
@@ -486,7 +486,7 @@ def AnalysisPanel(sbae_map=None, theme_toggle=None):
         # stamped with an inputs signature at Calculate time; once any input
         # changes the dashboard is hidden until the user recalculates.
         if _results_are_fresh(app_state):
-            AnalysisResultsView(theme_toggle=theme_toggle)
+            AnalysisResultsView(theme_state=theme_state)
         elif not ref_loaded:
             solara.Info(
                 "Upload a reference table (or load the example data) to run the "

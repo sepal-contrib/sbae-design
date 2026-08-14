@@ -14,7 +14,7 @@ logger = logging.getLogger("sbae.summary")
 
 
 @solara.component
-def Summary(theme_toggle=None):
+def Summary(theme_state=None):
     """Right panel content with progress and summary."""
     sample_results = app_state.sample_results.value
     sampling_method = app_state.sampling_method.value
@@ -28,13 +28,13 @@ def Summary(theme_toggle=None):
             sampling_method=sampling_method,
         )
 
-        precision_curve_graph(theme_toggle=theme_toggle)
+        precision_curve_graph(theme_state=theme_state)
 
         # Only show per-class precision for stratified sampling
         if sampling_method == "stratified":
-            per_class_precision_graph(theme_toggle=theme_toggle)
+            per_class_precision_graph(theme_state=theme_state)
 
-            area_proportion_pie_chart(theme_toggle=theme_toggle)
+            area_proportion_pie_chart(theme_state=theme_state)
 
 
 def statistics_summary(
@@ -156,7 +156,7 @@ def statistics_summary(
         )
 
 
-def precision_curve_graph(theme_toggle=None) -> None:
+def precision_curve_graph(theme_state=None) -> None:
     """Display precision curve graph showing MOE vs sample size relationship."""
     sample_results = app_state.sample_results.value
     if not sample_results:
@@ -226,7 +226,7 @@ def precision_curve_graph(theme_toggle=None) -> None:
     EChartsWidget.element(
         option=option,
         style={"height": "220px", "width": "100%"},
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
     )
 
     with solara.Row(
@@ -240,7 +240,7 @@ def precision_curve_graph(theme_toggle=None) -> None:
         )
 
 
-def per_class_precision_graph(theme_toggle=None) -> None:
+def per_class_precision_graph(theme_state=None) -> None:
     """Display per-class precision (MOE) given current allocation."""
     sample_results = app_state.sample_results.value
     if not sample_results:
@@ -324,7 +324,7 @@ def per_class_precision_graph(theme_toggle=None) -> None:
     EChartsWidget.element(
         option=option,
         style={"height": "280px", "width": "100%"},
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
     )
 
     max_moe_row = moe_df.iloc[0]
@@ -342,7 +342,7 @@ def per_class_precision_graph(theme_toggle=None) -> None:
 
 
 @solara.component
-def area_proportion_pie_chart(theme_toggle=None):
+def area_proportion_pie_chart(theme_state=None):
     """Pie chart showing the proportion of each class by area."""
     area_data = app_state.area_data.value
     class_colors = app_state.class_colors.value
@@ -410,5 +410,5 @@ def area_proportion_pie_chart(theme_toggle=None):
         style={"height": "380px", "width": "100%"},
         # width="100%",
         # height="300px",
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
     )

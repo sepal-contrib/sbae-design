@@ -66,7 +66,7 @@ def test_confusion_heatmap_data_shapes():
 
 def test_confusion_matrix_chart_renders_raw_widget():
     _, rc = solara.render(
-        ConfusionMatrixChart(_RESULTS, theme_toggle=None), handle_error=False
+        ConfusionMatrixChart(_RESULTS, theme_state=None), handle_error=False
     )
     widgets = rc.find(RawEChartsWidget).widgets
     assert len(widgets) == 1
@@ -78,7 +78,7 @@ def test_confusion_matrix_chart_renders_raw_widget():
 
 def test_accuracy_by_class_chart_two_series():
     _, rc = solara.render(
-        AccuracyByClassChart(_RESULTS, theme_toggle=None), handle_error=False
+        AccuracyByClassChart(_RESULTS, theme_state=None), handle_error=False
     )
     widgets = rc.find(EChartsWidget).widgets
     assert len(widgets) == 1
@@ -89,7 +89,7 @@ def test_accuracy_by_class_chart_two_series():
 
 def test_area_proportion_chart_pie_sums_to_100():
     _, rc = solara.render(
-        AreaProportionChart(_RESULTS, theme_toggle=None), handle_error=False
+        AreaProportionChart(_RESULTS, theme_state=None), handle_error=False
     )
     widgets = rc.find(EChartsWidget).widgets
     assert len(widgets) == 1
@@ -99,7 +99,7 @@ def test_area_proportion_chart_pie_sums_to_100():
 
 def test_area_estimate_chart_has_transparent_background():
     _, rc = solara.render(
-        AreaEstimateChart(_RESULTS, "ha", theme_toggle=None), handle_error=False
+        AreaEstimateChart(_RESULTS, "ha", theme_state=None), handle_error=False
     )
     widgets = rc.find(EChartsWidget).widgets
     assert len(widgets) == 1
@@ -109,22 +109,20 @@ def test_area_estimate_chart_has_transparent_background():
 def test_confusion_matrix_chart_empty_matrix_renders_nothing():
     results = {"confusion_matrix": {"index": [], "columns": [], "data": []}}
     _, rc = solara.render(
-        ConfusionMatrixChart(results, theme_toggle=None), handle_error=False
+        ConfusionMatrixChart(results, theme_state=None), handle_error=False
     )
     assert len(rc.find(RawEChartsWidget).widgets) == 0
 
 
 def test_accuracy_by_class_chart_empty_renders_nothing():
     _, rc = solara.render(
-        AccuracyByClassChart({}, theme_toggle=None), handle_error=False
+        AccuracyByClassChart({}, theme_state=None), handle_error=False
     )
     assert len(rc.find(EChartsWidget).widgets) == 0
 
 
 def test_area_proportion_chart_empty_renders_nothing():
-    _, rc = solara.render(
-        AreaProportionChart({}, theme_toggle=None), handle_error=False
-    )
+    _, rc = solara.render(AreaProportionChart({}, theme_state=None), handle_error=False)
     assert len(rc.find(EChartsWidget).widgets) == 0
 
 
@@ -136,7 +134,7 @@ def test_area_proportion_chart_all_zero_area_does_not_crash():
         ]
     }
     _, rc = solara.render(
-        AreaProportionChart(results, theme_toggle=None), handle_error=False
+        AreaProportionChart(results, theme_state=None), handle_error=False
     )
     assert (
         len(rc.find(EChartsWidget).widgets) == 1

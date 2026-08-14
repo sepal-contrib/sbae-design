@@ -1,7 +1,7 @@
 import logging
 
 import solara
-from sepal_ui.solara.components.aoi.aoi_view import AoiView
+from pysepal.solara.components.aoi.aoi_view import AoiView
 
 from component.model import app_state
 from component.tile.upload import CurrentFileDisplay, UploadTile

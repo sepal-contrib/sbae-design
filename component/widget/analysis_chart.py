@@ -35,7 +35,7 @@ def _ChartTitle(title: str):
 
 
 @solara.component
-def AreaEstimateChart(results: dict, unit: str, theme_toggle=None):
+def AreaEstimateChart(results: dict, unit: str, theme_state=None):
     rows = results.get("class_estimates", [])
     if not rows:
         return
@@ -91,7 +91,7 @@ def AreaEstimateChart(results: dict, unit: str, theme_toggle=None):
         EChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
-            theme_toggle=theme_toggle,
+            theme_state=theme_state,
         )
 
 
@@ -117,7 +117,7 @@ def confusion_heatmap_data(confusion_matrix: dict):
 
 
 @solara.component
-def ConfusionMatrixChart(results: dict, theme_toggle=None):
+def ConfusionMatrixChart(results: dict, theme_state=None):
     cm = results.get("confusion_matrix")
     if not cm or not cm.get("data"):
         return
@@ -174,12 +174,12 @@ def ConfusionMatrixChart(results: dict, theme_toggle=None):
         RawEChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
-            theme_toggle=theme_toggle,
+            theme_state=theme_state,
         )
 
 
 @solara.component
-def AccuracyByClassChart(results: dict, theme_toggle=None):
+def AccuracyByClassChart(results: dict, theme_state=None):
     rows = results.get("accuracy_rows", [])
     if not rows:
         return
@@ -204,7 +204,7 @@ def AccuracyByClassChart(results: dict, theme_toggle=None):
         EChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
-            theme_toggle=theme_toggle,
+            theme_state=theme_state,
         )
 
 
@@ -223,7 +223,7 @@ _PIE_FALLBACK = [
 
 @solara.component
 def AreaProportionChart(
-    results: dict, theme_toggle=None, legend_width: int | None = 480, card: bool = True
+    results: dict, theme_state=None, legend_width: int | None = 480, card: bool = True
 ):
     rows = results.get("class_estimates", [])
     if not rows:
@@ -276,7 +276,7 @@ def AreaProportionChart(
         EChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
-            theme_toggle=theme_toggle,
+            theme_state=theme_state,
         )
 
     # ``card=False`` drops the surface so it sits flush in the right panel.

@@ -5,8 +5,8 @@ from typing import Any, Dict
 
 import solara
 from pysepal.mapping import prepare_for_tiles
-from sepal_ui.sepalwidgets.file_input import FileInputComponent
-from sepal_ui.solara.notifications import use_notifications
+from pysepal.solara import use_notifications
+from pysepal.solara.components.inputs import FileInputComponent
 
 from component.model import app_state
 from component.scripts.geospatial import (
