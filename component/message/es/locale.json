@@ -159,7 +159,7 @@
             "type": "Tipo",
             "size": "Tamaño",
             "features": "Entidades",
-            "crs": "SRC",
+            "crs": "CRS",
             "crs_missing": "No especificado"
         },
         "toast": {
@@ -229,7 +229,7 @@
         },
         "filter": {
             "title": "Filtro (opcional)",
-            "help": "Opcional: limite la evaluación a un subconjunto de puntos de referencia -- elija una columna y conserve solo los valores que desee (p. ej., una región, un mosaico o una campaña). Déjelo vacío para usar todas las filas.",
+            "help": "Opcional: limite la evaluación a un subconjunto de puntos de referencia -- elija una columna y conserve solo los valores que desee (p. ej., una región, un tile o una campaña). Déjelo vacío para usar todas las filas.",
             "column": "Columna de filtro",
             "keep_values": "Valores a conservar"
         },
