@@ -20,10 +20,11 @@ if os.path.exists(proj_data):
 # jupyter-server-proxy route that forwards any port in the sandbox, so it carries
 # PMTiles as well as raster tiles -- but vectortileserver never autodetects one,
 # and left alone its layers keep a URL the browser cannot reach, so the points
-# silently never arrive. Only borrow a generic route: localtileserver's own
-# autodetected prefix is namespaced to itself and would not serve a vector port.
+# silently never arrive. Only borrow the generic /proxy/{port} form: it forwards
+# any port by construction, while a route namespaced to one server (localtileserver's
+# own autodetected prefix) would not serve a vector port.
 _raster_prefix = os.environ.get("LOCALTILESERVER_CLIENT_PREFIX")
-if _raster_prefix and "localtileserver-proxy" not in _raster_prefix:
+if _raster_prefix and "/proxy/{port}" in _raster_prefix:
     os.environ.setdefault("VECTORTILESERVER_CLIENT_PREFIX", _raster_prefix)
 
 import logging
