@@ -4,6 +4,7 @@ import ipyvuetify as ipv
 import solara
 from traitlets import Int, Unicode
 
+from component.message import use_translator
 from component.model import app_state
 from component.widget.analysis_chart import (
     AccuracyByClassChart,
@@ -80,31 +81,33 @@ def _KpiStat(icon: str, label: str, value: str, hint: str):
 @solara.component
 def _DashboardKpiCards(results: dict):
     """Overall accuracy / confidence / samples / classes as compact stat items."""
+    ms = use_translator()
     k = dashboard_kpis(results)
+    d = ms.analysis.dashboard
     items = [
         (
             "mdi-target",
-            "Overall accuracy",
+            d.overall_accuracy,
             f"{k['overall_accuracy_pct']:.1f}%",
-            "Share of reference points classified correctly.",
+            d.overall_accuracy_hint,
         ),
         (
             "mdi-percent-outline",
-            "Confidence level",
+            d.confidence_level,
             f"{k['confidence_level']:.0f}%",
-            "Probability that the ± intervals contain the true value.",
+            d.confidence_level_hint,
         ),
         (
             "mdi-map-marker-multiple",
-            "Reference samples",
+            d.reference_samples,
             f"{k['n_samples']:,}",
-            "Total reference points assessed.",
+            d.reference_samples_hint,
         ),
         (
             "mdi-shape-outline",
-            "Classes",
+            d.classes,
             f"{k['n_classes']}",
-            "Number of map classes evaluated.",
+            d.classes_hint,
         ),
     ]
     with solara.v.Row(dense=True, align="center", justify="center", class_="mb-3"):
@@ -113,12 +116,13 @@ def _DashboardKpiCards(results: dict):
 
 
 @solara.component
-def AnalysisDashboardModal(open, theme_toggle=None):
+def AnalysisDashboardModal(open, theme_state=None):
     # Hooks must run unconditionally, before the early return, for hook-order
     # stability across renders (see solara's rules-of-hooks).
     #
     # Kick ECharts into a re-layout each time the dialog opens; otherwise the
     # charts, mounted eagerly while the dialog was hidden, stay tiny.
+    ms = use_translator()
     resizer = solara.use_memo(_DialogResizer, [])
 
     def _resize_on_open():
@@ -136,16 +140,16 @@ def AnalysisDashboardModal(open, theme_toggle=None):
         v_model=open.value, on_v_model=open.set, max_width=1400, eager=True
     ):
         with solara.v.Card():
-            solara.v.CardTitle(children=["Accuracy assessment results"])
+            solara.v.CardTitle(children=[ms.analysis.dashboard.title])
             with solara.v.CardText(style="max-height: 80vh; overflow-y: auto;"):
                 solara.v.Html(tag="div", children=[resizer], style_="display: none;")
                 _DashboardKpiCards(results)
                 with solara.ColumnsResponsive(6, small=12):
-                    ConfusionMatrixChart(results, theme_toggle=theme_toggle)
-                    AccuracyByClassChart(results, theme_toggle=theme_toggle)
-                    AreaEstimateChart(results, unit, theme_toggle=theme_toggle)
-                    AreaProportionChart(results, theme_toggle=theme_toggle)
-                with solara.Details("Tables"):
+                    ConfusionMatrixChart(results, theme_state=theme_state)
+                    AccuracyByClassChart(results, theme_state=theme_state)
+                    AreaEstimateChart(results, unit, theme_state=theme_state)
+                    AreaProportionChart(results, theme_state=theme_state)
+                with solara.Details(ms.analysis.dashboard.tables):
                     # Space the three tables apart so they don't read as one block.
                     with solara.Column(style="gap: 28px; padding-top: 8px;"):
                         _AreaEstimates(results, unit)
@@ -153,40 +157,44 @@ def AnalysisDashboardModal(open, theme_toggle=None):
                         _ConfusionMatrix(results)
             with solara.v.CardActions():
                 solara.v.Spacer()
-                solara.Button("Close", text=True, on_click=lambda: open.set(False))
+                solara.Button(
+                    ms.common.close, text=True, on_click=lambda: open.set(False)
+                )
 
 
 @solara.component
-def AnalysisSummaryCard(theme_toggle=None):
+def AnalysisSummaryCard(theme_state=None):
     results = app_state.analysis_results.value
-    # Hook must run unconditionally, before the early return, for hook-order
+    # Hooks must run unconditionally, before the early return, for hook-order
     # stability across renders (see solara's rules-of-hooks).
+    ms = use_translator()
     open_modal = solara.use_reactive(False)
     if not results:
         return
     k = dashboard_kpis(results)
+    d = ms.analysis.dashboard
     with solara.Column(gap="8px"):
         # Compact stat chips + one graph, mirroring the design tab's summary
         # style so both tabs feel consistent.
         with solara.Row(gap="4px", justify="center", style="flex-wrap: wrap;"):
             for chip_text in (
-                f"Overall {k['overall_accuracy_pct']:.1f}%",
-                f"CL {k['confidence_level']:.0f}%",
-                f"n={k['n_samples']:,}",
-                f"{k['n_classes']} classes",
+                d.overall_chip.format(f"{k['overall_accuracy_pct']:.1f}"),
+                d.confidence_chip.format(f"{k['confidence_level']:.0f}"),
+                d.samples_chip.format(f"{k['n_samples']:,}"),
+                d.classes_chip.format(k["n_classes"]),
             ):
                 solara.v.Chip(
                     small=True, label=True, outlined=True, children=[chip_text]
                 )
         AreaProportionChart(
-            results, theme_toggle=theme_toggle, legend_width=None, card=False
+            results, theme_state=theme_state, legend_width=None, card=False
         )
         solara.Button(
-            "View dashboard",
+            d.open,
             color="primary",
             block=True,
             small=True,
             on_click=lambda: open_modal.set(True),
         )
         _Downloads()
-    AnalysisDashboardModal(open_modal, theme_toggle=theme_toggle)
+    AnalysisDashboardModal(open_modal, theme_state=theme_state)

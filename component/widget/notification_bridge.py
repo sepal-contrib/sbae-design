@@ -3,7 +3,7 @@
 import logging
 
 import solara
-from sepal_ui.solara.notifications import use_notifications
+from pysepal.solara import use_notifications
 
 from component.model import app_state
 

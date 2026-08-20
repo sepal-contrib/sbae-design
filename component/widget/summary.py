@@ -6,6 +6,7 @@ import solara
 from ipecharts.option import Grid, Legend, Option, Title, Tooltip, XAxis, YAxis
 from ipecharts.option.series import Bar, Line, Pie
 
+from component.message import get_translator, use_translator
 from component.model import app_state
 from component.scripts.stratified import calculate_per_class_moe_for_allocation
 from component.widget.echarts import EChartsWidget
@@ -14,8 +15,13 @@ logger = logging.getLogger("sbae.summary")
 
 
 @solara.component
-def Summary(theme_toggle=None):
+def Summary(theme_state=None):
     """Right panel content with progress and summary."""
+    # The helpers below are plain functions, not components, so they share this
+    # component's hook scope -- and two of them are called conditionally. The
+    # translator is resolved once here and passed down rather than hooked in
+    # each, which would make the hook count vary with the sampling method.
+    ms = use_translator()
     sample_results = app_state.sample_results.value
     sampling_method = app_state.sampling_method.value
 
@@ -26,15 +32,16 @@ def Summary(theme_toggle=None):
             sample_results=sample_results,
             sample_points=app_state.sample_points.value,
             sampling_method=sampling_method,
+            ms=ms,
         )
 
-        precision_curve_graph(theme_toggle=theme_toggle)
+        precision_curve_graph(theme_state=theme_state, ms=ms)
 
         # Only show per-class precision for stratified sampling
         if sampling_method == "stratified":
-            per_class_precision_graph(theme_toggle=theme_toggle)
+            per_class_precision_graph(theme_state=theme_state, ms=ms)
 
-            area_proportion_pie_chart(theme_toggle=theme_toggle)
+            area_proportion_pie_chart(theme_state=theme_state)
 
 
 def statistics_summary(
@@ -43,6 +50,7 @@ def statistics_summary(
     sample_results: Optional[Dict] = None,
     sample_points: Optional[pd.DataFrame] = None,
     sampling_method: str = "stratified",
+    ms=None,
 ) -> None:
     """Display summary statistics.
 
@@ -52,7 +60,9 @@ def statistics_summary(
         sample_results: Sample calculation results
         sample_points: Generated sample points
         sampling_method: Current sampling method
+        ms: Message catalog; defaults to English
     """
+    ms = ms if ms is not None else get_translator()
     with solara.Row(gap="4px", justify="center", style="flex-wrap: wrap;"):
         # Show area based on sampling method
         if (
@@ -67,13 +77,13 @@ def statistics_summary(
                 small=True,
                 label=True,
                 outlined=True,
-                children=[f"{total_area:,.1f} ha"],
+                children=[ms.design.stats.area_ha.format(f"{total_area:,.1f}")],
             )
             solara.v.Chip(
                 small=True,
                 label=True,
                 outlined=True,
-                children=[f"{n_classes} classes"],
+                children=[ms.design.stats.class_count.format(n_classes)],
             )
         elif sampling_method in ("simple", "systematic") and aoi_gdf is not None:
             try:
@@ -86,7 +96,7 @@ def statistics_summary(
                     small=True,
                     label=True,
                     outlined=True,
-                    children=[f"{area_ha:,.1f} ha"],
+                    children=[ms.design.stats.area_ha.format(f"{area_ha:,.1f}")],
                 )
             except Exception as e:
                 logger.error(f"Error calculating AOI area: {e}")
@@ -95,21 +105,13 @@ def statistics_summary(
         moe_chip_ref = solara.use_reactive(None)
 
         if sample_results:
+            target_error = sample_results.get("target_error", "N/A")
             if sampling_method == "stratified":
-                precision_label = (
-                    f"Target SE: {sample_results.get('target_error', 'N/A')}%"
-                )
-                precision_tooltip = (
-                    "Target standard error of expected overall accuracy used to "
-                    "calculate the stratified sample size."
-                )
+                precision_label = ms.design.stats.target_se.format(target_error)
+                precision_tooltip = ms.design.stats.target_se_tooltip
             else:
-                precision_label = f"MOE: {sample_results.get('target_error', 'N/A')}%"
-                precision_tooltip = (
-                    "Margin of Error: The range of uncertainty in the overall "
-                    "accuracy estimate at the specified confidence level. Lower "
-                    "MOE indicates higher precision."
-                )
+                precision_label = ms.design.stats.moe.format(target_error)
+                precision_tooltip = ms.design.stats.moe_tooltip
 
             moe_chip = solara.v.Chip(
                 small=True,
@@ -136,7 +138,11 @@ def statistics_summary(
                 small=True,
                 label=True,
                 outlined=True,
-                children=[f"n={sample_results.get('total_samples', 'N/A')}"],
+                children=[
+                    ms.design.stats.sample_count.format(
+                        sample_results.get("total_samples", "N/A")
+                    )
+                ],
             )
 
         def set_v_on():
@@ -151,13 +157,12 @@ def statistics_summary(
         solara.use_effect(set_v_on, [moe_chip_ref.value])
 
     if not sample_results:
-        solara.Info(
-            "Define an area of interest, or load a classification map for stratified sampling, to compute the sample design."
-        )
+        solara.Info(ms.design.stats.empty)
 
 
-def precision_curve_graph(theme_toggle=None) -> None:
+def precision_curve_graph(theme_state=None, ms=None) -> None:
     """Display precision curve graph showing MOE vs sample size relationship."""
+    ms = ms if ms is not None else get_translator()
     sample_results = app_state.sample_results.value
     if not sample_results:
         logger.debug("No sample results available, skipping precision curve graph")
@@ -179,7 +184,7 @@ def precision_curve_graph(theme_toggle=None) -> None:
 
     # Create line series for the precision curve
     line = Line(
-        name="MOE vs Sample Size",
+        name=ms.design.charts.precision_curve_series,
         data=[[x, y] for x, y in zip(sample_sizes, moe_percents)],
         smooth=True,
         lineStyle={"color": "#5470c6", "width": 2},
@@ -188,7 +193,7 @@ def precision_curve_graph(theme_toggle=None) -> None:
 
     # Create scatter series for current design point
     current_point = Line(
-        name=f"Current Design (n={current_total})",
+        name=ms.design.charts.precision_curve_current.format(current_total),
         data=[[current_total, round(current_moe, 2)]],
         type="scatter",
         symbolSize=12,
@@ -199,20 +204,20 @@ def precision_curve_graph(theme_toggle=None) -> None:
     option = Option(
         backgroundColor="#1e1e1e00",
         title=Title(
-            text="Precision Curve",
+            text=ms.design.charts.precision_curve_title,
             left="center",
             textStyle={"fontSize": 13, "fontWeight": "normal"},
         ),
         xAxis=XAxis(
             type="value",
-            name="Sample Size",
+            name=ms.design.charts.sample_size_axis,
             nameLocation="middle",
             nameGap=25,
             nameTextStyle={"fontSize": 11},
         ),
         yAxis=YAxis(
             type="value",
-            name="MOE (%)",
+            name=ms.design.charts.moe_axis,
             nameLocation="middle",
             nameGap=35,
             nameTextStyle={"fontSize": 11},
@@ -226,7 +231,7 @@ def precision_curve_graph(theme_toggle=None) -> None:
     EChartsWidget.element(
         option=option,
         style={"height": "220px", "width": "100%"},
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
     )
 
     with solara.Row(
@@ -236,12 +241,17 @@ def precision_curve_graph(theme_toggle=None) -> None:
             x_small=True,
             label=True,
             outlined=True,
-            children=[f"n={current_total}, MOE=±{current_moe:.2f}%"],
+            children=[
+                ms.design.charts.current_design_chip.format(
+                    current_total, f"{current_moe:.2f}"
+                )
+            ],
         )
 
 
-def per_class_precision_graph(theme_toggle=None) -> None:
+def per_class_precision_graph(theme_state=None, ms=None) -> None:
     """Display per-class precision (MOE) given current allocation."""
+    ms = ms if ms is not None else get_translator()
     sample_results = app_state.sample_results.value
     if not sample_results:
         return
@@ -277,7 +287,7 @@ def per_class_precision_graph(theme_toggle=None) -> None:
     ]
 
     bar_series = Bar(
-        name="MOE (%)",
+        name=ms.design.charts.moe_axis,
         data=[
             {
                 "value": round(moe, 2),
@@ -296,13 +306,13 @@ def per_class_precision_graph(theme_toggle=None) -> None:
     option = Option(
         backgroundColor="#1e1e1e00",
         title=Title(
-            text="Per-Class Precision",
+            text=ms.design.charts.per_class_title,
             left="center",
             textStyle={"fontSize": 13, "fontWeight": "normal"},
         ),
         xAxis=XAxis(
             type="value",
-            name="MOE (%)",
+            name=ms.design.charts.moe_axis,
             nameLocation="middle",
             nameGap=25,
             nameTextStyle={"fontSize": 11},
@@ -324,7 +334,7 @@ def per_class_precision_graph(theme_toggle=None) -> None:
     EChartsWidget.element(
         option=option,
         style={"height": "280px", "width": "100%"},
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
     )
 
     max_moe_row = moe_df.iloc[0]
@@ -336,14 +346,17 @@ def per_class_precision_graph(theme_toggle=None) -> None:
             label=True,
             outlined=True,
             children=[
-                f"Max MOE: {max_moe_row['class_name']} (±{max_moe_row['moe_percent']:.1f}%)"
+                ms.design.charts.max_moe_chip.format(
+                    max_moe_row["class_name"], f"{max_moe_row['moe_percent']:.1f}"
+                )
             ],
         )
 
 
 @solara.component
-def area_proportion_pie_chart(theme_toggle=None):
+def area_proportion_pie_chart(theme_state=None):
     """Pie chart showing the proportion of each class by area."""
+    ms = use_translator()
     area_data = app_state.area_data.value
     class_colors = app_state.class_colors.value
 
@@ -369,7 +382,9 @@ def area_proportion_pie_chart(theme_toggle=None):
 
     for idx, row in area_data.iterrows():
         map_code = row["map_code"]
-        current_name = row.get("map_edited_class", f"Class {map_code}")
+        current_name = row.get(
+            "map_edited_class", ms.common.class_code.format(map_code)
+        )
         area_pct = 100 * row["map_area"] / total_area
 
         # Get color from extracted palette or use default
@@ -399,7 +414,7 @@ def area_proportion_pie_chart(theme_toggle=None):
         series=[pie],
         color=chart_colors,
         title=Title(
-            text="Proportion by Area",
+            text=ms.design.charts.area_proportion_title,
             left="center",
             textStyle={"fontSize": 13, "fontWeight": "normal"},
         ),
@@ -410,5 +425,5 @@ def area_proportion_pie_chart(theme_toggle=None):
         style={"height": "380px", "width": "100%"},
         # width="100%",
         # height="300px",
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
     )

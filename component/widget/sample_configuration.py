@@ -9,6 +9,7 @@ import logging
 import solara
 import solara.lab
 
+from component.message import use_translator
 from component.model import app_state
 from component.sampling import SamplingService
 from component.tile.class_editor import class_editor_table
@@ -26,26 +27,6 @@ logger = logging.getLogger("sbae.sample_configuration")
 
 AA_DESIGN_WORKFLOW = "aa_design"
 ADVANCED_WORKFLOW = "advanced"
-
-# Short intro shown inline in the Design tab.
-AA_DESIGN_INTRO = (
-    "**Accuracy assessment design** — stratified sample size and allocation "
-    "following Olofsson et al. (2014) good practices."
-)
-
-# Detailed methodology, shown in the "What's this?" help popup.
-AA_DESIGN_HELP = (
-    "Sample size and allocation follow **Olofsson et al. (2014)**, "
-    "*Good practices for estimating area and assessing accuracy of land "
-    "change*.\n\n"
-    "**Inputs:** Expected User's Accuracy (EUA) per class (High / Low "
-    "confidence), target standard error, and minimum samples per class.\n\n"
-    "**Total sample size:** `n = ( sum(Wi*Si) / SE )^2`, with "
-    "`Si = sqrt(EUAi*(1-EUAi))` and `Wi` the area share.\n\n"
-    "**Allocation (adjusted proportional):** start from area-proportional "
-    "samples, raise any class below the minimum up to it, then redistribute "
-    "the rest proportionally. Edit any class's sample count to override."
-)
 
 
 def apply_sample_design_workflow(state, workflow: str):
@@ -78,8 +59,9 @@ def apply_sample_design_workflow(state, workflow: str):
 
 
 @solara.component
-def SampleConfiguration(sbae_map=None, theme_toggle=None):
+def SampleConfiguration(sbae_map=None, theme_state=None):
     """Sample configuration widget for the right panel."""
+    ms = use_translator()
     # Use use_ref to persist value across renders without re-initializing
     prev_method_ref = solara.use_ref(app_state.sampling_method.value)
     current_method = app_state.sampling_method.value
@@ -138,35 +120,40 @@ def SampleConfiguration(sbae_map=None, theme_toggle=None):
             if results.success:
                 app_state.set_sample_results(results.to_dict())
             else:
-                app_state.add_error(results.error_message or "Calculation failed")
+                app_state.add_error(
+                    results.error_message or ms.design.error.calculation_failed
+                )
         except Exception as e:
-            app_state.add_error(f"Error calculating samples: {e!s}")
+            app_state.add_error(ms.design.error.calculating.format(e))
 
     active_tab = solara.use_reactive(0)
     point_generation_controller = use_point_generation_task(sbae_map)
 
     with solara.Column():
         with solara.lab.Tabs(value=active_tab):
-            solara.lab.Tab("Design")
-            solara.lab.Tab("Analysis")
+            solara.lab.Tab(ms.design.tab)
+            solara.lab.Tab(ms.analysis.tab)
 
         if active_tab.value == 0:
             DesignTab(
                 sbae_map,
-                theme_toggle=theme_toggle,
+                theme_state=theme_state,
                 point_generation_controller=point_generation_controller,
             )
         else:
-            AnalysisTab(sbae_map=sbae_map, theme_toggle=theme_toggle)
+            AnalysisTab(sbae_map=sbae_map, theme_state=theme_state)
 
 
 @solara.component
-def MethodologyHelpButton(
-    title="Olofsson AA design — methodology",
-    content=AA_DESIGN_HELP,
-):
-    """Question-mark icon that opens the methodology explanation in a dialog."""
+def MethodologyHelpButton(title=None, content=None):
+    """Question-mark icon that opens the methodology explanation in a dialog.
+
+    Defaults to the design-step methodology; the analysis tab passes its own.
+    """
+    ms = use_translator()
     show, set_show = solara.use_state(False)
+    title = title if title is not None else ms.design.help.title
+    content = content if content is not None else ms.design.help.body
 
     solara.Button(
         icon_name="mdi-help-circle-outline",
@@ -187,15 +174,18 @@ def MethodologyHelpButton(
                 solara.Markdown(content)
             with solara.v.CardActions():
                 solara.v.Spacer()
-                solara.Button("Close", text=True, on_click=lambda: set_show(False))
+                solara.Button(
+                    ms.common.close, text=True, on_click=lambda: set_show(False)
+                )
 
 
 @solara.component
-def DesignTab(sbae_map=None, theme_toggle=None, point_generation_controller=None):
+def DesignTab(sbae_map=None, theme_state=None, point_generation_controller=None):
     """Olofsson accuracy-assessment sample design."""
+    ms = use_translator()
     with solara.Row(style="align-items: center; gap: 4px;"):
         with solara.Column(style="flex: 1;"):
-            solara.Markdown(AA_DESIGN_INTRO)
+            solara.Markdown(ms.design.intro)
         MethodologyHelpButton()
 
     AoiUploadSelector(sbae_map)
@@ -221,13 +211,13 @@ def DesignTab(sbae_map=None, theme_toggle=None, point_generation_controller=None
     # Design tab so they no longer leak onto the Analysis tab.
     DesignOutputs(
         sbae_map,
-        theme_toggle=theme_toggle,
+        theme_state=theme_state,
         point_generation_controller=point_generation_controller,
     )
 
 
 @solara.component
-def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=None):
+def DesignOutputs(sbae_map=None, theme_state=None, point_generation_controller=None):
     """Design-phase outputs, relocated from standalone right-panel sections.
 
     Renders the sample-design summary, point generation and export blocks using
@@ -235,13 +225,14 @@ def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=
     section look). Kept standalone so it scopes cleanly to the Design tab (and
     renders without a map).
     """
-    Section("Summary", "mdi-progress-check")
-    Summary(theme_toggle=theme_toggle)
+    ms = use_translator()
+    Section(ms.design.outputs.summary, "mdi-progress-check")
+    Summary(theme_state=theme_state)
 
     Section(
-        "Generate Points",
+        ms.design.outputs.generate_points,
         "mdi-map-marker-multiple",
-        "Generate sample points based on calculated sample sizes.",
+        ms.design.outputs.generate_points_description,
     )
     if point_generation_controller is None:
         PointGeneration(sbae_map)
@@ -249,38 +240,39 @@ def DesignOutputs(sbae_map=None, theme_toggle=None, point_generation_controller=
         PointGenerationView(sbae_map, point_generation_controller)
 
     Section(
-        "Export Results",
+        ms.design.outputs.export,
         "mdi-download",
-        "Download the generated sample points (CSV / GeoJSON).",
+        ms.design.outputs.export_description,
     )
     Export()
 
 
 @solara.component
-def AnalysisTab(sbae_map=None, theme_toggle=None):
+def AnalysisTab(sbae_map=None, theme_state=None):
     """Accuracy-assessment analysis (area estimation + accuracies)."""
     from component.widget.analysis_tab import AnalysisPanel
 
-    AnalysisPanel(sbae_map=sbae_map, theme_toggle=theme_toggle)
+    AnalysisPanel(sbae_map=sbae_map, theme_state=theme_state)
 
 
 @solara.component
 def SampleDesignWorkflowSelector():
     """Toggle between Olofsson accuracy-assessment design and sampling."""
+    ms = use_translator()
 
     def update_workflow(value):
         if value is not None:
             try:
                 apply_sample_design_workflow(app_state, value)
             except (ValueError, TypeError) as e:
-                app_state.add_error(f"Invalid sample design workflow: {e!s}")
+                app_state.add_error(ms.design.workflow.invalid.format(e))
 
     active_workflow = app_state.sample_design_workflow.value
 
-    solara.Text("Sample Design Workflow", style="font-weight: bold;")
+    solara.Text(ms.design.workflow.title, style="font-weight: bold;")
     with solara.Row(gap="4px", style="margin-bottom: 8px;"):
         solara.Button(
-            label="Olofsson AA Design",
+            label=ms.design.workflow.aa_design,
             on_click=lambda: update_workflow(AA_DESIGN_WORKFLOW),
             icon_name="mdi-bullseye-arrow",
             color="primary" if active_workflow == AA_DESIGN_WORKFLOW else None,
@@ -289,7 +281,7 @@ def SampleDesignWorkflowSelector():
             text=True,
         )
         solara.Button(
-            label="Sampling",
+            label=ms.design.workflow.advanced,
             on_click=lambda: update_workflow(ADVANCED_WORKFLOW),
             icon_name="mdi-flask-outline",
             color="primary" if active_workflow == ADVANCED_WORKFLOW else None,
@@ -299,7 +291,7 @@ def SampleDesignWorkflowSelector():
         )
 
     if active_workflow == AA_DESIGN_WORKFLOW:
-        solara.Markdown(AA_DESIGN_INTRO)
+        solara.Markdown(ms.design.intro)
 
     if active_workflow == ADVANCED_WORKFLOW:
         SamplingMethodSelector(values=["simple", "systematic"])
@@ -308,9 +300,9 @@ def SampleDesignWorkflowSelector():
 @solara.component
 def AccuracyDesignControls():
     """Compact controls for the Olofsson accuracy-assessment design."""
+    ms = use_translator()
     ClassEditorDialogButton(
-        button_label="Edit classes & EUA",
-        dialog_title="Edit Classes, EUA & Samples",
+        dialog_title=ms.design.class_editor.dialog_title_with_samples,
         show_sample_controls=True,
     )
     StratifiedParameters()
@@ -318,12 +310,15 @@ def AccuracyDesignControls():
 
 @solara.component
 def ClassEditorDialogButton(
-    button_label="Edit classes & EUA",
-    dialog_title="Edit Classes and Expected User's Accuracy",
+    button_label=None,
+    dialog_title=None,
     show_sample_controls=False,
 ):
     """Open the class/EUA editor in a dialog instead of rendering it inline."""
+    ms = use_translator()
     show_editor_dialog, set_show_editor_dialog = solara.use_state(False)
+    button_label = button_label or ms.design.class_editor.button
+    dialog_title = dialog_title or ms.design.class_editor.dialog_title
 
     solara.Button(
         button_label,
@@ -351,6 +346,7 @@ def ClassEditorDialogButton(
 @solara.component
 def SamplingMethodSelector(values=None):
     """Dropdown for selecting sampling method."""
+    ms = use_translator()
     if values is None:
         values = ["stratified", "simple", "systematic"]
 
@@ -366,10 +362,10 @@ def SamplingMethodSelector(values=None):
                     app_state.simple_total_samples.value,
                 )
             except (ValueError, TypeError) as e:
-                app_state.add_error(f"Invalid sampling method: {e!s}")
+                app_state.add_error(ms.design.error.invalid_method.format(e))
 
     solara.Select(
-        label="Sampling Method",
+        label=ms.design.parameters.sampling_method,
         value=app_state.sampling_method.value,
         values=values,
         on_value=update_method,
@@ -379,6 +375,7 @@ def SamplingMethodSelector(values=None):
 @solara.component
 def SimpleSystematicParameters():
     """Parameters for simple and systematic sampling."""
+    ms = use_translator()
 
     def update_total_samples(value):
         if value is not None and value != "":
@@ -394,7 +391,7 @@ def SimpleSystematicParameters():
                         int_value,
                     )
             except (ValueError, TypeError) as e:
-                app_state.add_error(f"Invalid sample total: {e!s}")
+                app_state.add_error(ms.design.error.invalid_total.format(e))
 
     def update_confidence(value):
         if value is not None:
@@ -403,7 +400,7 @@ def SimpleSystematicParameters():
                     app_state.target_error.value, float(value)
                 )
             except (ValueError, TypeError) as e:
-                app_state.add_error(f"Invalid confidence level: {e!s}")
+                app_state.add_error(ms.design.error.invalid_confidence.format(e))
 
     def update_expected_accuracy(value):
         if value is not None:
@@ -417,19 +414,19 @@ def SimpleSystematicParameters():
                     app_state.simple_total_samples.value,
                 )
             except (ValueError, TypeError) as e:
-                app_state.add_error(f"Invalid expected accuracy: {e!s}")
+                app_state.add_error(ms.design.error.invalid_expected_accuracy.format(e))
 
     with solara.Row(gap="8px", style="margin-bottom: 8px;"):
         with solara.Column(style="flex: 1;"):
             solara.v.TextField(
-                label="Total Sample Size",
+                label=ms.design.parameters.total_sample_size,
                 v_model=app_state.simple_total_samples.value,
                 on_v_model=update_total_samples,
                 type="number",
             )
         with solara.Column(style="flex: 1;"):
             solara.Select(
-                label="Confidence Level",
+                label=ms.design.parameters.confidence_level,
                 value=app_state.confidence_level.value,
                 values=[90.0, 95.0, 99.0],
                 on_value=update_confidence,
@@ -438,7 +435,7 @@ def SimpleSystematicParameters():
     with solara.Row(gap="8px", style="margin-bottom: 8px;"):
         with solara.Column(style="flex: 1;"):
             solara.SliderFloat(
-                "Expected Overall Accuracy (%)",
+                ms.design.parameters.expected_accuracy,
                 value=app_state.expected_accuracy.value,
                 min=50.0,
                 max=99.0,
@@ -450,6 +447,7 @@ def SimpleSystematicParameters():
 @solara.component
 def StratifiedParameters():
     """Parameters for stratified sampling."""
+    ms = use_translator()
 
     def update_target_error(value):
         if value is not None and value != "":
@@ -460,7 +458,7 @@ def StratifiedParameters():
                         float_value, app_state.confidence_level.value
                     )
             except (ValueError, TypeError) as e:
-                app_state.add_error(f"Invalid target error: {e!s}")
+                app_state.add_error(ms.design.error.invalid_target_error.format(e))
 
     def update_min_samples(value):
         if value is not None and value != "":
@@ -473,23 +471,23 @@ def StratifiedParameters():
                         int_value,
                     )
             except (ValueError, TypeError) as e:
-                app_state.add_error(f"Invalid minimum samples: {e!s}")
+                app_state.add_error(ms.design.error.invalid_min_samples.format(e))
 
     with solara.Row(gap="8px", style="margin-bottom: 8px;"):
         with solara.Column(style="flex: 1;"):
             solara.v.TextField(
-                label="Target Standard Error (%)",
+                label=ms.design.parameters.target_error,
                 v_model=app_state.target_error.value,
                 on_v_model=update_target_error,
                 type="number",
-                hint="Standard error of expected overall accuracy",
+                hint=ms.design.parameters.target_error_hint,
             )
 
         with solara.Column(style="flex: 1;"):
             solara.v.TextField(
-                label="Minimum Samples per Class",
+                label=ms.design.parameters.min_samples,
                 v_model=app_state.min_samples_per_class.value,
                 on_v_model=update_min_samples,
                 type="number",
-                hint="Safety minimum for small/rare classes",
+                hint=ms.design.parameters.min_samples_hint,
             )

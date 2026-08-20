@@ -2,6 +2,7 @@
 
 import solara
 
+from component.message import use_translator
 from component.model import app_state
 from component.scripts.accuracy import convert_area
 from component.widget.custom_widgets import DownloadMenu, Section
@@ -12,24 +13,26 @@ def _unit_label(unit: str) -> str:
 
 
 @solara.component
-def AnalysisResultsView(theme_toggle=None):
+def AnalysisResultsView(theme_state=None):
     results = app_state.analysis_results.value
     if not results:
         return
     from component.widget.analysis_dashboard import AnalysisSummaryCard
 
-    AnalysisSummaryCard(theme_toggle=theme_toggle)
+    AnalysisSummaryCard(theme_state=theme_state)
 
 
 @solara.component
 def _ConfusionMatrix(results):
+    ms = use_translator()
     cm = results.get("confusion_matrix")
     if not cm:
         return
+    tables = ms.analysis.tables
     with solara.Column(gap="4px"):
-        Section("Error matrix", "mdi-grid", "rows = map, cols = reference")
+        Section(tables.confusion_title, "mdi-grid", tables.confusion_description)
         with solara.GridFixed(columns=len(cm["columns"]) + 1):
-            solara.Text("map\\ref", style="font-weight: bold;")
+            solara.Text(tables.confusion_corner, style="font-weight: bold;")
             for c in cm["columns"]:
                 solara.Text(str(c), style="font-weight: bold;")
             for code, row in zip(cm["index"], cm["data"]):
@@ -40,22 +43,22 @@ def _ConfusionMatrix(results):
 
 @solara.component
 def _AreaEstimates(results, unit):
+    ms = use_translator()
     rows = results.get("class_estimates", [])
     if not rows:
         return
     u = _unit_label(unit)
+    tables = ms.analysis.tables
     headers = [
-        "Class",
-        "Samples",
-        f"Map area ({u})",
-        f"Adj. area ({u})",
-        f"± CI ({u})",
-        f"SRS area ({u})",
+        tables.class_header,
+        tables.samples_header,
+        tables.map_area_header.format(u),
+        tables.adjusted_area_header.format(u),
+        tables.confidence_interval_header.format(u),
+        tables.srs_area_header.format(u),
     ]
     with solara.Column(gap="4px"):
-        Section(
-            "Area estimates", "mdi-chart-box-outline", "Error-adjusted (Olofsson 2014)"
-        )
+        Section(tables.area_title, "mdi-chart-box-outline", tables.area_description)
         with solara.GridFixed(columns=len(headers)):
             for h in headers:
                 solara.Text(h, style="font-weight: bold;")
@@ -70,12 +73,19 @@ def _AreaEstimates(results, unit):
 
 @solara.component
 def _Accuracy(results):
+    ms = use_translator()
     rows = results.get("accuracy_rows", [])
     if not rows:
         return
-    headers = ["Class", "User's", "Producer's", "Weighted PA"]
+    tables = ms.analysis.tables
+    headers = [
+        tables.class_header,
+        tables.users_header,
+        tables.producers_header,
+        tables.weighted_producers_header,
+    ]
     with solara.Column(gap="4px"):
-        Section("Accuracy by class", "mdi-target")
+        Section(tables.accuracy_title, "mdi-target")
         with solara.GridFixed(columns=len(headers)):
             for h in headers:
                 solara.Text(h, style="font-weight: bold;")
@@ -88,20 +98,22 @@ def _Accuracy(results):
 
 @solara.component
 def _Downloads():
+    ms = use_translator()
+    downloads = ms.analysis.downloads
     items = [
         (
-            "Error matrix",
+            downloads.confusion,
             app_state.export_confusion_matrix_csv(),
             "confusion_matrix.csv",
         ),
         (
-            "Area estimates",
+            downloads.area,
             app_state.export_area_estimates_csv(),
             "area_estimates.csv",
         ),
-        ("Accuracy table", app_state.export_accuracy_csv(), "accuracy_table.csv"),
-        ("Reference input", app_state.export_reference_csv(), "reference_input.csv"),
+        (downloads.accuracy, app_state.export_accuracy_csv(), "accuracy_table.csv"),
+        (downloads.reference, app_state.export_reference_csv(), "reference_input.csv"),
     ]
     with solara.Column(gap="4px"):
-        Section("Downloads", "mdi-download")
+        Section(downloads.title, "mdi-download")
         DownloadMenu(items)

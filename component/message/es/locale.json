@@ -1,0 +1,377 @@
+{
+    "app": {
+        "title": "SBAE - Estimación de área basada en muestreo",
+        "route_label": "Herramienta SBAE",
+        "step_sample_design": "Diseño de muestreo",
+        "right_panel_title": "Herramientas de diseño de muestreo"
+    },
+    "common": {
+        "close": "Cerrar",
+        "download": "Descargar",
+        "or_divider": "o",
+        "unknown": "Desconocido",
+        "class_code": "Clase {}",
+        "row_singular": "fila",
+        "row_plural": "filas",
+        "column_singular": "columna",
+        "column_plural": "columnas",
+        "class_singular": "clase",
+        "class_plural": "clases"
+    },
+    "landing": {
+        "title": "Estimación de área basada en muestreo",
+        "step_design": "Diseño",
+        "step_analyze": "Analizar"
+    },
+    "map": {
+        "legend": {
+            "sample": "Punto de muestreo",
+            "correct": "Correcto",
+            "incorrect": "Incorrecto",
+            "reference": "Punto de referencia"
+        },
+        "reference_layer_name": "Puntos de referencia",
+        "error": {
+            "sample_points_failed": "No se pudieron dibujar los puntos de muestreo en el mapa: {}",
+            "reference_points_failed": "No se pudieron dibujar los puntos de referencia en el mapa: {}"
+        }
+    },
+    "design": {
+        "tab": "Diseño",
+        "intro": "**Diseño de la evaluación de la exactitud** — tamaño y asignación de la muestra estratificada según las buenas prácticas de Olofsson et al. (2014).",
+        "help": {
+            "title": "Diseño AA de Olofsson — metodología",
+            "body": "El tamaño y la asignación de la muestra siguen a **Olofsson et al. (2014)**, *Good practices for estimating area and assessing accuracy of land change*.\n\n**Entradas:** exactitud esperada del usuario (EUA) por clase (confianza alta / baja), error estándar objetivo y mínimo de muestras por clase.\n\n**Tamaño total de muestra:** `n = ( sum(Wi*Si) / SE )^2`, con `Si = sqrt(EUAi*(1-EUAi))` y `Wi` la proporción de área.\n\n**Asignación (proporcional ajustada):** parte de una muestra proporcional al área, eleva al mínimo cualquier clase que quede por debajo y reparte el resto proporcionalmente. Edite el número de muestras de cualquier clase para sobrescribirlo."
+        },
+        "workflow": {
+            "title": "Flujo de diseño de muestreo",
+            "aa_design": "Diseño AA Olofsson",
+            "advanced": "Muestreo",
+            "invalid": "Flujo de diseño de muestreo no válido: {}"
+        },
+        "class_editor": {
+            "button": "Editar clases y EUA",
+            "dialog_title": "Editar clases y exactitud esperada del usuario",
+            "dialog_title_with_samples": "Editar clases, EUA y muestras",
+            "no_area_data": "No hay datos de área disponibles.",
+            "eua_card_title": "Exactitud esperada del usuario (EUA)",
+            "high_eua": "EUA alta (%)",
+            "high_eua_hint": "Para clases estables y fáciles de identificar (p. ej., 85-95%)",
+            "low_eua": "EUA baja (%)",
+            "low_eua_hint": "Para clases difíciles, detección de cambios y clases raras (p. ej., 65-75%)",
+            "code": "Código {}",
+            "class_name": "Nombre de la clase",
+            "mode_high": "Alta",
+            "mode_low": "Baja",
+            "mode_custom": "Personalizada",
+            "custom_eua": "EUA (%)",
+            "samples": "Muestras",
+            "area_share": "{} ha ({}%)"
+        },
+        "point_generation": {
+            "calculate_first": "Calcule primero los tamaños de muestra.",
+            "use_custom_seed": "Usar semilla personalizada",
+            "seed": "Semilla",
+            "generate": "Generar puntos",
+            "generating": "Generando puntos de muestreo... Puede tardar un momento con conjuntos de datos grandes.",
+            "generating_status": "Generando puntos de muestreo...",
+            "allocation_changed": "¡La asignación de la muestra ha cambiado! Los puntos mostrados en el mapa no coinciden con la asignación actual. Vuelva a generar los puntos.",
+            "need_aoi": "Seleccione un área de interés antes de generar los puntos.",
+            "need_map": "Cargue un mapa de clasificación antes de generar los puntos.",
+            "error": {
+                "generating": "Error al generar los puntos: {}",
+                "not_ready_stratified": "Cargue primero un mapa de clasificación y complete el cálculo del tamaño de muestra.",
+                "not_ready_aoi": "Seleccione primero un área de interés y complete el cálculo del tamaño de muestra."
+            }
+        },
+        "export_files": {
+            "empty": "Genere primero los puntos de muestreo para habilitar la exportación.",
+            "csv": "Puntos de muestreo (CSV)",
+            "geojson": "Puntos de muestreo (GeoJSON)"
+        },
+        "stats": {
+            "area_ha": "{} ha",
+            "class_count": "{} clases",
+            "sample_count": "n={}",
+            "target_se": "EE objetivo: {}%",
+            "target_se_tooltip": "Error estándar (EE) objetivo de la exactitud global esperada, usado para calcular el tamaño de la muestra estratificada.",
+            "moe": "MOE: {}%",
+            "moe_tooltip": "Margen de error (MOE): rango de incertidumbre de la estimación de exactitud global al nivel de confianza indicado. Un MOE menor indica mayor precisión.",
+            "empty": "Defina un área de interés, o cargue un mapa de clasificación para el muestreo estratificado, para calcular el diseño de muestreo."
+        },
+        "charts": {
+            "precision_curve_title": "Curva de precisión",
+            "precision_curve_series": "MOE vs tamaño de muestra",
+            "precision_curve_current": "Diseño actual (n={})",
+            "sample_size_axis": "Tamaño de muestra",
+            "moe_axis": "MOE (%)",
+            "current_design_chip": "n={}, MOE=±{}%",
+            "per_class_title": "Precisión por clase",
+            "max_moe_chip": "MOE máx.: {} (±{}%)",
+            "area_proportion_title": "Proporción por área"
+        },
+        "parameters": {
+            "sampling_method": "Método de muestreo",
+            "total_sample_size": "Tamaño total de muestra",
+            "confidence_level": "Nivel de confianza",
+            "expected_accuracy": "Exactitud global esperada (%)",
+            "target_error": "Error estándar objetivo (%)",
+            "target_error_hint": "Error estándar de la exactitud global esperada",
+            "min_samples": "Muestras mínimas por clase",
+            "min_samples_hint": "Mínimo de seguridad para clases pequeñas o raras"
+        },
+        "outputs": {
+            "summary": "Resumen",
+            "generate_points": "Generar puntos",
+            "generate_points_description": "Genere puntos de muestreo a partir de los tamaños de muestra calculados.",
+            "export": "Exportar resultados",
+            "export_description": "Descargue los puntos de muestreo generados (CSV / GeoJSON)."
+        },
+        "error": {
+            "calculation_failed": "El cálculo falló",
+            "calculating": "Error al calcular las muestras: {}",
+            "invalid_method": "Método de muestreo no válido: {}",
+            "invalid_total": "Total de muestras no válido: {}",
+            "invalid_confidence": "Nivel de confianza no válido: {}",
+            "invalid_expected_accuracy": "Exactitud esperada no válida: {}",
+            "invalid_target_error": "Error objetivo no válido: {}",
+            "invalid_min_samples": "Mínimo de muestras no válido: {}"
+        }
+    },
+    "aoi": {
+        "title": "Seleccionar área de interés (AOI)",
+        "computing": "Calculando los límites del AOI..."
+    },
+    "upload": {
+        "button": "Cargar mapa",
+        "dialog_title": "Cargar mapa de clasificación",
+        "instructions": "Cargue su mapa de clasificación de cobertura del suelo como archivo raster. Los formatos admitidos incluyen GeoTIFF, ERDAS Imagine y otros formatos raster compatibles con rasterio.",
+        "confirm": "Usar este archivo",
+        "sample_map": "Usar mapa de ejemplo",
+        "layer_name": "Mapa de clasificación",
+        "current_file": "Archivo actual:",
+        "current_file_details": "Tipo: {} | Tamaño: {} MB",
+        "optimizing": "Optimizando el raster para su visualización... puede tardar un momento con archivos grandes.",
+        "computing_areas": "Calculando las áreas por clase...",
+        "loading_sample": "Cargando el mapa de ejemplo...",
+        "preview": {
+            "title": "Archivo seleccionado",
+            "type": "Tipo",
+            "size": "Tamaño",
+            "features": "Entidades",
+            "crs": "CRS",
+            "crs_missing": "No especificado"
+        },
+        "toast": {
+            "uploaded": "Archivo cargado correctamente.",
+            "optimized": "Archivo cargado y optimizado — ya puede editar los nombres de las clases.",
+            "optimization_failed": "Error al optimizar el raster: {}"
+        },
+        "error": {
+            "not_a_raster": "Formato de archivo no admitido. El mapa de clasificación debe ser un raster (GeoTIFF, ERDAS Imagine u otro formato que rasterio pueda abrir).",
+            "sample_not_found": "No se encontró el archivo de ejemplo: {}",
+            "sample_failed": "Error al cargar el mapa de ejemplo: {}"
+        }
+    },
+    "analysis": {
+        "tab": "Análisis",
+        "intro": "**Análisis de la evaluación de la exactitud** — estimaciones de área ajustadas por error y exactitudes por clase a partir de su muestra de referencia, según Olofsson et al. (2014).",
+        "help": {
+            "title": "Evaluación de la exactitud — metodología",
+            "body": "Estima **áreas ajustadas por error** y exactitudes a partir de una **muestra de referencia / validación** recolectada, usando los estimadores de buenas prácticas de **Olofsson et al. (2014)**.\n\n**Entradas:** la tabla de referencia (clase del mapa frente a clase de referencia por muestra) y las áreas por clase del mapa — tomadas de su clasificación (paso de diseño) o de un CSV independiente de áreas / estratos.\n\n**Salidas:** la matriz de error, el área ajustada por error de cada clase con sus intervalos de confianza y las exactitudes del usuario / del productor / global."
+        },
+        "reference": {
+            "upload_button": "Cargar datos de referencia",
+            "dialog_title": "Cargar datos de referencia",
+            "dialog_body": "Cargue la tabla de **referencia / validación** recolectada (CSV).",
+            "example_button": "Usar datos de ejemplo",
+            "table_title": "Tabla de referencia",
+            "reading": "Leyendo el archivo de referencia..."
+        },
+        "column_mapping": {
+            "title": "Asignación de columnas",
+            "help": "Asocie cada columna del CSV con su función. Cada punto de referencia necesita su **clase del mapa** (`map_code` -- lo que asignó la clasificación) y su **clase de referencia** (`ref_code` -- la verdad interpretada); esas dos construyen la matriz de error. X/Y solo son necesarias cuando la clase se lee de un mapa cargado. Los campos marcados con \\* son obligatorios.",
+            "role": {
+                "map": "Clase del mapa / predicha",
+                "ref": "Clase de referencia",
+                "x": "X / longitud",
+                "y": "Y / latitud",
+                "sample_area": "Área por muestra (opcional)"
+            }
+        },
+        "options": {
+            "title": "Opciones",
+            "help": "De dónde provienen las **áreas** por clase (los pesos de los estratos) -- la clasificación del paso de diseño, un CSV independiente de áreas/estratos o un mapa de clasificación que cargue aquí -- además del **nivel de confianza** de los intervalos ajustados por error y la **unidad de visualización**.",
+            "area_source": "Origen de áreas / estratos",
+            "confidence_level": "Nivel de confianza (%)",
+            "display_unit": "Unidad de visualización"
+        },
+        "area_source": {
+            "design": "Del mapa del diseño",
+            "map": "Cargar un mapa de clasificación",
+            "upload": "De un CSV de áreas / estratos"
+        },
+        "design_map": {
+            "title": "Mapa del diseño:",
+            "fallback_name": "clasificación del diseño",
+            "detail": "{} {} del paso de diseño",
+            "missing": "No hay ninguna clasificación cargada del paso de diseño. Cambie a 'Cargar un mapa de clasificación' o 'De un CSV de áreas / estratos'."
+        },
+        "classification_map": {
+            "title": "Mapa de clasificación:",
+            "detail": "GeoTIFF | {} MB",
+            "layer_name": "Clasificación (análisis)"
+        },
+        "area_table": {
+            "title": "Tabla de áreas / estratos",
+            "class_column": "Archivo de áreas: columna de clase",
+            "area_column": "Archivo de áreas: columna de área"
+        },
+        "filter": {
+            "title": "Filtro (opcional)",
+            "help": "Opcional: limite la evaluación a un subconjunto de puntos de referencia -- elija una columna y conserve solo los valores que desee (p. ej., una región, un tile o una campaña). Déjelo vacío para usar todas las filas.",
+            "column": "Columna de filtro",
+            "keep_values": "Valores a conservar"
+        },
+        "calculate": "Calcular la evaluación de la exactitud",
+        "empty": {
+            "no_reference": "Cargue una tabla de referencia (o los datos de ejemplo) para ejecutar la evaluación de la exactitud.",
+            "not_calculated": "Defina el origen de las áreas y la asignación de columnas, y pulse **Calcular** para ejecutar la evaluación de la exactitud."
+        },
+        "note": {
+            "legend_mismatch": "Nota: las leyendas del mapa y de la referencia difieren; las clases presentes en solo una se muestran con valores en cero."
+        },
+        "error": {
+            "example_not_found": "No se encontraron los datos de análisis de ejemplo en {}",
+            "example_failed": "No se pudieron cargar los datos de análisis de ejemplo: {}",
+            "reference_read_failed": "No se pudo leer el archivo de referencia: {}",
+            "area_read_failed": "No se pudo leer el archivo de áreas: {}",
+            "classification_failed": "Falló el análisis del mapa de clasificación: {}",
+            "raster_render_failed": "El análisis se ejecutó, pero el mapa de clasificación no se pudo dibujar en el mapa: {}",
+            "missing_inputs": "Proporcione las entradas requeridas antes de calcular.",
+            "failed": "El análisis falló"
+        },
+        "tables": {
+            "confusion_title": "Matriz de error",
+            "confusion_description": "filas = mapa, cols = referencia",
+            "confusion_corner": "mapa\\ref",
+            "area_title": "Estimaciones de área",
+            "area_description": "Ajustadas por error (Olofsson 2014)",
+            "accuracy_title": "Exactitud por clase",
+            "class_header": "Clase",
+            "samples_header": "Muestras",
+            "map_area_header": "Área del mapa ({})",
+            "adjusted_area_header": "Área ajust. ({})",
+            "confidence_interval_header": "± IC ({})",
+            "srs_area_header": "Área SRS ({})",
+            "users_header": "Usuario",
+            "producers_header": "Productor",
+            "weighted_producers_header": "EP ponderada"
+        },
+        "downloads": {
+            "title": "Descargas",
+            "confusion": "Matriz de error",
+            "area": "Estimaciones de área",
+            "accuracy": "Tabla de exactitud",
+            "reference": "Datos de referencia de entrada"
+        },
+        "charts": {
+            "area_estimate_title": "Área ajustada por error por clase ({})",
+            "adjusted_area_series": "Área ajustada ({})",
+            "confidence_interval_series": "IC",
+            "area_axis": "Área ({})",
+            "confusion_title": "Matriz de confusión (mapa → referencia)",
+            "confusion_reference_axis": "referencia",
+            "confusion_map_axis": "mapa",
+            "accuracy_title": "Exactitud por clase",
+            "users_series": "Usuario",
+            "producers_series": "Productor",
+            "area_proportion_title": "Proporción de área estimada"
+        },
+        "dashboard": {
+            "title": "Resultados de la evaluación de la exactitud",
+            "tables": "Tablas",
+            "open": "Ver panel de resultados",
+            "overall_accuracy": "Exactitud global",
+            "overall_accuracy_hint": "Proporción de puntos de referencia clasificados correctamente.",
+            "confidence_level": "Nivel de confianza",
+            "confidence_level_hint": "Probabilidad de que los intervalos ± contengan el valor verdadero.",
+            "reference_samples": "Muestras de referencia",
+            "reference_samples_hint": "Total de puntos de referencia evaluados.",
+            "classes": "Clases",
+            "classes_hint": "Número de clases del mapa evaluadas.",
+            "overall_chip": "Global {}%",
+            "confidence_chip": "NC {}%",
+            "samples_chip": "n={}",
+            "classes_chip": "{} clases"
+        }
+    },
+    "calculator": {
+        "title": "Calcular el tamaño de muestra",
+        "intro": "Configure los parámetros de muestreo y calcule el tamaño de muestra necesario para su evaluación de la exactitud con métodos estadísticos.",
+        "parameters_title": "Parámetros:",
+        "parameter_accuracy": "• Exactitud global objetivo: nivel de exactitud deseado (p. ej., 85%)",
+        "parameter_confidence": "• Nivel de confianza: confianza estadística (habitualmente 95%)",
+        "parameter_minimum": "• Tamaño mínimo de muestra: mínimo de seguridad para clases pequeñas",
+        "complete": "¡Configuración de la muestra completa! Ya puede generar los puntos.",
+        "card_intro": "Configure los parámetros de muestreo para determinar el tamaño de muestra necesario para su evaluación de la exactitud.",
+        "upload_first": "Cargue y configure primero su mapa.",
+        "target_moe": "Margen de error objetivo (%)",
+        "calculating": "Calculando los tamaños de muestra...",
+        "needs_map": "Cargue primero un mapa de clasificación.",
+        "simple_results_title": "Configuración del tamaño de muestra:",
+        "sampling_method": "Método de muestreo: {}",
+        "total_samples": "Muestras totales: {}",
+        "confidence_level": "Nivel de confianza: {}%",
+        "distribution_note": "Las muestras se distribuirán {} por toda el área de estudio.",
+        "distribution_random": "aleatoriamente",
+        "distribution_systematic": "en una malla sistemática",
+        "stratified_results_title": "Resultados del cálculo del tamaño de muestra:",
+        "total_samples_needed": "Muestras totales necesarias: {}",
+        "allocation_method": "Método de asignación: {}",
+        "current_moe": "Margen de error actual: {}%",
+        "samples_per_class": "Muestras por clase:",
+        "class_samples": "• {}: {}",
+        "allocation": {
+            "title": "Asignación de la muestra",
+            "empty": "No hay datos de asignación disponibles",
+            "manual_title": "Edición manual de la asignación:",
+            "samples": "Muestras"
+        },
+        "per_class": {
+            "title": "Precisión por clase (según la asignación actual)",
+            "subtitle": "Margen de error (MOE) por clase",
+            "description": "Este gráfico muestra la precisión esperada de cada clase según su asignación de muestra actual. Las clases con barras de MOE más grandes están submuestreadas y tienen estimaciones menos precisas.",
+            "formula_title": "Fórmula (aproximación normal binomial):",
+            "where": "Donde:",
+            "term_n": "• n_h: muestras asignadas a la clase",
+            "term_p": "• p_h: exactitud esperada (se usa 0.5 como valor conservador por defecto)",
+            "term_z": "• Z: valor Z según el nivel de confianza",
+            "term_population": "• N_h: tamaño de población finita (opcional, se usa 1 si se desconoce)",
+            "term_deff": "• DEFF: efecto de diseño (≈1.0 para muestras espacialmente equilibradas; >1 si hay conglomerados)",
+            "analysis_title": "Análisis de la asignación actual:",
+            "highest_moe": "MOE más alto: {} (±{}%, n={})",
+            "lowest_moe": "MOE más bajo: {} (±{}%, n={})",
+            "advice": "Las clases con valores de MOE altos pueden necesitar más muestras para mejorar la precisión.",
+            "moe_axis": "Margen de error (%)",
+            "interpretation": "**Interpretación**: las barras muestran el margen de error de la estimación de exactitud del usuario de cada clase. Las barras más grandes indican estimaciones menos precisas. Si sobremuestrea las clases raras, este gráfico ayuda a comprobar que alcanzó la precisión deseada por clase."
+        },
+        "curve": {
+            "title": "Análisis de la curva de precisión",
+            "subtitle": "Cómo cambia el margen de error (MOE) con el tamaño de muestra",
+            "description": "La curva de precisión muestra la relación inversa entre el tamaño de muestra y el margen de error. A medida que aumenta el tamaño total de muestra (n), el margen de error disminuye según la fórmula:",
+            "where": "Donde:",
+            "term_z": "• Z = valor Z según el nivel de confianza",
+            "term_oa": "• OA = exactitud global (esperada)",
+            "term_n": "• n = tamaño total de muestra",
+            "current_title": "Su diseño actual:",
+            "current_size": "Tamaño de muestra: {}",
+            "current_moe": "Margen de error: ±{}%",
+            "series": "MOE vs tamaño de muestra",
+            "current_series": "Su diseño (n={})",
+            "sample_size_axis": "Tamaño de muestra (n)",
+            "moe_axis": "Margen de error (%)",
+            "insight": "**Idea clave**: observe cómo el MOE disminuye rápidamente al principio, pero la mejora se ralentiza a medida que crece el tamaño de muestra. Es el efecto de \"rendimientos decrecientes\": duplicar el tamaño de muestra no reduce el error a la mitad."
+        }
+    }
+}

@@ -74,7 +74,7 @@ def test_raster_coordinate_transformation():
         assert bounds[2] <= expected_bounds[2] + 100, "Points outside expected bounds"
         assert bounds[3] <= expected_bounds[3] + 100, "Points outside expected bounds"
 
-        print("✓ Raster coordinate transformation test passed")
+        print("Raster coordinate transformation test passed")
 
 
 def test_vector_coordinate_transformation():
@@ -127,7 +127,7 @@ def test_vector_coordinate_transformation():
         assert bounds[2] <= 510000 + 100, "Points outside expected bounds"
         assert bounds[3] <= 4503000 + 100, "Points outside expected bounds"
 
-        print("✓ Vector coordinate transformation test passed")
+        print("Vector coordinate transformation test passed")
 
 
 def test_simple_random_coordinate_transformation():
@@ -169,7 +169,7 @@ def test_simple_random_coordinate_transformation():
             points_df["latitude"].between(-90, 90).all()
         ), "Latitude values outside valid range"
 
-        print("✓ Simple random coordinate transformation test passed")
+        print("Simple random coordinate transformation test passed")
 
 
 def test_systematic_coordinate_transformation():
@@ -211,7 +211,7 @@ def test_systematic_coordinate_transformation():
             points_df["latitude"].between(-90, 90).all()
         ), "Latitude values outside valid range"
 
-        print("✓ Systematic coordinate transformation test passed")
+        print("Systematic coordinate transformation test passed")
 
 
 if __name__ == "__main__":
@@ -219,4 +219,4 @@ if __name__ == "__main__":
     test_vector_coordinate_transformation()
     test_simple_random_coordinate_transformation()
     test_systematic_coordinate_transformation()
-    print("\n✅ All coordinate transformation tests passed!")
+    print("\nAll coordinate transformation tests passed!")

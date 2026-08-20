@@ -5,6 +5,7 @@ from typing import Callable
 
 import solara
 
+from component.message import use_translator
 from component.model import app_state
 from component.scripts.geospatial import extract_map_codes, generate_sample_points
 from component.scripts.vector_tiles import build_layer_or_notify
@@ -95,6 +96,7 @@ def _result_is_generating(generation_task, generation_request) -> bool:
 
 def use_point_generation_task(sbae_map=None) -> PointGenerationController:
     """Own the point-generation thread from a component that survives tab swaps."""
+    ms = use_translator()
     use_custom_seed = solara.use_reactive(True)
     custom_seed = solara.use_reactive(33)
     generation_request = solara.use_reactive(None)
@@ -144,9 +146,15 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
 
         if generation_task.pending:
             app_state.points_generation_status.value = POINT_GENERATION_RUNNING
-            app_state.set_processing_status("Generating sample points...")
+            app_state.set_processing_status(
+                ms.design.point_generation.generating_status
+            )
         elif generation_task.error:
-            app_state.add_error(f"Error generating points: {generation_task.exception}")
+            app_state.add_error(
+                ms.design.point_generation.error.generating.format(
+                    generation_task.exception
+                )
+            )
             app_state.points_generation_status.value = POINT_GENERATION_ERROR
             app_state.set_processing_status("")
             generation_request.value = None
@@ -179,14 +187,12 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
 
         if not app_state.is_ready_for_point_generation():
             sampling_method = app_state.sampling_method.value
-            if sampling_method == "stratified":
-                app_state.add_error(
-                    "Please upload a classification map and complete sample size calculation first."
-                )
-            else:
-                app_state.add_error(
-                    "Please select an Area of Interest and complete sample size calculation first."
-                )
+            error = ms.design.point_generation.error
+            app_state.add_error(
+                error.not_ready_stratified
+                if sampling_method == "stratified"
+                else error.not_ready_aoi
+            )
             return
 
         request_id_ref.current += 1
@@ -197,7 +203,7 @@ def use_point_generation_task(sbae_map=None) -> PointGenerationController:
             custom_seed=custom_seed.value,
         )
         app_state.points_generation_status.value = POINT_GENERATION_RUNNING
-        app_state.set_processing_status("Generating sample points...")
+        app_state.set_processing_status(ms.design.point_generation.generating_status)
 
     return PointGenerationController(
         custom_seed_enabled=use_custom_seed,
@@ -219,6 +225,7 @@ def PointGeneration(sbae_map):
 @solara.component
 def PointGenerationView(sbae_map, controller: PointGenerationController):
     """Render point-generation controls for an existing task controller."""
+    ms = use_translator()
     custom_seed_enabled = controller.custom_seed_enabled
     custom_seed = controller.custom_seed
     is_generating = controller.is_generating
@@ -259,7 +266,7 @@ def PointGenerationView(sbae_map, controller: PointGenerationController):
 
     with solara.Column():
         if sample_results is None:
-            solara.Info("Calculate sample sizes first.")
+            solara.Info(ms.design.point_generation.calculate_first)
         else:
 
             with solara.Row(
@@ -267,14 +274,14 @@ def PointGenerationView(sbae_map, controller: PointGenerationController):
                 style="align-items: center; margin-bottom: 8px;",
             ):
                 solara.Checkbox(
-                    label="Use custom seed",
+                    label=ms.design.point_generation.use_custom_seed,
                     value=custom_seed_enabled.value,
                     on_value=lambda v: setattr(custom_seed_enabled, "value", v),
                 )
 
                 if custom_seed_enabled.value:
                     solara.v.TextField(
-                        label="Seed",
+                        label=ms.design.point_generation.seed,
                         v_model=custom_seed.value,
                         on_v_model=lambda v: setattr(
                             custom_seed,
@@ -288,7 +295,7 @@ def PointGenerationView(sbae_map, controller: PointGenerationController):
                     )
 
             solara.Button(
-                "Generate Points",
+                ms.design.point_generation.generate,
                 on_click=controller.trigger,
                 color="primary",
                 block=True,
@@ -299,19 +306,15 @@ def PointGenerationView(sbae_map, controller: PointGenerationController):
 
             # Show generation progress
             if is_generating:
-                solara.Info(
-                    "Generating sample points... This may take a moment for large datasets."
-                )
+                solara.Info(ms.design.point_generation.generating)
                 solara.ProgressLinear(value=True)
 
             # Warning if allocation changed
             if allocation_changed:
-                solara.Warning(
-                    "Sample allocation has changed! The points shown on the map don't match your current allocation. Please regenerate points."
-                )
+                solara.Warning(ms.design.point_generation.allocation_changed)
             elif not ready_for_generation:
                 sampling_method = sample_results.get("sampling_method", "stratified")
                 if sampling_method in ("simple", "systematic"):
-                    solara.Info("Select an Area of Interest before generating points.")
+                    solara.Info(ms.design.point_generation.need_aoi)
                 else:
-                    solara.Info("Upload a classification map before generating points.")
+                    solara.Info(ms.design.point_generation.need_map)

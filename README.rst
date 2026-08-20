@@ -40,7 +40,7 @@ Features
   accepts a separate area CSV. Confidence levels of 90/95/99% are supported.
   Collect Earth Online ingestion and accuracy standard errors are planned for a
   later release.
-- **SEPAL-UI Integration:** Built using ``sepal-ui`` for a seamless experience within the SEPAL environment.
+- **pysepal Integration:** Built using ``pysepal`` for a seamless experience within the SEPAL environment.
 
 Prerequisites
 -------------
@@ -49,7 +49,7 @@ Prerequisites
 - The following Python libraries (and their dependencies) should be available in your SEPAL environment. The application checks for these and prints warnings if they are missing:
   
   - ``ipyvuetify``
-  - ``sepal_ui``
+  - ``pysepal``
   - ``pandas``
   - ``numpy``
   - ``ipywidgets``
@@ -126,7 +126,7 @@ Technology Stack
 ----------------
 
 - **UI Framework:** ``ipyvuetify`` (for Jupyter-based UI components)
-- **SEPAL Integration:** ``sepal-ui`` (for SEPAL-specific widgets and model structure)
+- **SEPAL Integration:** ``pysepal`` (for SEPAL-specific widgets and model structure)
 - **Mapping:** ``ipyleaflet`` (for interactive map display)
 - **Core Processing:** ``pandas``, ``numpy``
 - **Geospatial Libraries:**

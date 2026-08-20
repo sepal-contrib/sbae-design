@@ -1,15 +1,13 @@
 import logging
-import os
 import shutil
 
 import pandas as pd
 import solara
-from localtileserver import TileClient, get_leaflet_tile_layer
+from pysepal.mapping import SepalMap
 from pysepal.scripts.scratch import scratch_dir
-from sepal_ui.mapping import SepalMap
-from sepal_ui.sepalwidgets.vue_app import ThemeToggle
+from pysepal.solara import ThemeState
 
-from component.scripts.logging_config import quiet_tile_server_logs
+from component.message import get_translator, use_translator
 from component.scripts.vector_tiles import (
     CORRECT_COLOR,
     INCORRECT_COLOR,
@@ -21,18 +19,14 @@ from component.scripts.vector_tiles import (
 
 logger = logging.getLogger("sbae.map")
 
-# On-map legend entries (label -> hex). Composed from whichever point layers are
-# currently shown; see ``_compose_points_legend``.
-_SAMPLE_LEGEND_LABEL = "Sample point"
-_CORRECT_LEGEND_LABEL = "Correct"
-_INCORRECT_LEGEND_LABEL = "Incorrect"
-_REFERENCE_LEGEND_LABEL = "Reference point"
-
-
-def _hex_to_rgb(hex_color: str) -> tuple:
-    """Convert '#rrggbb' to an (r, g, b) tuple."""
-    h = hex_color.lstrip("#")
-    return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+# Identifiers for the on-map legend entries, matching the ``map.legend`` catalog
+# keys. The legend is composed in worker threads, where no translator hook is
+# available, so ``PointsLegend`` resolves these to text at render time -- which
+# also lets a language change relabel a legend that is already on screen.
+_SAMPLE_LEGEND_KEY = "sample"
+_CORRECT_LEGEND_KEY = "correct"
+_INCORRECT_LEGEND_KEY = "incorrect"
+_REFERENCE_LEGEND_KEY = "reference"
 
 
 def _points_signature(df):
@@ -54,46 +48,31 @@ def _points_signature(df):
 def _compose_points_legend(
     has_sample: bool, has_reference: bool, reference_evaluated: bool
 ) -> dict:
-    """Legend entries (label -> hex) for the point layers currently shown.
+    """Legend entries (catalog key -> hex) for the point layers currently shown.
 
     Sample points contribute one neutral entry; reference points contribute the
     green/red correctness key once evaluated, else a single neutral entry.
     """
     legend = {}
     if has_sample:
-        legend[_SAMPLE_LEGEND_LABEL] = SAMPLE_POINT_COLOR
+        legend[_SAMPLE_LEGEND_KEY] = SAMPLE_POINT_COLOR
     if has_reference:
         if reference_evaluated:
-            legend[_CORRECT_LEGEND_LABEL] = CORRECT_COLOR
-            legend[_INCORRECT_LEGEND_LABEL] = INCORRECT_COLOR
+            legend[_CORRECT_LEGEND_KEY] = CORRECT_COLOR
+            legend[_INCORRECT_LEGEND_KEY] = INCORRECT_COLOR
         else:
-            legend[_REFERENCE_LEGEND_LABEL] = REFERENCE_NEUTRAL_COLOR
+            legend[_REFERENCE_LEGEND_KEY] = REFERENCE_NEUTRAL_COLOR
     return legend
-
-
-def _build_class_colormap(class_colors: dict) -> dict:
-    """Build a discrete {pixel_value: (r, g, b, a)} LUT for a categorical raster.
-
-    Every class present in ``class_colors`` is rendered opaque, including code 0
-    and codes above 255 -- area calculation treats those as valid, sampleable
-    classes, so they must be visible on the map. Values not in ``class_colors``
-    render transparent (background).
-    """
-    colormap = {i: (0, 0, 0, 0) for i in range(256)}
-    for code, hex_color in class_colors.items():
-        colormap[int(code)] = (*_hex_to_rgb(hex_color), 255)
-    return colormap
 
 
 class SbaeMap(SepalMap):
     """SBAE Map class extending SepalMap for map visualization and interactions."""
 
-    def __init__(self, theme_toggle: ThemeToggle, gee: bool = False, min_zoom: int = 5):
+    def __init__(self, theme_state: ThemeState, gee: bool = False, min_zoom: int = 5):
         super().__init__(
-            fullscreen=True, theme_toggle=theme_toggle, gee=gee, min_zoom=min_zoom
+            fullscreen=True, theme_state=theme_state, gee=gee, min_zoom=min_zoom
         )
 
-        self.classification_layer = None
         self.sample_points_layer = None
         self.sample_points_dir = None
         self._pending_points_dir = None
@@ -108,123 +87,6 @@ class SbaeMap(SepalMap):
         # rebuilds when the same points are re-submitted (e.g. Analysis-tab
         # re-entry remounts the render task).
         self._reference_points_sig = None
-
-    def _optimize_for_tiles(self, path) -> str:
-        """Return a tiling-optimized (cached COG with overviews) path.
-
-        rio-tiler reads full-resolution pixels -- and warns ``NoOverviewWarning``
-        -- for every tile when the source has no overviews, so low-zoom tiles are
-        slow. ``prepare_for_tiles`` is a fast no-op when ``path`` is already a
-        tiled COG with overviews (the design step pre-optimizes off-thread); it
-        only does real work for raw rasters such as the analysis classification
-        map, which are added off the UI thread. Best-effort: on failure, serve the
-        raw raster (tiling still works, just slower).
-        """
-        from component.scripts.tiling import prepare_for_tiles
-
-        try:
-            return prepare_for_tiles(str(path))["path"]
-        except Exception as e:
-            logger.warning(
-                "Tiling optimization failed for %s (%s); serving the raw raster.",
-                path,
-                e,
-            )
-            return str(path)
-
-    def add_class_raster(
-        self,
-        path,
-        class_colors,
-        layer_name: str = "Classification Map",
-        key: str = "clas",
-        opacity: float = 1.0,
-        fit_bounds: bool = True,
-    ):
-        """Add a categorical raster with exact per-class colors.
-
-        Unlike ``add_raster`` (which applies a continuous inferno colormap
-        stretched across the value range and renders sparse/low-value class
-        maps as black), this builds a discrete lookup table so each class
-        value gets its own color. Any value not in ``class_colors`` is rendered
-        transparent (background); classes 0 and > 255 are colored like any other.
-
-        Args:
-            path: path to the (optimized) raster file.
-            class_colors: mapping of class code -> '#rrggbb' hex color.
-            layer_name: display name of the layer.
-            key: unequivocal key of the layer (for later removal).
-            opacity: layer opacity, default 1.0.
-            fit_bounds: whether to recenter/zoom onto the raster.
-        """
-        # Build (or reuse a cached) COG with overviews before tiling: rio-tiler
-        # otherwise reads full-res pixels and logs NoOverviewWarning per tile.
-        tile_path = self._optimize_for_tiles(path)
-
-        if not class_colors:
-            logger.warning(
-                "add_class_raster called without class_colors; "
-                "falling back to add_raster for %s",
-                path,
-            )
-            return self.add_raster(
-                tile_path,
-                layer_name=layer_name,
-                key=key,
-                opacity=opacity,
-                fit_bounds=fit_bounds,
-            )
-
-        # Discrete LUT: transparent everywhere unless it's a known class. Every
-        # class in class_colors is colored, including code 0 and codes > 255.
-        colormap = _build_class_colormap(class_colors)
-
-        # localtileserver won't accept a raw {value: rgba} dict as `colormap`;
-        # it must be registered server-side first, which yields a "custom:<hash>"
-        # key. This is the only path that preserves per-class alpha (the
-        # matplotlib-Colormap path forces alpha=1, losing transparency).
-        try:
-            from localtileserver.tiler.palettes import register_colormap
-
-            colormap_arg = register_colormap(colormap)
-        except Exception:
-            logger.warning(
-                "localtileserver register_colormap unavailable; falling back "
-                "to add_raster (classes may render dark) for %s",
-                path,
-            )
-            return self.add_raster(
-                tile_path,
-                layer_name=layer_name,
-                key=key,
-                opacity=opacity,
-                fit_bounds=fit_bounds,
-            )
-
-        # Bind the tile server to a reachable interface when serving the app
-        # over the network (e.g. Solara --host over Tailscale). Defaults to
-        # loopback for local dev; set LOCALTILESERVER_HOST=0.0.0.0 (or the
-        # tailnet IP) plus LOCALTILESERVER_CLIENT_HOST for remote access.
-        client = TileClient(
-            tile_path, host=os.environ.get("LOCALTILESERVER_HOST", "127.0.0.1")
-        )
-        quiet_tile_server_logs()
-        layer = get_leaflet_tile_layer(
-            client,
-            colormap=colormap_arg,
-            name=layer_name,
-            opacity=opacity,
-            max_zoom=20,
-        )
-        self.add_layer(layer, key=key)
-        self.classification_layer = layer
-        layer.raster = str(path)
-
-        if fit_bounds:
-            self.center = client.center()
-            self.zoom = client.default_zoom
-
-        return layer
 
     async def build_sample_points_layer(
         self,
@@ -289,7 +151,7 @@ class SbaeMap(SepalMap):
 
         Mutates the map, so the main thread is preferred. ``add_sample_points``
         deliberately calls this off the UI thread anyway, matching the
-        pre-existing off-thread ``add_class_raster`` mutation in
+        pre-existing off-thread ``add_raster`` mutation in
         ``analysis_tab.py``.
         """
         old_dir = getattr(self, "sample_points_dir", None)
@@ -327,11 +189,13 @@ class SbaeMap(SepalMap):
             )
         except VectorTileError as e:
             logger.warning("Sample points layer failed: %s", e)
-            app_state.add_error(f"Could not render sample points on the map: {e}")
+            app_state.add_error(
+                get_translator().map.error.sample_points_failed.format(e)
+            )
             return
         SbaeMap.attach_sample_points_layer(self, layer)
 
-    async def add_reference_points(self, points_data, *, layer_name="Reference points"):
+    async def add_reference_points(self, points_data, *, layer_name=None):
         """Render the analysis reference points on their own layer, by agreement.
 
         Kept separate from the design sample (``add_sample_points`` / the
@@ -342,6 +206,9 @@ class SbaeMap(SepalMap):
         UI thread; on failure, notify and skip.
         """
         from component.model import app_state
+
+        ms = get_translator()
+        layer_name = layer_name or ms.map.reference_layer_name
 
         # Unchanged points already on the map -> keep the existing layer and skip
         # the tippecanoe rebuild (see _points_signature).
@@ -377,7 +244,7 @@ class SbaeMap(SepalMap):
             )
         except VectorTileError as e:
             logger.warning("Reference points layer failed: %s", e)
-            app_state.add_error(f"Could not render reference points on the map: {e}")
+            app_state.add_error(ms.map.error.reference_points_failed.format(e))
             return
         old_dir = self.reference_points_dir
         if self.reference_points_layer is not None:
@@ -425,9 +292,10 @@ class SbaeMap(SepalMap):
         """Publish the on-map points legend to reactive state.
 
         The legend is a declarative Solara overlay (``PointsLegend`` ->
-        pysepal ``LegendComponent``), so this just pushes ``{label: hex}`` to
-        ``app_state.points_legend``; the component re-renders itself. Safe to call
-        from the worker threads that mutate the map.
+        pysepal ``LegendComponent``), so this just pushes ``{key: hex}`` to
+        ``app_state.points_legend``; the component translates the keys and
+        re-renders itself. Safe to call from the worker threads that mutate the
+        map.
         """
         from component.model import app_state
 
@@ -443,8 +311,8 @@ def PointsLegend():
     """Floating map legend for the sample/reference points.
 
     Renders the modern pysepal ``LegendComponent`` overlay, driven by
-    ``app_state.points_legend`` ({label: hex}); hidden when there is nothing to
-    show. Place it once in the page alongside the map.
+    ``app_state.points_legend`` ({catalog key: hex}); hidden when there is
+    nothing to show. Place it once in the page alongside the map.
     """
     from dataclasses import asdict
 
@@ -456,10 +324,12 @@ def PointsLegend():
 
     from component.model import app_state
 
+    ms = use_translator()
     legend = app_state.points_legend.value or {}
     data = LegendData(
         items=[
-            DiscreteEntry(label=label, color=color) for label, color in legend.items()
+            DiscreteEntry(label=ms.map.legend[key], color=color)
+            for key, color in legend.items()
         ]
     )
     LegendComponent(legend_data=asdict(data), visible=bool(legend))

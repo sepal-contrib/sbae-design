@@ -24,10 +24,16 @@ dependencies:
   # tippecanoe builds the PMTiles vector tiles for the map sample-points layer.
   - tippecanoe>=2
   - pip:
-      - pysepal>=3.8.1
+      # 4.0 drops the sepal_ui package, moves theme onto ThemeState, and is the
+      # first release with add_raster(class_colors=...). The floor names the rc
+      # on purpose: pip only considers a pre-release when the specifier itself
+      # mentions one, so plain >=4.0.0 resolves to nothing while 4.0.0rc0 is
+      # the only 4.x on PyPI.
+      - pysepal>=4.0.0rc0
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
-      - git+https://github.com/SerafiniJose/jupyter-loopback.git@fix/voila-localhost-proxy-probe
       - ipecharts>=1.0.0
       - voila
-      # local vector-tile server for the PMTiles map sample-points layer
-      - vectortileserver>=0.2.1
+      # local vector-tile server for the PMTiles map sample-points layer.
+      # 0.2.2 is the first release that binds 127.0.0.1 and resolves tippecanoe
+      # next to the interpreter, which sbae used to patch around locally.
+      - vectortileserver>=0.2.2

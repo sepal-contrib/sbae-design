@@ -146,3 +146,20 @@ ui-tests/jlab_root
 
 .yarn/
 yarn.lock
+
+# Local working files: agent configs, design notes and teaching material that
+# live alongside the repo but are not part of it.
+.codex
+AGENTS.md
+docs/
+notebooks/
+sampling-theory/
+
+# Artifacts of running the app or the test suite against the bundled sample map.
+# aa_test_congo.tif itself IS tracked (it backs the "Sample map" button); GDAL
+# writes the .aux.xml statistics sidecar next to whatever raster it opens.
+tests/data/*.aux.xml
+tests/data/sae_design_aa_test_congo/
+
+# Scratch raster for manual testing, 46M and referenced by nothing.
+tests/data/hansen_bolivia.tif
