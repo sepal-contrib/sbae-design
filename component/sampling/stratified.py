@@ -6,8 +6,7 @@ accuracy assessment as it ensures representation of all classes.
 """
 
 import logging
-import math
-from typing import Dict, List
+from typing import List
 
 from component.sampling.base import SamplingStrategy
 from component.sampling.types import (
@@ -20,8 +19,8 @@ from component.sampling.types import (
 from component.scripts.stratified import (
     allocate_samples_balanced,
     allocate_samples_equal,
-    allocate_samples_neyman,
-    apply_adjusted_allocation,
+    allocate_samples_proportional,
+    calculate_openforis_stratified_design,
     calculate_per_class_moe_for_allocation,
     calculate_stratified_sample_size,
 )
@@ -73,134 +72,173 @@ class StratifiedSamplingStrategy(SamplingStrategy):
         elif inputs.min_samples_per_class > 100:
             errors.append("Minimum samples per class should not exceed 100")
 
-        # Validate allocation method
+        # Per-class EUA is required ONLY for Neyman allocation; proportional /
+        # equal / balanced runs use the visible global expected accuracy
+        # (AGENTS.md: "Per-class EUA is only active for neyman allocation").
         if inputs.allocation_method == AllocationMethod.NEYMAN:
             if not inputs.expected_accuracies:
                 errors.append(
-                    "Neyman allocation requires expected accuracies per class"
+                    "Neyman allocation requires expected user accuracy per class"
                 )
+            elif inputs.area_data is not None and not inputs.area_data.empty:
+                expected_codes = set(inputs.expected_accuracies)
+                missing_codes = [
+                    int(row["map_code"])
+                    for _, row in inputs.area_data.iterrows()
+                    if int(row["map_code"]) not in expected_codes
+                ]
+                if missing_codes:
+                    errors.append(
+                        "Expected user accuracy is missing for class code(s): "
+                        + ", ".join(str(code) for code in missing_codes)
+                    )
 
         return errors
 
     def calculate(self, inputs: SamplingInputs) -> SamplingResults:
-        """Calculate stratified sample design."""
-        # Validate first
+        """Calculate the stratified sample design honoring the allocation method.
+
+        Neyman allocation uses per-class expected accuracy (the Open Foris /
+        Olofsson adjusted-proportional design); proportional / equal / balanced
+        use the global expected accuracy for sizing and MOE.
+        """
         errors = self.validate_inputs(inputs)
         if errors:
             return SamplingResults.error(self.method, "; ".join(errors))
 
         try:
-            area_df = inputs.area_data
-            target_se = inputs.target_error_decimal
-            confidence_level = inputs.confidence_level_decimal
-            min_samples = inputs.min_samples_per_class
-            expected_accuracies = inputs.expected_accuracies or {}
-
-            # Fill in default expected accuracies if missing
-            for _, row in area_df.iterrows():
-                code = int(row["map_code"])
-                if code not in expected_accuracies:
-                    expected_accuracies[code] = inputs.expected_accuracy_decimal
-
-            # Calculate total sample size using stratified formula
-            n_total = calculate_stratified_sample_size(
-                area_df=area_df,
-                expected_accuracies=expected_accuracies,
-                target_standard_error=target_se,
-            )
-
-            # Allocate samples based on method
-            allocation_dict = self._allocate_samples(
-                area_df=area_df,
-                total_samples=n_total,
-                allocation_method=inputs.allocation_method,
-                expected_accuracies=expected_accuracies,
-                min_samples=min_samples,
-            )
-
-            # Build per-class allocation results
-            total_area = area_df["map_area"].sum()
-            samples_per_class = []
-
-            for _, row in area_df.iterrows():
-                code = int(row["map_code"])
-                class_name = row.get("map_edited_class", f"Class {code}")
-                samples = allocation_dict.get(code, min_samples)
-                area_ha = row["map_area"] / 10000
-                proportion = row["map_area"] / total_area if total_area > 0 else 0
-
-                samples_per_class.append(
-                    ClassAllocation(
-                        map_code=code,
-                        class_name=class_name,
-                        samples=samples,
-                        area_ha=area_ha,
-                        proportion=proportion,
-                    )
-                )
-
-            # Calculate per-class MOE
-            try:
-                moe_df = calculate_per_class_moe_for_allocation(
-                    allocation=allocation_dict,
-                    area_df=area_df,
-                    confidence_level=confidence_level,
-                )
-                for alloc in samples_per_class:
-                    moe_row = moe_df[moe_df["map_code"] == alloc.map_code]
-                    if not moe_row.empty:
-                        alloc.moe_percent = moe_row["moe_percent"].iloc[0]
-            except Exception as e:
-                logger.warning(f"Could not calculate per-class MOE: {e}")
-
-            actual_total = sum(allocation_dict.values())
-
-            return SamplingResults(
-                sampling_method=self.method,
-                success=True,
-                total_samples=actual_total,
-                target_error=inputs.target_error,
-                confidence_level=inputs.confidence_level,
-                allocation_method=inputs.allocation_method.value,
-                allocation_dict=allocation_dict,
-                samples_per_class=samples_per_class,
-                total_area_ha=total_area / 10000,
-                # Note: MOE for stratified is per-class, not a single value
-                current_moe_percent=None,
-                current_moe_decimal=None,
-            )
-
+            if inputs.allocation_method == AllocationMethod.NEYMAN:
+                return self._calculate_neyman(inputs)
+            return self._calculate_global_eua(inputs)
         except Exception as e:
             logger.error(f"Error in stratified sampling calculation: {e}")
             return SamplingResults.error(self.method, str(e))
 
-    def _allocate_samples(
-        self,
-        area_df,
-        total_samples: int,
-        allocation_method: AllocationMethod,
-        expected_accuracies: Dict[int, float],
-        min_samples: int,
-    ) -> Dict[int, int]:
-        """Allocate samples to classes based on allocation method."""
-        if allocation_method == AllocationMethod.EQUAL:
-            raw_allocation = allocate_samples_equal(area_df, total_samples)
-        elif allocation_method == AllocationMethod.NEYMAN:
-            raw_allocation = allocate_samples_neyman(
-                area_df, expected_accuracies, total_samples
+    def _calculate_neyman(self, inputs: SamplingInputs) -> SamplingResults:
+        """Per-class EUA path: Olofsson (Open Foris) adjusted-proportional design."""
+        area_df = inputs.area_data
+        expected_accuracies = {
+            int(code): float(value)
+            for code, value in (inputs.expected_accuracies or {}).items()
+        }
+        design_df = calculate_openforis_stratified_design(
+            area_df=area_df,
+            expected_accuracies=expected_accuracies,
+            target_standard_error=inputs.target_error_decimal,
+            min_samples_per_class=inputs.min_samples_per_class,
+        )
+        allocation_dict = {
+            int(row["map_code"]): int(row["final"]) for _, row in design_df.iterrows()
+        }
+        samples_per_class = [
+            ClassAllocation(
+                map_code=int(row["map_code"]),
+                class_name=row.get("map_edited_class", f"Class {int(row['map_code'])}"),
+                samples=int(row["final"]),
+                area_ha=row["map_area"] / 10000,
+                proportion=float(row["wi"]),
+                expected_accuracy=float(row["eua"]),
+                equal_samples=int(row["equal"]),
+                proportional_samples=int(row["proportional"]),
+                adjusted_samples=int(row["adjusted"]),
             )
-        elif allocation_method == AllocationMethod.BALANCED:
-            raw_allocation = allocate_samples_balanced(area_df, total_samples)
+            for _, row in design_df.iterrows()
+        ]
+        self._attach_moe(
+            samples_per_class,
+            allocation_dict,
+            area_df,
+            inputs.confidence_level_decimal,
+            expected_accuracies,
+        )
+        return self._results(
+            inputs, allocation_dict, samples_per_class, AllocationMethod.NEYMAN
+        )
+
+    def _calculate_global_eua(self, inputs: SamplingInputs) -> SamplingResults:
+        """Proportional / equal / balanced using the global expected accuracy."""
+        area_df = inputs.area_data
+        method = inputs.allocation_method
+        min_samples = inputs.min_samples_per_class
+        global_eua = inputs.expected_accuracy_decimal
+        codes = [int(c) for c in area_df["map_code"]]
+        # Uniform (global) EUA -> total sample size ignores per-class EUA.
+        eua_dict = {code: global_eua for code in codes}
+
+        total = calculate_stratified_sample_size(
+            area_df, eua_dict, inputs.target_error_decimal
+        )
+
+        equal_by_code = {
+            int(c): v for c, v in allocate_samples_equal(area_df, total).items()
+        }
+        prop_series = allocate_samples_proportional(area_df, total)
+        prop_by_code = {
+            int(area_df.iloc[i]["map_code"]): float(prop_series.iloc[i])
+            for i in range(len(area_df))
+        }
+        if method == AllocationMethod.EQUAL:
+            raw_by_code = equal_by_code
+        elif method == AllocationMethod.BALANCED:
+            raw_by_code = {
+                int(c): v for c, v in allocate_samples_balanced(area_df, total).items()
+            }
         else:  # PROPORTIONAL (default)
-            raw_allocation = apply_adjusted_allocation(
-                area_df, total_samples, min_samples
+            raw_by_code = prop_by_code
+
+        allocation_dict = {
+            code: max(round(float(raw_by_code[code])), min_samples) for code in codes
+        }
+
+        total_area = area_df["map_area"].sum()
+        samples_per_class = []
+        for _, row in area_df.iterrows():
+            code = int(row["map_code"])
+            samples_per_class.append(
+                ClassAllocation(
+                    map_code=code,
+                    class_name=row.get("map_edited_class", f"Class {code}"),
+                    samples=allocation_dict[code],
+                    area_ha=row["map_area"] / 10000,
+                    proportion=float(row["map_area"] / total_area),
+                    expected_accuracy=global_eua,
+                    equal_samples=round(float(equal_by_code[code])),
+                    proportional_samples=round(float(prop_by_code[code])),
+                    adjusted_samples=allocation_dict[code],
+                )
             )
-            return raw_allocation  # Already returns integers
+        self._attach_moe(
+            samples_per_class,
+            allocation_dict,
+            area_df,
+            inputs.confidence_level_decimal,
+            eua_dict,
+        )
+        return self._results(inputs, allocation_dict, samples_per_class, method)
 
-        # Apply minimum constraints and convert to integers
-        final_allocation = {}
-        for code, n_float in raw_allocation.items():
-            n_int = max(math.ceil(n_float), min_samples)
-            final_allocation[int(code)] = n_int
+    def _attach_moe(self, samples_per_class, allocation_dict, area_df, conf, eua):
+        moe_df = calculate_per_class_moe_for_allocation(
+            allocation=allocation_dict,
+            area_df=area_df,
+            confidence_level=conf,
+            expected_accuracies=eua,
+        )
+        moe_by_code = moe_df.set_index("map_code")["moe_percent"]
+        for alloc in samples_per_class:
+            alloc.moe_percent = float(moe_by_code.loc[alloc.map_code])
 
-        return final_allocation
+    def _results(self, inputs, allocation_dict, samples_per_class, method):
+        total_area = inputs.area_data["map_area"].sum()
+        return SamplingResults(
+            sampling_method=self.method,
+            success=True,
+            total_samples=sum(allocation_dict.values()),
+            target_error=inputs.target_error,
+            confidence_level=inputs.confidence_level,
+            allocation_method=method.value,
+            allocation_dict=allocation_dict,
+            samples_per_class=samples_per_class,
+            total_area_ha=total_area / 10000,
+            current_moe_percent=None,
+            current_moe_decimal=None,
+        )

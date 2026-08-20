@@ -1,0 +1,377 @@
+{
+    "app": {
+        "title": "SBAE - Sampling-Based Area Estimation",
+        "route_label": "SBAE Tool",
+        "step_sample_design": "Sample design",
+        "right_panel_title": "Sample design tools"
+    },
+    "common": {
+        "close": "Close",
+        "download": "Download",
+        "or_divider": "or",
+        "unknown": "Unknown",
+        "class_code": "Class {}",
+        "row_singular": "row",
+        "row_plural": "rows",
+        "column_singular": "column",
+        "column_plural": "columns",
+        "class_singular": "class",
+        "class_plural": "classes"
+    },
+    "landing": {
+        "title": "Sampling-Based Area Estimation",
+        "step_design": "Design",
+        "step_analyze": "Analyze"
+    },
+    "map": {
+        "legend": {
+            "sample": "Sample point",
+            "correct": "Correct",
+            "incorrect": "Incorrect",
+            "reference": "Reference point"
+        },
+        "reference_layer_name": "Reference points",
+        "error": {
+            "sample_points_failed": "Could not render sample points on the map: {}",
+            "reference_points_failed": "Could not render reference points on the map: {}"
+        }
+    },
+    "design": {
+        "tab": "Design",
+        "intro": "**Accuracy assessment design** — stratified sample size and allocation following Olofsson et al. (2014) good practices.",
+        "help": {
+            "title": "Olofsson AA design — methodology",
+            "body": "Sample size and allocation follow **Olofsson et al. (2014)**, *Good practices for estimating area and assessing accuracy of land change*.\n\n**Inputs:** Expected User's Accuracy (EUA) per class (High / Low confidence), target standard error, and minimum samples per class.\n\n**Total sample size:** `n = ( sum(Wi*Si) / SE )^2`, with `Si = sqrt(EUAi*(1-EUAi))` and `Wi` the area share.\n\n**Allocation (adjusted proportional):** start from area-proportional samples, raise any class below the minimum up to it, then redistribute the rest proportionally. Edit any class's sample count to override."
+        },
+        "workflow": {
+            "title": "Sample Design Workflow",
+            "aa_design": "Olofsson AA Design",
+            "advanced": "Sampling",
+            "invalid": "Invalid sample design workflow: {}"
+        },
+        "class_editor": {
+            "button": "Edit classes & EUA",
+            "dialog_title": "Edit Classes and Expected User's Accuracy",
+            "dialog_title_with_samples": "Edit Classes, EUA & Samples",
+            "no_area_data": "No area data available.",
+            "eua_card_title": "Expected User's Accuracy (EUA)",
+            "high_eua": "High EUA (%)",
+            "high_eua_hint": "For stable, easily identifiable classes (e.g., 85-95%)",
+            "low_eua": "Low EUA (%)",
+            "low_eua_hint": "For difficult classes, change detection, rare classes (e.g., 65-75%)",
+            "code": "Code {}",
+            "class_name": "Class Name",
+            "mode_high": "High",
+            "mode_low": "Low",
+            "mode_custom": "Custom",
+            "custom_eua": "EUA (%)",
+            "samples": "Samples",
+            "area_share": "{} ha ({}%)"
+        },
+        "point_generation": {
+            "calculate_first": "Calculate sample sizes first.",
+            "use_custom_seed": "Use custom seed",
+            "seed": "Seed",
+            "generate": "Generate Points",
+            "generating": "Generating sample points... This may take a moment for large datasets.",
+            "generating_status": "Generating sample points...",
+            "allocation_changed": "Sample allocation has changed! The points shown on the map don't match your current allocation. Please regenerate points.",
+            "need_aoi": "Select an Area of Interest before generating points.",
+            "need_map": "Upload a classification map before generating points.",
+            "error": {
+                "generating": "Error generating points: {}",
+                "not_ready_stratified": "Please upload a classification map and complete sample size calculation first.",
+                "not_ready_aoi": "Please select an Area of Interest and complete sample size calculation first."
+            }
+        },
+        "export_files": {
+            "empty": "Generate sample points first to enable export.",
+            "csv": "Sample points (CSV)",
+            "geojson": "Sample points (GeoJSON)"
+        },
+        "stats": {
+            "area_ha": "{} ha",
+            "class_count": "{} classes",
+            "sample_count": "n={}",
+            "target_se": "Target SE: {}%",
+            "target_se_tooltip": "Target standard error of expected overall accuracy used to calculate the stratified sample size.",
+            "moe": "MOE: {}%",
+            "moe_tooltip": "Margin of Error: The range of uncertainty in the overall accuracy estimate at the specified confidence level. Lower MOE indicates higher precision.",
+            "empty": "Define an area of interest, or load a classification map for stratified sampling, to compute the sample design."
+        },
+        "charts": {
+            "precision_curve_title": "Precision Curve",
+            "precision_curve_series": "MOE vs Sample Size",
+            "precision_curve_current": "Current Design (n={})",
+            "sample_size_axis": "Sample Size",
+            "moe_axis": "MOE (%)",
+            "current_design_chip": "n={}, MOE=±{}%",
+            "per_class_title": "Per-Class Precision",
+            "max_moe_chip": "Max MOE: {} (±{}%)",
+            "area_proportion_title": "Proportion by Area"
+        },
+        "parameters": {
+            "sampling_method": "Sampling Method",
+            "total_sample_size": "Total Sample Size",
+            "confidence_level": "Confidence Level",
+            "expected_accuracy": "Expected Overall Accuracy (%)",
+            "target_error": "Target Standard Error (%)",
+            "target_error_hint": "Standard error of expected overall accuracy",
+            "min_samples": "Minimum Samples per Class",
+            "min_samples_hint": "Safety minimum for small/rare classes"
+        },
+        "outputs": {
+            "summary": "Summary",
+            "generate_points": "Generate Points",
+            "generate_points_description": "Generate sample points based on calculated sample sizes.",
+            "export": "Export Results",
+            "export_description": "Download the generated sample points (CSV / GeoJSON)."
+        },
+        "error": {
+            "calculation_failed": "Calculation failed",
+            "calculating": "Error calculating samples: {}",
+            "invalid_method": "Invalid sampling method: {}",
+            "invalid_total": "Invalid sample total: {}",
+            "invalid_confidence": "Invalid confidence level: {}",
+            "invalid_expected_accuracy": "Invalid expected accuracy: {}",
+            "invalid_target_error": "Invalid target error: {}",
+            "invalid_min_samples": "Invalid minimum samples: {}"
+        }
+    },
+    "aoi": {
+        "title": "Select Area of Interest",
+        "computing": "Computing AOI boundaries..."
+    },
+    "upload": {
+        "button": "Upload Map",
+        "dialog_title": "Upload classification map",
+        "instructions": "Upload your land cover classification map as a raster file. Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio.",
+        "confirm": "Use This File",
+        "sample_map": "Use Sample Map",
+        "layer_name": "Classification Map",
+        "current_file": "Current File:",
+        "current_file_details": "Type: {} | Size: {} MB",
+        "optimizing": "Optimizing raster for display... this may take a moment for large files.",
+        "computing_areas": "Computing class areas...",
+        "loading_sample": "Loading sample map...",
+        "preview": {
+            "title": "File selected",
+            "type": "Type",
+            "size": "Size",
+            "features": "Features",
+            "crs": "CRS",
+            "crs_missing": "Not specified"
+        },
+        "toast": {
+            "uploaded": "File uploaded successfully.",
+            "optimized": "File uploaded and optimized — you can now edit class names.",
+            "optimization_failed": "Error optimizing raster: {}"
+        },
+        "error": {
+            "not_a_raster": "Unsupported file format. The classification map must be a raster (GeoTIFF, ERDAS Imagine, or another format rasterio can open).",
+            "sample_not_found": "Sample file not found: {}",
+            "sample_failed": "Error loading sample map: {}"
+        }
+    },
+    "analysis": {
+        "tab": "Analysis",
+        "intro": "**Accuracy assessment analysis** — error-adjusted area estimates and class accuracies from your reference sample, following Olofsson et al. (2014).",
+        "help": {
+            "title": "Accuracy assessment — methodology",
+            "body": "Estimates **error-adjusted areas** and accuracies from a collected **reference / validation sample** using the **Olofsson et al. (2014)** good-practice estimators.\n\n**Inputs:** the reference table (mapped class vs. reference class per sample) and the mapped class areas — taken from your classification (design step) or a separate area / strata CSV.\n\n**Outputs:** the error matrix, error-adjusted area per class with confidence intervals, and user's / producer's / overall accuracies."
+        },
+        "reference": {
+            "upload_button": "Upload reference data",
+            "dialog_title": "Upload reference data",
+            "dialog_body": "Upload the collected **reference / validation** table (CSV).",
+            "example_button": "Use example data",
+            "table_title": "Reference table",
+            "reading": "Reading reference file..."
+        },
+        "column_mapping": {
+            "title": "Column mapping",
+            "help": "Match each CSV column to its role. Every reference point needs its **mapped class** (`map_code` -- what the classification assigned) and its **reference class** (`ref_code` -- the interpreted truth); those two build the error matrix. X/Y are required only when the class is read from an uploaded map. Fields marked \\* are required.",
+            "role": {
+                "map": "Map / predicted class",
+                "ref": "Reference class",
+                "x": "X / longitude",
+                "y": "Y / latitude",
+                "sample_area": "Per-sample area (optional)"
+            }
+        },
+        "options": {
+            "title": "Options",
+            "help": "Where the per-class **areas** (the stratum weights) come from -- the design step's classification, a separate area/strata CSV, or a classification map you upload here -- plus the **confidence level** for the error-adjusted intervals and the **display unit**.",
+            "area_source": "Area / strata source",
+            "confidence_level": "Confidence level (%)",
+            "display_unit": "Display unit"
+        },
+        "area_source": {
+            "design": "From the design map",
+            "map": "Upload a classification map",
+            "upload": "From an area / strata CSV"
+        },
+        "design_map": {
+            "title": "Design map:",
+            "fallback_name": "design classification",
+            "detail": "{} {} from the design step",
+            "missing": "No classification is loaded from the design step. Switch to 'Upload a classification map' or 'From an area / strata CSV'."
+        },
+        "classification_map": {
+            "title": "Classification map:",
+            "detail": "GeoTIFF | {} MB",
+            "layer_name": "Classification (analysis)"
+        },
+        "area_table": {
+            "title": "Area / strata table",
+            "class_column": "Area file: class column",
+            "area_column": "Area file: area column"
+        },
+        "filter": {
+            "title": "Filter (optional)",
+            "help": "Optional: restrict the assessment to a subset of reference points -- pick a column and keep only the values you choose (e.g. one region, tile, or campaign). Leave empty to use every row.",
+            "column": "Filter column",
+            "keep_values": "Keep values"
+        },
+        "calculate": "Calculate accuracy assessment",
+        "empty": {
+            "no_reference": "Upload a reference table (or load the example data) to run the accuracy assessment.",
+            "not_calculated": "Set the area source and column mapping, then press **Calculate** to run the accuracy assessment."
+        },
+        "note": {
+            "legend_mismatch": "Note: map and reference legends differ; classes present in only one are shown with zero-filled values."
+        },
+        "error": {
+            "example_not_found": "Example analysis data not found in {}",
+            "example_failed": "Could not load example analysis data: {}",
+            "reference_read_failed": "Could not read reference file: {}",
+            "area_read_failed": "Could not read area file: {}",
+            "classification_failed": "Classification-map analysis failed: {}",
+            "raster_render_failed": "Analysis ran, but the classification map could not be rendered on the map: {}",
+            "missing_inputs": "Provide the required inputs before calculating.",
+            "failed": "Analysis failed"
+        },
+        "tables": {
+            "confusion_title": "Error matrix",
+            "confusion_description": "rows = map, cols = reference",
+            "confusion_corner": "map\\ref",
+            "area_title": "Area estimates",
+            "area_description": "Error-adjusted (Olofsson 2014)",
+            "accuracy_title": "Accuracy by class",
+            "class_header": "Class",
+            "samples_header": "Samples",
+            "map_area_header": "Map area ({})",
+            "adjusted_area_header": "Adj. area ({})",
+            "confidence_interval_header": "± CI ({})",
+            "srs_area_header": "SRS area ({})",
+            "users_header": "User's",
+            "producers_header": "Producer's",
+            "weighted_producers_header": "Weighted PA"
+        },
+        "downloads": {
+            "title": "Downloads",
+            "confusion": "Error matrix",
+            "area": "Area estimates",
+            "accuracy": "Accuracy table",
+            "reference": "Reference input"
+        },
+        "charts": {
+            "area_estimate_title": "Error-adjusted area by class ({})",
+            "adjusted_area_series": "Adjusted area ({})",
+            "confidence_interval_series": "CI",
+            "area_axis": "Area ({})",
+            "confusion_title": "Confusion matrix (map → reference)",
+            "confusion_reference_axis": "reference",
+            "confusion_map_axis": "map",
+            "accuracy_title": "Accuracy by class",
+            "users_series": "User's",
+            "producers_series": "Producer's",
+            "area_proportion_title": "Estimated area proportion"
+        },
+        "dashboard": {
+            "title": "Accuracy assessment results",
+            "tables": "Tables",
+            "open": "View dashboard",
+            "overall_accuracy": "Overall accuracy",
+            "overall_accuracy_hint": "Share of reference points classified correctly.",
+            "confidence_level": "Confidence level",
+            "confidence_level_hint": "Probability that the ± intervals contain the true value.",
+            "reference_samples": "Reference samples",
+            "reference_samples_hint": "Total reference points assessed.",
+            "classes": "Classes",
+            "classes_hint": "Number of map classes evaluated.",
+            "overall_chip": "Overall {}%",
+            "confidence_chip": "CL {}%",
+            "samples_chip": "n={}",
+            "classes_chip": "{} classes"
+        }
+    },
+    "calculator": {
+        "title": "Calculate Sample Size",
+        "intro": "Configure sampling parameters and calculate the required sample size for your accuracy assessment based on statistical methods.",
+        "parameters_title": "Parameters:",
+        "parameter_accuracy": "• Target Overall Accuracy: Desired accuracy level (e.g., 85%)",
+        "parameter_confidence": "• Confidence Level: Statistical confidence (typically 95%)",
+        "parameter_minimum": "• Minimum Sample Size: Safety minimum for small classes",
+        "complete": "Sample configuration complete! Ready to generate points.",
+        "card_intro": "Configure sampling parameters to determine the required sample size for your accuracy assessment.",
+        "upload_first": "Upload and configure your map first.",
+        "target_moe": "Target Margin of Error (%)",
+        "calculating": "Calculating sample sizes...",
+        "needs_map": "Please upload a classification map first.",
+        "simple_results_title": "Sample Size Configuration:",
+        "sampling_method": "Sampling method: {}",
+        "total_samples": "Total samples: {}",
+        "confidence_level": "Confidence Level: {}%",
+        "distribution_note": "Samples will be distributed {} across the entire study area.",
+        "distribution_random": "randomly",
+        "distribution_systematic": "in a systematic grid",
+        "stratified_results_title": "Sample Size Calculation Results:",
+        "total_samples_needed": "Total samples needed: {}",
+        "allocation_method": "Allocation method: {}",
+        "current_moe": "Current Margin of Error: {}%",
+        "samples_per_class": "Samples per class:",
+        "class_samples": "• {}: {}",
+        "allocation": {
+            "title": "Sample Allocation",
+            "empty": "No allocation data available",
+            "manual_title": "Manual Allocation Editing:",
+            "samples": "Samples"
+        },
+        "per_class": {
+            "title": "Per-Class Precision (Given Current Allocation)",
+            "subtitle": "Per-Class Margin of Error (MOE)",
+            "description": "This chart shows the expected precision for each class based on your current sample allocation. Classes with larger MOE bars are under-powered and have less precise estimates.",
+            "formula_title": "Formula (binomial normal approximation):",
+            "where": "Where:",
+            "term_n": "• n_h: samples allocated to the class",
+            "term_p": "• p_h: expected accuracy (0.5 used as conservative default)",
+            "term_z": "• Z: Z-score based on confidence level",
+            "term_population": "• N_h: finite population size (optional, using 1 if unknown)",
+            "term_deff": "• DEFF: design effect (≈1.0 for spatially balanced; >1 if clustered)",
+            "analysis_title": "Current Allocation Analysis:",
+            "highest_moe": "Highest MOE: {} (±{}%, n={})",
+            "lowest_moe": "Lowest MOE: {} (±{}%, n={})",
+            "advice": "Classes with large MOE values may need more samples for better precision.",
+            "moe_axis": "Margin of Error (%)",
+            "interpretation": "**Interpretation**: The bars show the margin of error for each class's user accuracy estimate. Larger bars indicate less precise estimates. If you oversample rare classes, this chart helps verify you achieved the desired per-class precision."
+        },
+        "curve": {
+            "title": "Precision Curve Analysis",
+            "subtitle": "How Margin of Error (MOE) Changes with Sample Size",
+            "description": "The precision curve shows the inverse relationship between sample size and margin of error. As you increase the total sample size (n), the margin of error decreases following the formula:",
+            "where": "Where:",
+            "term_z": "• Z = Z-score based on confidence level",
+            "term_oa": "• OA = Overall accuracy (expected)",
+            "term_n": "• n = Total sample size",
+            "current_title": "Your Current Design:",
+            "current_size": "Sample size: {}",
+            "current_moe": "Margin of Error: ±{}%",
+            "series": "MOE vs Sample Size",
+            "current_series": "Your Design (n={})",
+            "sample_size_axis": "Sample Size (n)",
+            "moe_axis": "Margin of Error (%)",
+            "insight": "**Key Insight**: Notice how the MOE decreases rapidly at first, but the improvement slows as sample size increases. This is the \"diminishing returns\" effect - doubling the sample size doesn't halve the error."
+        }
+    }
+}

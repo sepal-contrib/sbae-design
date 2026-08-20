@@ -1,8 +1,9 @@
 import logging
 
 import solara
-from sepal_ui.solara.components.aoi.aoi_view import AoiView
+from pysepal.solara.components.aoi.aoi_view import AoiView
 
+from component.message import use_translator
 from component.model import app_state
 from component.tile.upload import CurrentFileDisplay, UploadTile
 from component.widget.map import SbaeMap
@@ -13,6 +14,7 @@ logger = logging.getLogger("sbae.aoi_upload_selector")
 @solara.component
 def AoiUploadSelector(sbae_map: SbaeMap = None):
     """Component that renders AOI selector or Upload button based on sampling method."""
+    ms = use_translator()
     show_upload_modal = solara.use_reactive(False)
     sampling_method = app_state.sampling_method.value
     has_uploaded_file = (
@@ -76,7 +78,7 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
 
             solara.HTML(
                 tag="div",
-                unsafe_innerHTML="<strong>Select Area of Interest</strong>",
+                unsafe_innerHTML=f"<strong>{ms.aoi.title}</strong>",
                 style="font-size: 16px; margin-bottom: 8px;",
             )
 
@@ -88,20 +90,16 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             )
 
             if app_state.aoi_computing.value:
-                solara.Info("⏳ Computing AOI boundaries...")
+                solara.Info(ms.aoi.computing)
 
         elif sampling_method == "stratified":
 
             if has_uploaded_file:
                 CurrentFileDisplay(sbae_map)
             else:
-                solara.Text(
-                    "For stratified sampling, you need to upload a classification map."
-                )
-
                 with solara.Row(justify="center", style={"margin-top": "16px"}):
                     solara.Button(
-                        label="Upload Map",
+                        label=ms.upload.button,
                         icon_name="mdi-upload",
                         on_click=open_upload_modal,
                         color="primary",
@@ -114,17 +112,25 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
         with solara.v.Dialog(
             v_model=show_upload_modal.value,
             on_v_model=show_upload_modal.set,
-            max_width="900px",
-            persistent=False,
+            max_width=900,
+            eager=True,
         ):
-            with solara.Card(margin=0):
+            UploadDialogCard(sbae_map, on_close=close_upload_modal)
 
-                with solara.Column():
-                    UploadTile(sbae_map)
 
-                with solara.CardActions():
-                    solara.Button(
-                        label="Close",
-                        on_click=close_upload_modal,
-                        text=True,
-                    )
+@solara.component
+def UploadDialogCard(sbae_map: SbaeMap = None, on_close=None):
+    """Card body for the upload modal.
+
+    Matches the "Edit classes" dialog styling: a single titled card (no nested
+    cards) with the content in a scrollable ``CardText`` and the Close button
+    right-aligned in the actions row.
+    """
+    ms = use_translator()
+    with solara.v.Card():
+        solara.v.CardTitle(children=[ms.upload.dialog_title])
+        with solara.v.CardText(style="max-height: 70vh; overflow-y: auto;"):
+            UploadTile(sbae_map)
+        with solara.v.CardActions():
+            solara.v.Spacer()
+            solara.Button(ms.common.close, text=True, on_click=on_close)

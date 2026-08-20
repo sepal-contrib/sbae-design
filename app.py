@@ -15,26 +15,37 @@ proj_data = os.path.join(env_prefix, "share", "proj")
 if os.path.exists(proj_data):
     os.environ["PROJ_DATA"] = proj_data
 
+# Both tile servers bind 127.0.0.1 inside the kernel, so the browser needs a route
+# that reaches them. SEPAL sets LOCALTILESERVER_CLIENT_PREFIX to a
+# jupyter-server-proxy route that forwards any port in the sandbox, so it carries
+# PMTiles as well as raster tiles -- but vectortileserver never autodetects one,
+# and left alone its layers keep a URL the browser cannot reach, so the points
+# silently never arrive. Only borrow the generic /proxy/{port} form: it forwards
+# any port by construction, while a route namespaced to one server (localtileserver's
+# own autodetected prefix) would not serve a vector port.
+_raster_prefix = os.environ.get("LOCALTILESERVER_CLIENT_PREFIX")
+if _raster_prefix and "/proxy/{port}" in _raster_prefix:
+    os.environ.setdefault("VECTORTILESERVER_CLIENT_PREFIX", _raster_prefix)
+
 import logging
 
 import solara
-from sepal_ui.logger import setup_logging
-from sepal_ui.sepalwidgets.vue_app import MapApp, ThemeToggle
-from sepal_ui.solara import (
+from pysepal.logger import setup_logging
+from pysepal.sepalwidgets.vue_app import MapApp
+from pysepal.solara import (
+    NotificationProvider,
+    get_current_theme_state,
     setup_sessions,
     setup_solara_server,
     setup_theme_colors,
 )
-from solara.lab.components.theming import theme
 
+from component.message import available_locales, get_translator, use_translator
 from component.model.app_model import AppModel
-from component.tile.export import Export
-from component.tile.landing import LandingTile
 from component.tile.upload import RasterMapWatcher
-from component.widget.map import SbaeMap
-from component.widget.point_generation import PointGeneration
+from component.widget.map import PointsLegend, SbaeMap
+from component.widget.notification_bridge import ErrorToastBridge
 from component.widget.sample_configuration import SampleConfiguration
-from component.widget.summary import Summary
 
 logger = setup_logging(logger_name="sbae")
 
@@ -58,27 +69,30 @@ def on_kernel_start():
 # @with_sepal_sessions(module_name="sbae_app")
 def Page():
     """Main SBAE application page using MapApp layout."""
+    theme_state = get_current_theme_state()
+    ms = use_translator()
+
+    # Notification system (pysepal): mount the provider once at the app root,
+    # before any component that calls use_notifications(). Kept in the same page
+    # as MapApp so the task pill can track the right-panel offset. It takes the
+    # same ThemeState as MapApp: without it the provider falls back to a
+    # process-local default and the toasts/pill stay light under a dark app.
+    NotificationProvider(theme_state=theme_state)
+    ErrorToastBridge()
+
     app_model = AppModel()
 
     setup_theme_colors()
-    theme_toggle = ThemeToggle()
-    theme_toggle.observe(lambda e: setattr(theme, "dark", e["new"]), "dark")
-    sbae_map = SbaeMap(theme_toggle=theme_toggle, gee=USE_GEE)
+    sbae_map = SbaeMap(theme_state=theme_state, gee=USE_GEE)
 
     RasterMapWatcher(sbae_map)
+    # Floating legend overlay for the sample/reference points (bottom-center).
+    PointsLegend()
 
     steps_data = [
         {
-            "id": 1,
-            "name": "Getting Started",
-            "icon": "mdi-rocket",
-            "display": "dialog",
-            "content": LandingTile(app_model),
-            "width": 900,
-        },
-        {
             "id": 4,
-            "name": "Sample design",
+            "name": ms.app.step_sample_design,
             "icon": "mdi-tune",
             "display": "step",
             "content": [],
@@ -88,47 +102,32 @@ def Page():
 
     # Right panel configuration
     right_panel_config = {
-        "title": "Sample design tools",
+        "title": ms.app.right_panel_title,
         "icon": "mdi-tools",
         "width": 450,
         "toggle_icon": "mdi-chevron-left",
         "is_open": True,
     }
 
-    # Right panel content sections
+    # Right panel content: a single section holding the tabbed Sample
+    # Configuration (Design | Analysis). The design-phase outputs (summary /
+    # generate points / export) now live inside the Design tab, so they no
+    # longer appear while the user is on the Analysis tab.
     right_panel_content = [
         {
-            "title": "Sample Configuration",
-            "icon": "mdi-tune",
-            "content": [SampleConfiguration(sbae_map)],
-        },
-        {
-            "title": "Summary",
-            "icon": "mdi-progress-check",
-            "content": [Summary(theme_toggle=theme_toggle)],
-        },
-        {
-            "title": "Generate Points",
-            "icon": "mdi-map-marker-multiple",
-            "content": [PointGeneration(sbae_map)],
-            "description": "Generate sample points based on calculated sample sizes.",
-        },
-        {
-            "title": "Export Results",
-            "icon": "mdi-download",
-            "content": [Export()],
-            "description": "Generate sample points based on calculated sample sizes.",
+            "content": [SampleConfiguration(sbae_map, theme_state=theme_state)],
         },
     ]
 
     # Create the MapApp with the shared map instance
     MapApp.element(
-        app_title="SBAE - Sampling-Based Area Estimation",
+        app_title=ms.app.title,
         app_icon="mdi-map-marker-radius",
+        locales=available_locales(),
         main_map=[sbae_map],
         steps_data=steps_data,
-        initial_step=1,
-        theme_toggle=[theme_toggle],
+        initial_step=4,
+        theme_state=theme_state,
         dialog_width=900,
         right_panel_config=right_panel_config,
         right_panel_content=right_panel_content,
@@ -140,7 +139,8 @@ def Page():
     )
 
 
-# Routes for the application
+# Routes for the application. The label is read once at import, outside any
+# render, so it stays in the default locale.
 routes = [
-    solara.Route(path="/", component=Page, label="SBAE Tool"),
+    solara.Route(path="/", component=Page, label=get_translator().app.route_label),
 ]

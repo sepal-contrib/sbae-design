@@ -4,12 +4,12 @@ Contains reactive state management for the SBAE application.
 """
 
 import json
-import tempfile
 from typing import Dict, List
 
 import geopandas as gpd
 import pandas as pd
 import solara
+from pysepal.scripts.scratch import scratch_dir
 
 from component.scripts.precision import calculate_current_moe
 
@@ -20,7 +20,7 @@ class AppState:
     def __init__(self):
         # File handling
         self.uploaded_file_info = solara.reactive(None)
-        self.temp_dir = solara.reactive(tempfile.mkdtemp())
+        self.temp_dir = solara.reactive(str(scratch_dir(prefix="sbae_")))
         self.file_path = solara.reactive(None)
         self.file_error = solara.reactive(None)
 
@@ -35,6 +35,10 @@ class AppState:
         self.aoi_computing = solara.reactive(False)
         # Color palette extracted from raster or default
         self.class_colors = solara.reactive({})
+        # On-map points legend: {label: hex}, composed from the point layers
+        # shown (see SbaeMap._refresh_points_legend); rendered by PointsLegend.
+        # (Distinct from accuracy's map_legend/ref_legend class-code lists.)
+        self.points_legend = solara.reactive({})
         # Expected User's Accuracy per class (EUA)
         self.expected_user_accuracies = solara.reactive({})
         # Global high and low EUA values
@@ -70,6 +74,7 @@ class AppState:
         self.current_step = solara.reactive(1)
         self.processing_status = solara.reactive("")
         self.error_messages = solara.reactive([])
+        self.sample_design_workflow = solara.reactive("aa_design")
         # Raster optimization status: 'idle', 'running', 'adding_to_map', 'finished', 'error'
         self.raster_optimization_status = solara.reactive("idle")
         self.raster_optimization_error = solara.reactive(None)
@@ -78,6 +83,30 @@ class AppState:
         # Export state
         self.last_export_csv = solara.reactive("")
         self.last_export_geojson = solara.reactive("")
+
+        # --- Analysis (accuracy assessment) ---
+        self.analysis_reference_df = solara.reactive(pd.DataFrame())
+        self.analysis_area_source = solara.reactive(
+            "design"
+        )  # "design" | "upload" | "map"
+        self.analysis_area_df = solara.reactive(pd.DataFrame())
+        self.analysis_classification_path = solara.reactive(
+            None
+        )  # raster path for "map" source
+        self.analysis_column_mapping = solara.reactive({})
+        self.analysis_filter = solara.reactive(None)
+        self.analysis_confidence_level = solara.reactive(95.0)
+        self.analysis_area_unit = solara.reactive("ha")  # "ha" | "m2"
+        self.analysis_results = solara.reactive(None)
+        # Signature of the inputs that produced analysis_results. Results are only
+        # (re)computed by an explicit Calculate action; when the live inputs no
+        # longer match this signature the dashboard is treated as stale and hidden.
+        self.analysis_results_signature = solara.reactive(None)
+        self.analysis_status = solara.reactive("")
+        # Display names for the loaded analysis tables (mirrors uploaded_file_info
+        # for the design tab): shown by CurrentTableDisplay once a CSV is loaded.
+        self.analysis_reference_name = solara.reactive("")
+        self.analysis_area_name = solara.reactive("")
 
     def update_class_name(self, map_code: int, new_name: str):
         """Update class name in area data."""
@@ -170,11 +199,11 @@ class AppState:
         self,
         target_error: float,
         confidence_level: float,
-        min_samples_per_class: int = None,
-        expected_accuracy: float = None,
-        sampling_method: str = None,
-        simple_total_samples: int = None,
-        stratified_allocation_method: str = None,
+        min_samples_per_class: int | None = None,
+        expected_accuracy: float | None = None,
+        sampling_method: str | None = None,
+        simple_total_samples: int | None = None,
+        stratified_allocation_method: str | None = None,
     ):
         """Update sampling parameters.
 
@@ -320,6 +349,14 @@ class AppState:
     def clear_errors(self):
         """Clear all error messages."""
         self.error_messages.value = []
+
+    def set_sample_design_workflow(self, workflow: str):
+        """Select the sample design workflow shown in the configuration panel."""
+        if workflow not in ("aa_design", "advanced"):
+            raise ValueError(
+                "sample_design_workflow must be one of: aa_design, advanced"
+            )
+        self.sample_design_workflow.value = workflow
 
     def set_processing_status(self, status: str):
         """Set current processing status."""
@@ -495,6 +532,9 @@ class AppState:
         self.raster_optimization_status.value = "idle"
         self.raster_optimization_error.value = None
         self.optimized_raster_path.value = None
+        # the map layer is gated on this being non-empty, so a stale palette
+        # would let the next file render in the previous file's colours
+        self.class_colors.value = {}
 
     def clear_aoi_data(self):
         """Clear all AOI-related data (for simple/systematic sampling).
@@ -532,6 +572,66 @@ class AppState:
         self.samples_per_class.value = {}
         self.sample_points.value = pd.DataFrame()
         self.points_generation_status.value = None
+
+        # Clear analysis data
+        self.clear_analysis_data()
+
+    def set_analysis_results(self, results: Dict, signature=None):
+        """Store analysis results and the inputs signature that produced them.
+
+        The signature lets the Analysis tab hide the dashboard once any input
+        changes (results are only recomputed on an explicit Calculate). Passing
+        ``None`` (the default) clears both, blanking the dashboard.
+        """
+        self.analysis_results.value = results
+        self.analysis_results_signature.value = signature
+
+    def clear_analysis_data(self):
+        """Reset all analysis inputs and outputs."""
+        self.analysis_reference_df.value = pd.DataFrame()
+        self.analysis_area_source.value = "design"
+        self.analysis_area_df.value = pd.DataFrame()
+        self.analysis_classification_path.value = None
+        self.analysis_column_mapping.value = {}
+        self.analysis_filter.value = None
+        self.analysis_confidence_level.value = 95.0
+        self.analysis_area_unit.value = "ha"
+        self.analysis_results.value = None
+        self.analysis_results_signature.value = None
+        self.analysis_status.value = ""
+        self.analysis_reference_name.value = ""
+        self.analysis_area_name.value = ""
+
+    def export_confusion_matrix_csv(self) -> str:
+        """Confusion matrix as CSV (class codes as row/col headers)."""
+        results = self.analysis_results.value
+        if not results or not results.get("confusion_matrix"):
+            return ""
+        cm = results["confusion_matrix"]
+        df = pd.DataFrame(cm["data"], index=cm["index"], columns=cm["columns"])
+        df.index.name = "map\\ref"
+        return df.to_csv()
+
+    def export_area_estimates_csv(self) -> str:
+        """Per-class area estimates + SRS comparator as CSV."""
+        results = self.analysis_results.value
+        if not results or not results.get("class_estimates"):
+            return ""
+        return pd.DataFrame(results["class_estimates"]).to_csv(index=False)
+
+    def export_accuracy_csv(self) -> str:
+        """Per-class accuracy table as CSV."""
+        results = self.analysis_results.value
+        if not results or not results.get("accuracy_rows"):
+            return ""
+        return pd.DataFrame(results["accuracy_rows"]).to_csv(index=False)
+
+    def export_reference_csv(self) -> str:
+        """The uploaded reference/validation table as CSV (input echo)."""
+        df = self.analysis_reference_df.value
+        if df is None or df.empty:
+            return ""
+        return df.to_csv(index=False)
 
 
 app_state = AppState()

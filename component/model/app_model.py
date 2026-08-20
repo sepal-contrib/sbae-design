@@ -1,4 +1,4 @@
-from sepal_ui.model import Model
+from pysepal.model import Model
 from traitlets import Int
 
 

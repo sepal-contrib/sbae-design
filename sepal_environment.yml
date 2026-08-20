@@ -13,10 +13,27 @@ dependencies:
   - xarray>=2023.1.0
   - h5netcdf>=1.2.0
   - pip
-  - rasterio
-  - pyproj
+  # Keep the geospatial stack modern and internally consistent. The old
+  # `rasterio<1.3.11` pin forced an outdated PROJ (proj.db schema MINOR 3),
+  # incompatible with the pyproj that pysepal pulls (needs MINOR >= 6), which
+  # broke both CI workflows at import.
+  - rasterio>=1.4
+  - proj>=9.3
+  - pyproj>=3.6
+  - pytest>=7.0.0 # for running the test suite
+  # tippecanoe builds the PMTiles vector tiles for the map sample-points layer.
+  - tippecanoe>=2
   - pip:
-      - sepal_ui==3.1.1
+      # 4.0 drops the sepal_ui package, moves theme onto ThemeState, and is the
+      # first release with add_raster(class_colors=...). The floor names the rc
+      # on purpose: pip only considers a pre-release when the specifier itself
+      # mentions one, so plain >=4.0.0 resolves to nothing while 4.0.0rc0 is
+      # the only 4.x on PyPI.
+      - pysepal>=4.0.0rc0
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
       - ipecharts>=1.0.0
       - voila
+      # local vector-tile server for the PMTiles map sample-points layer.
+      # 0.2.2 is the first release that binds 127.0.0.1 and resolves tippecanoe
+      # next to the interpreter, which sbae used to patch around locally.
+      - vectortileserver>=0.2.2
