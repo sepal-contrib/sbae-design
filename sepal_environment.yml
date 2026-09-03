@@ -29,7 +29,7 @@ dependencies:
       # on purpose: pip only considers a pre-release when the specifier itself
       # mentions one, so plain >=4.0.0 resolves to nothing while 4.0.0rc0 is
       # the only 4.x on PyPI.
-      - pysepal>=4.0.0rc0
+      - pysepal>=4.0.0rc1
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
       - ipecharts>=1.0.0
       - voila
