@@ -1,13 +1,12 @@
 import solara
 
-from component.message import use_translator
+from component.message import msg
 from component.widget.step_card import StepCard
 
 
 @solara.component
 def LandingTile(app_model):
     """Landing dialog with workflow steps as cards."""
-    ms = use_translator()
 
     def handle_step_click(step_number: int):
         """Handle click on a step card to navigate to that step."""
@@ -15,19 +14,19 @@ def LandingTile(app_model):
 
     with solara.Column():
         with solara.Column(style={"text-align": "center", "margin-bottom": "30px"}):
-            solara.HTML(tag="h1", unsafe_innerHTML=ms.landing.title)
+            solara.HTML(tag="h1", unsafe_innerHTML=msg("landing.title"))
 
         # Create workflow step cards
         workflow_steps = [
             {
                 "number": "1",
-                "title": ms.landing.step_design,
+                "title": msg("landing.step_design"),
                 "icon": "mdi-pencil",
                 "step_id": 4,
             },
             {
                 "number": "2",
-                "title": ms.landing.step_analyze,
+                "title": msg("landing.step_analyze"),
                 "icon": "mdi-chart-bar",
                 "step_id": 3,
             },

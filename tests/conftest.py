@@ -1,6 +1,8 @@
 import asyncio
 
 import pytest
+import solara
+from pysepal.solara import NotificationProvider
 
 
 @pytest.fixture(autouse=True)
@@ -20,3 +22,23 @@ def _fresh_event_loop():
     finally:
         if not loop.is_closed():
             loop.close()
+
+
+@pytest.fixture
+def render_in_app():
+    """Render an element below a ``NotificationProvider``, as ``app.Page`` does.
+
+    Components that report through ``use_notifications()`` raise without a
+    provider above them. Pass a zero-argument factory so the element is built
+    inside the wrapper's render and becomes its child.
+    """
+
+    def render(factory):
+        @solara.component
+        def _App():
+            NotificationProvider()
+            factory()
+
+        return solara.render(_App(), handle_error=False)
+
+    return render

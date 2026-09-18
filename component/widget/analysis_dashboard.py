@@ -4,7 +4,7 @@ import ipyvuetify as ipv
 import solara
 from traitlets import Int, Unicode
 
-from component.message import use_translator
+from component.message import msg
 from component.model import app_state
 from component.widget.analysis_chart import (
     AccuracyByClassChart,
@@ -81,33 +81,31 @@ def _KpiStat(icon: str, label: str, value: str, hint: str):
 @solara.component
 def _DashboardKpiCards(results: dict):
     """Overall accuracy / confidence / samples / classes as compact stat items."""
-    ms = use_translator()
     k = dashboard_kpis(results)
-    d = ms.analysis.dashboard
     items = [
         (
             "mdi-target",
-            d.overall_accuracy,
+            msg("analysis.dashboard.overall_accuracy"),
             f"{k['overall_accuracy_pct']:.1f}%",
-            d.overall_accuracy_hint,
+            msg("analysis.dashboard.overall_accuracy_hint"),
         ),
         (
             "mdi-percent-outline",
-            d.confidence_level,
+            msg("analysis.dashboard.confidence_level"),
             f"{k['confidence_level']:.0f}%",
-            d.confidence_level_hint,
+            msg("analysis.dashboard.confidence_level_hint"),
         ),
         (
             "mdi-map-marker-multiple",
-            d.reference_samples,
+            msg("analysis.dashboard.reference_samples"),
             f"{k['n_samples']:,}",
-            d.reference_samples_hint,
+            msg("analysis.dashboard.reference_samples_hint"),
         ),
         (
             "mdi-shape-outline",
-            d.classes,
+            msg("analysis.dashboard.classes"),
             f"{k['n_classes']}",
-            d.classes_hint,
+            msg("analysis.dashboard.classes_hint"),
         ),
     ]
     with solara.v.Row(dense=True, align="center", justify="center", class_="mb-3"):
@@ -122,7 +120,6 @@ def AnalysisDashboardModal(open, theme_state=None):
     #
     # Kick ECharts into a re-layout each time the dialog opens; otherwise the
     # charts, mounted eagerly while the dialog was hidden, stay tiny.
-    ms = use_translator()
     resizer = solara.use_memo(_DialogResizer, [])
 
     def _resize_on_open():
@@ -140,7 +137,7 @@ def AnalysisDashboardModal(open, theme_state=None):
         v_model=open.value, on_v_model=open.set, max_width=1400, eager=True
     ):
         with solara.v.Card():
-            solara.v.CardTitle(children=[ms.analysis.dashboard.title])
+            solara.v.CardTitle(children=[msg("analysis.dashboard.title")])
             with solara.v.CardText(style="max-height: 80vh; overflow-y: auto;"):
                 solara.v.Html(tag="div", children=[resizer], style_="display: none;")
                 _DashboardKpiCards(results)
@@ -149,7 +146,7 @@ def AnalysisDashboardModal(open, theme_state=None):
                     AccuracyByClassChart(results, theme_state=theme_state)
                     AreaEstimateChart(results, unit, theme_state=theme_state)
                     AreaProportionChart(results, theme_state=theme_state)
-                with solara.Details(ms.analysis.dashboard.tables):
+                with solara.Details(msg("analysis.dashboard.tables")):
                     # Space the three tables apart so they don't read as one block.
                     with solara.Column(style="gap: 28px; padding-top: 8px;"):
                         _AreaEstimates(results, unit)
@@ -158,7 +155,7 @@ def AnalysisDashboardModal(open, theme_state=None):
             with solara.v.CardActions():
                 solara.v.Spacer()
                 solara.Button(
-                    ms.common.close, text=True, on_click=lambda: open.set(False)
+                    msg("common.close"), text=True, on_click=lambda: open.set(False)
                 )
 
 
@@ -167,21 +164,25 @@ def AnalysisSummaryCard(theme_state=None):
     results = app_state.analysis_results.value
     # Hooks must run unconditionally, before the early return, for hook-order
     # stability across renders (see solara's rules-of-hooks).
-    ms = use_translator()
     open_modal = solara.use_reactive(False)
     if not results:
         return
     k = dashboard_kpis(results)
-    d = ms.analysis.dashboard
     with solara.Column(gap="8px"):
         # Compact stat chips + one graph, mirroring the design tab's summary
         # style so both tabs feel consistent.
         with solara.Row(gap="4px", justify="center", style="flex-wrap: wrap;"):
             for chip_text in (
-                d.overall_chip.format(f"{k['overall_accuracy_pct']:.1f}"),
-                d.confidence_chip.format(f"{k['confidence_level']:.0f}"),
-                d.samples_chip.format(f"{k['n_samples']:,}"),
-                d.classes_chip.format(k["n_classes"]),
+                msg(
+                    "analysis.dashboard.overall_chip",
+                    value=f"{k['overall_accuracy_pct']:.1f}",
+                ),
+                msg(
+                    "analysis.dashboard.confidence_chip",
+                    value=f"{k['confidence_level']:.0f}",
+                ),
+                msg("analysis.dashboard.samples_chip", n=f"{k['n_samples']:,}"),
+                msg("analysis.dashboard.classes_chip", count=k["n_classes"]),
             ):
                 solara.v.Chip(
                     small=True, label=True, outlined=True, children=[chip_text]
@@ -190,7 +191,7 @@ def AnalysisSummaryCard(theme_state=None):
             results, theme_state=theme_state, legend_width=None, card=False
         )
         solara.Button(
-            d.open,
+            msg("analysis.dashboard.open"),
             color="primary",
             block=True,
             small=True,

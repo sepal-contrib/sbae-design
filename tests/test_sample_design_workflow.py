@@ -6,7 +6,7 @@ import pytest
 import solara
 from ipyvuetify import VuetifyTemplate
 
-from component.message import get_translator
+from component.message import msg
 from component.model import app_state
 from component.model.state_manager import AppState
 from component.tile.class_editor import class_editor_table
@@ -83,7 +83,7 @@ def test_aa_design_controls_keep_class_editor_in_dialog():
 
 
 def test_aa_design_description_mentions_olofsson():
-    assert "Olofsson" in get_translator().design.intro
+    assert "Olofsson" in msg("design.intro")
 
 
 def test_aa_design_description_visible_before_data():

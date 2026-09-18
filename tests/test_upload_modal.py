@@ -8,9 +8,9 @@ from component.tile.upload import FilePreview, UploadTile
 from component.widget.aoi_upload_selector import UploadDialogCard
 
 
-def test_upload_dialog_card_has_title_and_right_aligned_close():
-    _, rc = solara.render(
-        UploadDialogCard(sbae_map=None, on_close=lambda: None), handle_error=False
+def test_upload_dialog_card_has_title_and_right_aligned_close(render_in_app):
+    _, rc = render_in_app(
+        lambda: UploadDialogCard(sbae_map=None, on_close=lambda: None)
     )
 
     title_text = " ".join(
@@ -28,13 +28,13 @@ def test_upload_dialog_card_has_title_and_right_aligned_close():
     assert rc.find(v.Spacer).widgets
 
 
-def test_upload_section_has_no_card_of_its_own():
+def test_upload_section_has_no_card_of_its_own(render_in_app):
     # The dialog provides the single card; the upload section must not add its
     # own solara.Card (that produced the nested-card look).
     app_state.uploaded_file_info.value = None
     app_state.file_path.value = None
 
-    _, rc = solara.render(UploadTile(None), handle_error=False)
+    _, rc = render_in_app(lambda: UploadTile(None))
 
     rc.find(v.Card).assert_empty()
 

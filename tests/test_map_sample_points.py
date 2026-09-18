@@ -3,7 +3,7 @@ import asyncio
 import pandas as pd
 import pytest
 
-from component.message import get_translator
+from component.message import msg
 from component.scripts.vector_tiles import VectorTileError
 from component.widget import map as map_mod
 from component.widget.map import SbaeMap
@@ -231,11 +231,10 @@ def test_composed_legend_keys_all_resolve_in_the_catalog():
     ``PointsLegend`` looks each one up by key, so a composer key with no
     catalog entry would raise while rendering the overlay.
     """
-    ms = get_translator()
     for key in map_mod._compose_points_legend(True, True, True):
-        assert ms.map.legend[key]
+        assert msg(f"map.legend.{key}")
     for key in map_mod._compose_points_legend(True, True, False):
-        assert ms.map.legend[key]
+        assert msg(f"map.legend.{key}")
 
 
 def test_add_reference_points_colors_by_correctness(monkeypatch):

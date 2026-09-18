@@ -17,8 +17,8 @@ def ErrorToastBridge():
     ``app_state.add_error()`` is called from many places across the app, but the
     list was never rendered anywhere, so errors were silently dropped. This
     component watches the list and emits a toast (and a log line) for each new
-    entry. Without a mounted ``NotificationProvider`` the hook is a no-op, so it
-    is safe to render in isolation.
+    entry. It must render below a ``NotificationProvider``, which the hook
+    requires.
     """
     notifications = use_notifications()
     seen = solara.use_ref(0)
