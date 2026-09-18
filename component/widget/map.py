@@ -7,7 +7,7 @@ from pysepal.mapping import SepalMap
 from pysepal.scripts.scratch import scratch_dir
 from pysepal.solara import ThemeState
 
-from component.message import get_translator, use_translator
+from component.message import msg
 from component.scripts.vector_tiles import (
     CORRECT_COLOR,
     INCORRECT_COLOR,
@@ -189,9 +189,7 @@ class SbaeMap(SepalMap):
             )
         except VectorTileError as e:
             logger.warning("Sample points layer failed: %s", e)
-            app_state.add_error(
-                get_translator().map.error.sample_points_failed.format(e)
-            )
+            app_state.add_error(msg("map.error.sample_points_failed", error=e))
             return
         SbaeMap.attach_sample_points_layer(self, layer)
 
@@ -207,8 +205,7 @@ class SbaeMap(SepalMap):
         """
         from component.model import app_state
 
-        ms = get_translator()
-        layer_name = layer_name or ms.map.reference_layer_name
+        layer_name = layer_name or msg("map.reference_layer_name")
 
         # Unchanged points already on the map -> keep the existing layer and skip
         # the tippecanoe rebuild (see _points_signature).
@@ -244,7 +241,7 @@ class SbaeMap(SepalMap):
             )
         except VectorTileError as e:
             logger.warning("Reference points layer failed: %s", e)
-            app_state.add_error(ms.map.error.reference_points_failed.format(e))
+            app_state.add_error(msg("map.error.reference_points_failed", error=e))
             return
         old_dir = self.reference_points_dir
         if self.reference_points_layer is not None:
@@ -324,11 +321,10 @@ def PointsLegend():
 
     from component.model import app_state
 
-    ms = use_translator()
     legend = app_state.points_legend.value or {}
     data = LegendData(
         items=[
-            DiscreteEntry(label=ms.map.legend[key], color=color)
+            DiscreteEntry(label=msg(f"map.legend.{key}"), color=color)
             for key, color in legend.items()
         ]
     )

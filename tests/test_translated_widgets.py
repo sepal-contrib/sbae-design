@@ -7,9 +7,9 @@ it breaks in ways a plain string swap would not.
 import ipyvuetify as v
 import pytest
 import solara
-from pysepal.solara import get_current_locale_state
+from pysepal.i18n import set_locale
 
-from component.message import get_translator
+from component.message import msg
 from component.model import app_state
 from component.widget import map as map_mod
 from component.widget.map import PointsLegend
@@ -18,9 +18,8 @@ from component.widget.map import PointsLegend
 @pytest.fixture(autouse=True)
 def _reset_locale():
     """Keep a locale switch from leaking into the rest of the suite."""
-    state = get_current_locale_state()
     yield
-    state.set_locale("en")
+    set_locale("en")
 
 
 def _legend_labels(rc):
@@ -43,11 +42,10 @@ def test_points_legend_translates_the_composed_keys():
 
     _, rc = solara.render(PointsLegend(), handle_error=False)
 
-    ms = get_translator()
     assert _legend_labels(rc) == [
-        ms.map.legend.sample,
-        ms.map.legend.correct,
-        ms.map.legend.incorrect,
+        msg("map.legend.sample"),
+        msg("map.legend.correct"),
+        msg("map.legend.incorrect"),
     ]
 
 
@@ -56,8 +54,9 @@ def test_points_legend_relabels_on_a_language_change():
     app_state.points_legend.value = map_mod._compose_points_legend(False, True, False)
 
     _, rc = solara.render(PointsLegend(), handle_error=False)
-    assert _legend_labels(rc) == [get_translator().map.legend.reference]
+    assert _legend_labels(rc) == ["Reference point"]
 
-    get_current_locale_state().set_locale("es")
+    set_locale("es")
 
-    assert _legend_labels(rc) == [get_translator("es").map.legend.reference]
+    assert _legend_labels(rc) == [msg("map.legend.reference")]
+    assert _legend_labels(rc) != ["Reference point"]

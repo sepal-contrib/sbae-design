@@ -10,13 +10,17 @@
         "download": "Descargar",
         "or_divider": "o",
         "unknown": "Desconocido",
-        "class_code": "Clase {}",
-        "row_singular": "fila",
-        "row_plural": "filas",
-        "column_singular": "columna",
-        "column_plural": "columnas",
-        "class_singular": "clase",
-        "class_plural": "clases"
+        "class_code": "Clase {code}",
+        "rows": {
+            "one": "{rows} fila",
+            "many": "{rows} filas",
+            "other": "{rows} filas"
+        },
+        "columns": {
+            "one": "{count} columna",
+            "many": "{count} columnas",
+            "other": "{count} columnas"
+        }
     },
     "landing": {
         "title": "Estimación de área basada en muestreo",
@@ -32,8 +36,8 @@
         },
         "reference_layer_name": "Puntos de referencia",
         "error": {
-            "sample_points_failed": "No se pudieron dibujar los puntos de muestreo en el mapa: {}",
-            "reference_points_failed": "No se pudieron dibujar los puntos de referencia en el mapa: {}"
+            "sample_points_failed": "No se pudieron dibujar los puntos de muestreo en el mapa: {error}",
+            "reference_points_failed": "No se pudieron dibujar los puntos de referencia en el mapa: {error}"
         }
     },
     "design": {
@@ -47,7 +51,7 @@
             "title": "Flujo de diseño de muestreo",
             "aa_design": "Diseño AA Olofsson",
             "advanced": "Muestreo",
-            "invalid": "Flujo de diseño de muestreo no válido: {}"
+            "invalid": "Flujo de diseño de muestreo no válido: {error}"
         },
         "class_editor": {
             "button": "Editar clases y EUA",
@@ -59,14 +63,14 @@
             "high_eua_hint": "Para clases estables y fáciles de identificar (p. ej., 85-95%)",
             "low_eua": "EUA baja (%)",
             "low_eua_hint": "Para clases difíciles, detección de cambios y clases raras (p. ej., 65-75%)",
-            "code": "Código {}",
+            "code": "Código {code}",
             "class_name": "Nombre de la clase",
             "mode_high": "Alta",
             "mode_low": "Baja",
             "mode_custom": "Personalizada",
             "custom_eua": "EUA (%)",
             "samples": "Muestras",
-            "area_share": "{} ha ({}%)"
+            "area_share": "{area} ha ({percent}%)"
         },
         "point_generation": {
             "calculate_first": "Calcule primero los tamaños de muestra.",
@@ -79,7 +83,7 @@
             "need_aoi": "Seleccione un área de interés antes de generar los puntos.",
             "need_map": "Cargue un mapa de clasificación antes de generar los puntos.",
             "error": {
-                "generating": "Error al generar los puntos: {}",
+                "generating": "Error al generar los puntos: {error}",
                 "not_ready_stratified": "Cargue primero un mapa de clasificación y complete el cálculo del tamaño de muestra.",
                 "not_ready_aoi": "Seleccione primero un área de interés y complete el cálculo del tamaño de muestra."
             }
@@ -90,24 +94,28 @@
             "geojson": "Puntos de muestreo (GeoJSON)"
         },
         "stats": {
-            "area_ha": "{} ha",
-            "class_count": "{} clases",
-            "sample_count": "n={}",
-            "target_se": "EE objetivo: {}%",
+            "area_ha": "{area} ha",
+            "class_count": {
+                "one": "{count} clase",
+                "many": "{count} clases",
+                "other": "{count} clases"
+            },
+            "sample_count": "n={n}",
+            "target_se": "EE objetivo: {value}%",
             "target_se_tooltip": "Error estándar (EE) objetivo de la exactitud global esperada, usado para calcular el tamaño de la muestra estratificada.",
-            "moe": "MOE: {}%",
+            "moe": "MOE: {value}%",
             "moe_tooltip": "Margen de error (MOE): rango de incertidumbre de la estimación de exactitud global al nivel de confianza indicado. Un MOE menor indica mayor precisión.",
             "empty": "Defina un área de interés, o cargue un mapa de clasificación para el muestreo estratificado, para calcular el diseño de muestreo."
         },
         "charts": {
             "precision_curve_title": "Curva de precisión",
             "precision_curve_series": "MOE vs tamaño de muestra",
-            "precision_curve_current": "Diseño actual (n={})",
+            "precision_curve_current": "Diseño actual (n={n})",
             "sample_size_axis": "Tamaño de muestra",
             "moe_axis": "MOE (%)",
-            "current_design_chip": "n={}, MOE=±{}%",
+            "current_design_chip": "n={n}, MOE=±{moe}%",
             "per_class_title": "Precisión por clase",
-            "max_moe_chip": "MOE máx.: {} (±{}%)",
+            "max_moe_chip": "MOE máx.: {name} (±{moe}%)",
             "area_proportion_title": "Proporción por área"
         },
         "parameters": {
@@ -129,13 +137,13 @@
         },
         "error": {
             "calculation_failed": "El cálculo falló",
-            "calculating": "Error al calcular las muestras: {}",
-            "invalid_method": "Método de muestreo no válido: {}",
-            "invalid_total": "Total de muestras no válido: {}",
-            "invalid_confidence": "Nivel de confianza no válido: {}",
-            "invalid_expected_accuracy": "Exactitud esperada no válida: {}",
-            "invalid_target_error": "Error objetivo no válido: {}",
-            "invalid_min_samples": "Mínimo de muestras no válido: {}"
+            "calculating": "Error al calcular las muestras: {error}",
+            "invalid_method": "Método de muestreo no válido: {error}",
+            "invalid_total": "Total de muestras no válido: {error}",
+            "invalid_confidence": "Nivel de confianza no válido: {error}",
+            "invalid_expected_accuracy": "Exactitud esperada no válida: {error}",
+            "invalid_target_error": "Error objetivo no válido: {error}",
+            "invalid_min_samples": "Mínimo de muestras no válido: {error}"
         }
     },
     "aoi": {
@@ -150,7 +158,7 @@
         "sample_map": "Usar mapa de ejemplo",
         "layer_name": "Mapa de clasificación",
         "current_file": "Archivo actual:",
-        "current_file_details": "Tipo: {} | Tamaño: {} MB",
+        "current_file_details": "Tipo: {type} | Tamaño: {size} MB",
         "optimizing": "Optimizando el raster para su visualización... puede tardar un momento con archivos grandes.",
         "computing_areas": "Calculando las áreas por clase...",
         "loading_sample": "Cargando el mapa de ejemplo...",
@@ -165,12 +173,12 @@
         "toast": {
             "uploaded": "Archivo cargado correctamente.",
             "optimized": "Archivo cargado y optimizado — ya puede editar los nombres de las clases.",
-            "optimization_failed": "Error al optimizar el raster: {}"
+            "optimization_failed": "Error al optimizar el raster: {error}"
         },
         "error": {
             "not_a_raster": "Formato de archivo no admitido. El mapa de clasificación debe ser un raster (GeoTIFF, ERDAS Imagine u otro formato que rasterio pueda abrir).",
-            "sample_not_found": "No se encontró el archivo de ejemplo: {}",
-            "sample_failed": "Error al cargar el mapa de ejemplo: {}"
+            "sample_not_found": "No se encontró el archivo de ejemplo: {path}",
+            "sample_failed": "Error al cargar el mapa de ejemplo: {error}"
         }
     },
     "analysis": {
@@ -214,12 +222,16 @@
         "design_map": {
             "title": "Mapa del diseño:",
             "fallback_name": "clasificación del diseño",
-            "detail": "{} {} del paso de diseño",
+            "detail": {
+                "one": "{count} clase del paso de diseño",
+                "many": "{count} clases del paso de diseño",
+                "other": "{count} clases del paso de diseño"
+            },
             "missing": "No hay ninguna clasificación cargada del paso de diseño. Cambie a 'Cargar un mapa de clasificación' o 'De un CSV de áreas / estratos'."
         },
         "classification_map": {
             "title": "Mapa de clasificación:",
-            "detail": "GeoTIFF | {} MB",
+            "detail": "GeoTIFF | {size} MB",
             "layer_name": "Clasificación (análisis)"
         },
         "area_table": {
@@ -242,12 +254,12 @@
             "legend_mismatch": "Nota: las leyendas del mapa y de la referencia difieren; las clases presentes en solo una se muestran con valores en cero."
         },
         "error": {
-            "example_not_found": "No se encontraron los datos de análisis de ejemplo en {}",
-            "example_failed": "No se pudieron cargar los datos de análisis de ejemplo: {}",
-            "reference_read_failed": "No se pudo leer el archivo de referencia: {}",
-            "area_read_failed": "No se pudo leer el archivo de áreas: {}",
-            "classification_failed": "Falló el análisis del mapa de clasificación: {}",
-            "raster_render_failed": "El análisis se ejecutó, pero el mapa de clasificación no se pudo dibujar en el mapa: {}",
+            "example_not_found": "No se encontraron los datos de análisis de ejemplo en {path}",
+            "example_failed": "No se pudieron cargar los datos de análisis de ejemplo: {error}",
+            "reference_read_failed": "No se pudo leer el archivo de referencia: {error}",
+            "area_read_failed": "No se pudo leer el archivo de áreas: {error}",
+            "classification_failed": "Falló el análisis del mapa de clasificación: {error}",
+            "raster_render_failed": "El análisis se ejecutó, pero el mapa de clasificación no se pudo dibujar en el mapa: {error}",
             "missing_inputs": "Proporcione las entradas requeridas antes de calcular.",
             "failed": "El análisis falló"
         },
@@ -260,10 +272,10 @@
             "accuracy_title": "Exactitud por clase",
             "class_header": "Clase",
             "samples_header": "Muestras",
-            "map_area_header": "Área del mapa ({})",
-            "adjusted_area_header": "Área ajust. ({})",
-            "confidence_interval_header": "± IC ({})",
-            "srs_area_header": "Área SRS ({})",
+            "map_area_header": "Área del mapa ({unit})",
+            "adjusted_area_header": "Área ajust. ({unit})",
+            "confidence_interval_header": "± IC ({unit})",
+            "srs_area_header": "Área SRS ({unit})",
             "users_header": "Usuario",
             "producers_header": "Productor",
             "weighted_producers_header": "EP ponderada"
@@ -276,10 +288,10 @@
             "reference": "Datos de referencia de entrada"
         },
         "charts": {
-            "area_estimate_title": "Área ajustada por error por clase ({})",
-            "adjusted_area_series": "Área ajustada ({})",
+            "area_estimate_title": "Área ajustada por error por clase ({unit})",
+            "adjusted_area_series": "Área ajustada ({unit})",
             "confidence_interval_series": "IC",
-            "area_axis": "Área ({})",
+            "area_axis": "Área ({unit})",
             "confusion_title": "Matriz de confusión (mapa → referencia)",
             "confusion_reference_axis": "referencia",
             "confusion_map_axis": "mapa",
@@ -300,10 +312,14 @@
             "reference_samples_hint": "Total de puntos de referencia evaluados.",
             "classes": "Clases",
             "classes_hint": "Número de clases del mapa evaluadas.",
-            "overall_chip": "Global {}%",
-            "confidence_chip": "NC {}%",
-            "samples_chip": "n={}",
-            "classes_chip": "{} clases"
+            "overall_chip": "Global {value}%",
+            "confidence_chip": "NC {value}%",
+            "samples_chip": "n={n}",
+            "classes_chip": {
+                "one": "{count} clase",
+                "many": "{count} clases",
+                "other": "{count} clases"
+            }
         }
     },
     "calculator": {
@@ -320,18 +336,18 @@
         "calculating": "Calculando los tamaños de muestra...",
         "needs_map": "Cargue primero un mapa de clasificación.",
         "simple_results_title": "Configuración del tamaño de muestra:",
-        "sampling_method": "Método de muestreo: {}",
-        "total_samples": "Muestras totales: {}",
-        "confidence_level": "Nivel de confianza: {}%",
-        "distribution_note": "Las muestras se distribuirán {} por toda el área de estudio.",
+        "sampling_method": "Método de muestreo: {method}",
+        "total_samples": "Muestras totales: {n}",
+        "confidence_level": "Nivel de confianza: {value}%",
+        "distribution_note": "Las muestras se distribuirán {distribution} por toda el área de estudio.",
         "distribution_random": "aleatoriamente",
         "distribution_systematic": "en una malla sistemática",
         "stratified_results_title": "Resultados del cálculo del tamaño de muestra:",
-        "total_samples_needed": "Muestras totales necesarias: {}",
-        "allocation_method": "Método de asignación: {}",
-        "current_moe": "Margen de error actual: {}%",
+        "total_samples_needed": "Muestras totales necesarias: {n}",
+        "allocation_method": "Método de asignación: {method}",
+        "current_moe": "Margen de error actual: {value}%",
         "samples_per_class": "Muestras por clase:",
-        "class_samples": "• {}: {}",
+        "class_samples": "• {name}: {n}",
         "allocation": {
             "title": "Asignación de la muestra",
             "empty": "No hay datos de asignación disponibles",
@@ -350,8 +366,8 @@
             "term_population": "• N_h: tamaño de población finita (opcional, se usa 1 si se desconoce)",
             "term_deff": "• DEFF: efecto de diseño (≈1.0 para muestras espacialmente equilibradas; >1 si hay conglomerados)",
             "analysis_title": "Análisis de la asignación actual:",
-            "highest_moe": "MOE más alto: {} (±{}%, n={})",
-            "lowest_moe": "MOE más bajo: {} (±{}%, n={})",
+            "highest_moe": "MOE más alto: {name} (±{moe}%, n={n})",
+            "lowest_moe": "MOE más bajo: {name} (±{moe}%, n={n})",
             "advice": "Las clases con valores de MOE altos pueden necesitar más muestras para mejorar la precisión.",
             "moe_axis": "Margen de error (%)",
             "interpretation": "**Interpretación**: las barras muestran el margen de error de la estimación de exactitud del usuario de cada clase. Las barras más grandes indican estimaciones menos precisas. Si sobremuestrea las clases raras, este gráfico ayuda a comprobar que alcanzó la precisión deseada por clase."
@@ -365,10 +381,10 @@
             "term_oa": "• OA = exactitud global (esperada)",
             "term_n": "• n = tamaño total de muestra",
             "current_title": "Su diseño actual:",
-            "current_size": "Tamaño de muestra: {}",
-            "current_moe": "Margen de error: ±{}%",
+            "current_size": "Tamaño de muestra: {n}",
+            "current_moe": "Margen de error: ±{value}%",
             "series": "MOE vs tamaño de muestra",
-            "current_series": "Su diseño (n={})",
+            "current_series": "Su diseño (n={n})",
             "sample_size_axis": "Tamaño de muestra (n)",
             "moe_axis": "Margen de error (%)",
             "insight": "**Idea clave**: observe cómo el MOE disminuye rápidamente al principio, pero la mejora se ralentiza a medida que crece el tamaño de muestra. Es el efecto de \"rendimientos decrecientes\": duplicar el tamaño de muestra no reduce el error a la mitad."

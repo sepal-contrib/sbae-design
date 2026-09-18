@@ -3,7 +3,7 @@ from ipecharts.option import Grid, Legend, Option, Tooltip, XAxis, YAxis
 from ipecharts.option.series import Bar, Line
 from solara.alias import rv
 
-from component.message import get_translator, use_translator
+from component.message import msg
 from component.model import app_state
 from component.scripts.calculations import (
     calculate_current_moe,
@@ -24,20 +24,19 @@ _PRECISION_CURVE_FORMULA = "$$MOE = Z \\times \\sqrt{\\frac{OA \\times (1 - OA)}
 @solara.component
 def SampleCalculationTile(theme_state=None):
     """Step 3: Calculate Sample Size Dialog."""
-    ms = use_translator()
     with solara.Column():
-        solara.HTML(tag="h2", unsafe_innerHTML=ms.calculator.title)
+        solara.HTML(tag="h2", unsafe_innerHTML=msg("calculator.title"))
         with solara.Column(gap="8px", style="margin-bottom: 16px;"):
-            solara.Text(ms.calculator.intro)
+            solara.Text(msg("calculator.intro"))
             solara.Text(
-                ms.calculator.parameters_title,
+                msg("calculator.parameters_title"),
                 style="font-weight: bold; margin-top: 8px;",
             )
-            solara.Text(ms.calculator.parameter_accuracy)
-            solara.Text(ms.calculator.parameter_confidence)
-            solara.Text(ms.calculator.parameter_minimum)
+            solara.Text(msg("calculator.parameter_accuracy"))
+            solara.Text(msg("calculator.parameter_confidence"))
+            solara.Text(msg("calculator.parameter_minimum"))
 
-        sample_size_calculator(ms=ms)
+        sample_size_calculator()
 
         # Show allocation table and per-class precision only for stratified sampling
         if (
@@ -50,31 +49,30 @@ def SampleCalculationTile(theme_state=None):
 
             # Allocation table and per-class charts only relevant for stratified
             if sampling_method == "stratified":
-                sample_allocation_table(ms=ms)
+                sample_allocation_table()
                 if app_state.sample_results.value.get("precision_curve"):
-                    per_class_precision_chart(theme_state=theme_state, ms=ms)
+                    per_class_precision_chart(theme_state=theme_state)
 
-            solara.Success(ms.calculator.complete)
+            solara.Success(msg("calculator.complete"))
 
         # Display precision curve for all methods
         if app_state.sample_results.value and app_state.sample_results.value.get(
             "precision_curve"
         ):
-            precision_curve_info(theme_state=theme_state, ms=ms)
+            precision_curve_info(theme_state=theme_state)
 
 
-def sample_size_calculator(ms=None) -> None:
+def sample_size_calculator() -> None:
     """Sample size calculation component."""
-    ms = ms if ms is not None else get_translator()
 
     def handle_calculate_samples():
         """Handle sample size calculation."""
         if not app_state.is_ready_for_calculation():
-            app_state.add_error(ms.calculator.needs_map)
+            app_state.add_error(msg("calculator.needs_map"))
             return
 
         try:
-            app_state.set_processing_status(ms.calculator.calculating)
+            app_state.set_processing_status(msg("calculator.calculating"))
 
             # Get current parameters
             area_data = app_state.area_data.value
@@ -139,7 +137,7 @@ def sample_size_calculator(ms=None) -> None:
                 class_name = (
                     class_row["map_edited_class"].iloc[0]
                     if not class_row.empty
-                    else ms.common.class_code.format(class_code)
+                    else msg("common.class_code", code=class_code)
                 )
 
                 samples_per_class.append(
@@ -175,14 +173,14 @@ def sample_size_calculator(ms=None) -> None:
             app_state.set_processing_status("")
 
         except Exception as e:
-            app_state.add_error(ms.design.error.calculating.format(e))
+            app_state.add_error(msg("design.error.calculating", error=e))
             app_state.set_processing_status("")
 
-    with solara.Card(ms.calculator.title):
-        solara.Text(ms.calculator.card_intro)
+    with solara.Card(msg("calculator.title")):
+        solara.Text(msg("calculator.card_intro"))
 
         if app_state.area_data.value is None or app_state.area_data.value.empty:
-            solara.Info(ms.calculator.upload_first)
+            solara.Info(msg("calculator.upload_first"))
             return
 
         # Parameter update handlers
@@ -207,7 +205,7 @@ def sample_size_calculator(ms=None) -> None:
 
         with solara.Row():
             solara.SliderFloat(
-                ms.calculator.target_moe,
+                msg("calculator.target_moe"),
                 value=app_state.target_error.value,
                 min=1.0,
                 max=10.0,
@@ -217,7 +215,7 @@ def sample_size_calculator(ms=None) -> None:
 
         with solara.Row():
             solara.Select(
-                label=ms.design.parameters.confidence_level,
+                label=msg("design.parameters.confidence_level"),
                 value=app_state.confidence_level.value,
                 values=[90.0, 95.0, 99.0],
                 on_value=update_confidence_level,
@@ -225,7 +223,7 @@ def sample_size_calculator(ms=None) -> None:
 
         with solara.Row():
             solara.SliderFloat(
-                ms.design.parameters.expected_accuracy,
+                msg("design.parameters.expected_accuracy"),
                 value=app_state.expected_accuracy.value,
                 min=50.0,
                 max=99.0,
@@ -235,7 +233,7 @@ def sample_size_calculator(ms=None) -> None:
 
         with solara.Row():
             solara.SliderInt(
-                ms.design.parameters.min_samples,
+                msg("design.parameters.min_samples"),
                 value=app_state.min_samples_per_class.value,
                 min=1,
                 max=20,
@@ -245,7 +243,7 @@ def sample_size_calculator(ms=None) -> None:
 
         with solara.Row():
             solara.Button(
-                ms.calculator.title,
+                msg("calculator.title"),
                 on_click=handle_calculate_samples,
                 color="primary",
                 outlined=True,
@@ -259,89 +257,98 @@ def sample_size_calculator(ms=None) -> None:
                 confidence = f"{sample_results.get('confidence_level', 95):.0f}"
                 if sampling_method in ("simple", "systematic"):
                     distribution = (
-                        ms.calculator.distribution_random
+                        msg("calculator.distribution_random")
                         if sampling_method == "simple"
-                        else ms.calculator.distribution_systematic
+                        else msg("calculator.distribution_systematic")
                     )
                     with solara.Column(gap="4px"):
                         solara.Text(
-                            ms.calculator.simple_results_title,
+                            msg("calculator.simple_results_title"),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.sampling_method.format(
-                                sampling_method.capitalize()
+                            msg(
+                                "calculator.sampling_method",
+                                method=sampling_method.capitalize(),
                             ),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.total_samples.format(
-                                sample_results.get("total_samples", 0)
+                            msg(
+                                "calculator.total_samples",
+                                n=sample_results.get("total_samples", 0),
                             ),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.confidence_level.format(confidence),
+                            msg("calculator.confidence_level", value=confidence),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.distribution_note.format(distribution),
+                            msg(
+                                "calculator.distribution_note",
+                                distribution=distribution,
+                            ),
                             style="margin-top: 8px;",
                         )
                 else:
                     with solara.Column(gap="4px"):
                         solara.Text(
-                            ms.calculator.stratified_results_title,
+                            msg("calculator.stratified_results_title"),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.total_samples_needed.format(
-                                sample_results.get("total_samples", 0)
+                            msg(
+                                "calculator.total_samples_needed",
+                                n=sample_results.get("total_samples", 0),
                             ),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.allocation_method.format(
-                                sample_results.get(
-                                    "allocation_method", ms.common.unknown
-                                )
+                            msg(
+                                "calculator.allocation_method",
+                                method=sample_results.get(
+                                    "allocation_method", msg("common.unknown")
+                                ),
                             ),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.current_moe.format(
-                                f"{sample_results.get('current_moe_percent', 0):.2f}"
+                            msg(
+                                "calculator.current_moe",
+                                value=f"{sample_results.get('current_moe_percent', 0):.2f}",
                             ),
                             style="font-weight: bold;",
                         )
                         solara.Text(
-                            ms.calculator.samples_per_class,
+                            msg("calculator.samples_per_class"),
                             style="font-weight: bold; margin-top: 8px;",
                         )
 
                         for class_info in sample_results.get("samples_per_class", []):
                             solara.Text(
-                                ms.calculator.class_samples.format(
-                                    class_info["class_name"], class_info["samples"]
+                                msg(
+                                    "calculator.class_samples",
+                                    name=class_info["class_name"],
+                                    n=class_info["samples"],
                                 )
                             )
 
 
-def sample_allocation_table(ms=None) -> None:
+def sample_allocation_table() -> None:
     """Display sample allocation with manual editing - self-contained with its own logic."""
-    ms = ms if ms is not None else get_translator()
     if not app_state.sample_results.value:
         return
 
     allocation_data = app_state.get_allocation_data()
 
-    with solara.Card(ms.calculator.allocation.title):
+    with solara.Card(msg("calculator.allocation.title")):
         if not allocation_data:
-            solara.Warning(ms.calculator.allocation.empty)
+            solara.Warning(msg("calculator.allocation.empty"))
             return
 
         solara.Text(
-            ms.calculator.allocation.manual_title,
+            msg("calculator.allocation.manual_title"),
             style="font-weight: bold; margin-bottom: 12px;",
         )
 
@@ -356,15 +363,14 @@ def sample_allocation_table(ms=None) -> None:
                     return update_samples
 
                 solara.InputInt(
-                    label=ms.calculator.allocation.samples,
+                    label=msg("calculator.allocation.samples"),
                     value=item["samples"],
                     on_value=make_update_callback(item["map_code"]),
                 )
 
 
-def per_class_precision_chart(theme_state=None, ms=None):
+def per_class_precision_chart(theme_state=None):
     """Display per-class precision (MOE) given current allocation."""
-    ms = ms if ms is not None else get_translator()
     sample_results = app_state.sample_results.value
     if not sample_results:
         return
@@ -390,53 +396,62 @@ def per_class_precision_chart(theme_state=None, ms=None):
 
     moe_df = moe_df.sort_values("moe_percent", ascending=False)
 
-    per_class = ms.calculator.per_class
-    with solara.Card(per_class.title):
+    with solara.Card(msg("calculator.per_class.title")):
         with solara.Column(gap="8px", style="margin-bottom: 12px;"):
-            solara.Text(per_class.subtitle, style="font-weight: bold;")
-            solara.Text(per_class.description)
             solara.Text(
-                per_class.formula_title,
+                msg("calculator.per_class.subtitle"), style="font-weight: bold;"
+            )
+            solara.Text(msg("calculator.per_class.description"))
+            solara.Text(
+                msg("calculator.per_class.formula_title"),
                 style="font-weight: bold; margin-top: 8px;",
             )
             solara.Markdown(_PER_CLASS_MOE_FORMULA)
             with solara.Column(gap="2px", style="font-size: 0.9em; margin-top: 8px;"):
-                solara.Text(per_class.where)
-                solara.Text(per_class.term_n)
-                solara.Text(per_class.term_p)
-                solara.Text(per_class.term_z)
-                solara.Text(per_class.term_population)
-                solara.Text(per_class.term_deff)
+                solara.Text(msg("calculator.per_class.where"))
+                solara.Text(msg("calculator.per_class.term_n"))
+                solara.Text(msg("calculator.per_class.term_p"))
+                solara.Text(msg("calculator.per_class.term_z"))
+                solara.Text(msg("calculator.per_class.term_population"))
+                solara.Text(msg("calculator.per_class.term_deff"))
 
         with rv.Alert(type="info", text=True, style="margin-bottom: 16px;"):
             max_moe_row = moe_df.iloc[0]
             min_moe_row = moe_df.iloc[-1]
 
             with solara.Column(gap="4px"):
-                solara.Text(per_class.analysis_title, style="font-weight: bold;")
                 solara.Text(
-                    per_class.highest_moe.format(
-                        max_moe_row["class_name"],
-                        f"{max_moe_row['moe_percent']:.2f}",
-                        max_moe_row["samples"],
+                    msg("calculator.per_class.analysis_title"),
+                    style="font-weight: bold;",
+                )
+                solara.Text(
+                    msg(
+                        "calculator.per_class.highest_moe",
+                        name=max_moe_row["class_name"],
+                        moe=f"{max_moe_row['moe_percent']:.2f}",
+                        n=max_moe_row["samples"],
                     ),
                     style="font-weight: bold;",
                 )
                 solara.Text(
-                    per_class.lowest_moe.format(
-                        min_moe_row["class_name"],
-                        f"{min_moe_row['moe_percent']:.2f}",
-                        min_moe_row["samples"],
+                    msg(
+                        "calculator.per_class.lowest_moe",
+                        name=min_moe_row["class_name"],
+                        moe=f"{min_moe_row['moe_percent']:.2f}",
+                        n=min_moe_row["samples"],
                     ),
                     style="font-weight: bold;",
                 )
                 solara.Text(
-                    ms.calculator.confidence_level.format(
-                        f"{sample_results.get('confidence_level', 95):.0f}"
+                    msg(
+                        "calculator.confidence_level",
+                        value=f"{sample_results.get('confidence_level', 95):.0f}",
                     ),
                     style="font-weight: bold;",
                 )
-                solara.Text(per_class.advice, style="margin-top: 8px;")
+                solara.Text(
+                    msg("calculator.per_class.advice"), style="margin-top: 8px;"
+                )
 
         class_names = moe_df["class_name"].tolist()
         moe_values = moe_df["moe_percent"].tolist()
@@ -448,7 +463,7 @@ def per_class_precision_chart(theme_state=None, ms=None):
         ]
 
         bar_series = Bar(
-            name=per_class.moe_axis,
+            name=msg("calculator.per_class.moe_axis"),
             data=[
                 {
                     "value": round(moe, 2),
@@ -468,7 +483,7 @@ def per_class_precision_chart(theme_state=None, ms=None):
         option = Option(
             xAxis=XAxis(
                 type="value",
-                name=per_class.moe_axis,
+                name=msg("calculator.per_class.moe_axis"),
                 nameLocation="middle",
                 nameGap=35,
                 nameTextStyle={"fontSize": 14},
@@ -494,12 +509,11 @@ def per_class_precision_chart(theme_state=None, ms=None):
             theme_state=theme_state,
         )
 
-        solara.Info(per_class.interpretation)
+        solara.Info(msg("calculator.per_class.interpretation"))
 
 
-def precision_curve_info(theme_state=None, ms=None) -> None:
+def precision_curve_info(theme_state=None) -> None:
     """Display precision curve information showing MOE vs sample size relationship."""
-    ms = ms if ms is not None else get_translator()
     sample_results = app_state.sample_results.value
     if not sample_results:
         return
@@ -508,35 +522,37 @@ def precision_curve_info(theme_state=None, ms=None) -> None:
     if not precision_curve:
         return
 
-    curve = ms.calculator.curve
-    with solara.Card(curve.title):
+    with solara.Card(msg("calculator.curve.title")):
         with solara.Column(gap="8px", style="margin-bottom: 12px;"):
-            solara.Text(curve.subtitle, style="font-weight: bold;")
-            solara.Text(curve.description)
+            solara.Text(msg("calculator.curve.subtitle"), style="font-weight: bold;")
+            solara.Text(msg("calculator.curve.description"))
             solara.Markdown(_PRECISION_CURVE_FORMULA)
             with solara.Column(gap="2px", style="font-size: 0.9em; margin-top: 8px;"):
-                solara.Text(curve.where)
-                solara.Text(curve.term_z)
-                solara.Text(curve.term_oa)
-                solara.Text(curve.term_n)
+                solara.Text(msg("calculator.curve.where"))
+                solara.Text(msg("calculator.curve.term_z"))
+                solara.Text(msg("calculator.curve.term_oa"))
+                solara.Text(msg("calculator.curve.term_n"))
 
         with rv.Alert(type="success", text=True):
             current_total = sample_results.get("total_samples", 0)
             current_moe = sample_results.get("current_moe_percent", 0)
 
             with solara.Column(gap="4px"):
-                solara.Text(curve.current_title, style="font-weight: bold;")
                 solara.Text(
-                    curve.current_size.format(current_total),
+                    msg("calculator.curve.current_title"), style="font-weight: bold;"
+                )
+                solara.Text(
+                    msg("calculator.curve.current_size", n=current_total),
                     style="font-weight: bold;",
                 )
                 solara.Text(
-                    curve.current_moe.format(f"{current_moe:.2f}"),
+                    msg("calculator.curve.current_moe", value=f"{current_moe:.2f}"),
                     style="font-weight: bold;",
                 )
                 solara.Text(
-                    ms.calculator.confidence_level.format(
-                        f"{sample_results.get('confidence_level', 95):.0f}"
+                    msg(
+                        "calculator.confidence_level",
+                        value=f"{sample_results.get('confidence_level', 95):.0f}",
                     ),
                     style="font-weight: bold;",
                 )
@@ -546,9 +562,9 @@ def precision_curve_info(theme_state=None, ms=None) -> None:
         moe_percents = [round(point["moe_percent"], 2) for point in precision_curve]
 
         # Create line series for the precision curve
-        current_series_name = curve.current_series.format(current_total)
+        current_series_name = msg("calculator.curve.current_series", n=current_total)
         curve_line = Line(
-            name=curve.series,
+            name=msg("calculator.curve.series"),
             data=[[x, y] for x, y in zip(sample_sizes, moe_percents)],
             smooth=True,
             lineStyle={"color": "#5470c6", "width": 3},
@@ -569,14 +585,14 @@ def precision_curve_info(theme_state=None, ms=None) -> None:
         option = Option(
             xAxis=XAxis(
                 type="value",
-                name=curve.sample_size_axis,
+                name=msg("calculator.curve.sample_size_axis"),
                 nameLocation="middle",
                 nameGap=35,
                 nameTextStyle={"fontSize": 14},
             ),
             yAxis=YAxis(
                 type="value",
-                name=curve.moe_axis,
+                name=msg("calculator.curve.moe_axis"),
                 nameLocation="middle",
                 nameGap=50,
                 nameTextStyle={"fontSize": 14},
@@ -585,7 +601,9 @@ def precision_curve_info(theme_state=None, ms=None) -> None:
             tooltip=Tooltip(trigger="axis", axisPointer={"type": "cross"}),
             # The legend selects series by name, so these must stay identical
             # to the series names above.
-            legend=Legend(data=[curve.series, current_series_name], top="5%"),
+            legend=Legend(
+                data=[msg("calculator.curve.series"), current_series_name], top="5%"
+            ),
             grid=Grid(left="15%", right="10%", top="15%", bottom="15%"),
         )
 
@@ -596,4 +614,4 @@ def precision_curve_info(theme_state=None, ms=None) -> None:
             theme_state=theme_state,
         )
 
-        solara.Info(curve.insight)
+        solara.Info(msg("calculator.curve.insight"))

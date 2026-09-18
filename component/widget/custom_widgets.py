@@ -7,7 +7,7 @@ import solara
 import solara.lab
 from solara.alias import rv
 
-from component.message import use_translator
+from component.message import msg
 
 
 @solara.component
@@ -68,13 +68,12 @@ def DownloadMenu(
         icon_name: Icon shown on the activator button.
         mime_type: Default MIME type applied when an item does not specify one.
     """
-    ms = use_translator()
     valid = [item for item in items if item[1]]
     if not valid:
         return
 
     activator = solara.Button(
-        label or ms.common.download,
+        label or msg("common.download"),
         icon_name=icon_name,
         outlined=True,
         color="primary",
