@@ -3,11 +3,44 @@
 Contains reusable Solara components for the SBAE application.
 """
 
+import contextlib
+
+import reacton.core
 import solara
 import solara.lab
 from solara.alias import rv
 
 from component.message import msg
+
+
+class _Batch(contextlib.ContextDecorator):
+    """What ``use_batch`` returns: a reusable, re-entrant render batch."""
+
+    def __init__(self, render_context):
+        self._render_context = render_context
+
+    def __enter__(self):
+        self._render_context.__enter__()
+        return self
+
+    def __exit__(self, *exc_info):
+        self._render_context.__exit__(*exc_info)
+
+
+def use_batch():
+    """Return a batch that folds the reactive writes made inside it into one render.
+
+    Outside a render, reacton renders synchronously on every state change. It
+    only batches trait syncs coming from the browser; a click arrives as a custom
+    message, so a handler that writes N reactives renders N times and the browser
+    paints each half-updated state in between.
+
+    Decorate a handler with ``@batch``, or wrap part of one in ``with batch:``.
+    The render happens when the batch closes, so a handler that must show
+    progress before slow work opens one batch for the progress state and another
+    for the results. Call this while rendering, before any early return.
+    """
+    return _Batch(reacton.core.get_render_context())
 
 
 @solara.component

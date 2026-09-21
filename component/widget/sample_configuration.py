@@ -15,7 +15,7 @@ from component.sampling import SamplingService
 from component.tile.class_editor import class_editor_table
 from component.tile.export import Export
 from component.widget.aoi_upload_selector import AoiUploadSelector
-from component.widget.custom_widgets import Section
+from component.widget.custom_widgets import Section, use_batch
 from component.widget.point_generation import (
     PointGeneration,
     PointGenerationView,
@@ -254,7 +254,9 @@ def AnalysisTab(sbae_map=None, theme_state=None):
 @solara.component
 def SampleDesignWorkflowSelector():
     """Toggle between Olofsson accuracy-assessment design and sampling."""
+    batch = use_batch()
 
+    @batch
     def update_workflow(value):
         if value is not None:
             try:

@@ -2,11 +2,13 @@ import solara
 
 from component.message import msg
 from component.model import app_state
+from component.widget.custom_widgets import use_batch
 
 
 @solara.component
 def class_editor_table(show_sample_controls=True):
     """Editable table for class names, expected accuracies, and sample allocations."""
+    batch = use_batch()
     area_data = app_state.area_data.value
     sample_results = app_state.sample_results.value
     eua_dict = app_state.expected_user_accuracies.value
@@ -105,6 +107,7 @@ def class_editor_table(show_sample_controls=True):
                 return update_name
 
             def make_set_mode_callback(code, mode):
+                @batch
                 def set_mode():
                     app_state.set_eua_mode(code, mode)
 
