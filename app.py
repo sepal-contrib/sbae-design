@@ -79,10 +79,14 @@ def Page():
     NotificationProvider(theme_state=theme_state)
     ErrorToastBridge()
 
-    app_model = AppModel()
+    # msg() re-renders this component on a language change. The map owns its
+    # layers and nothing re-adds one already added, so it must outlive renders.
+    app_model = solara.use_memo(AppModel, [])
 
     setup_theme_colors()
-    sbae_map = SbaeMap(theme_state=theme_state, gee=USE_GEE)
+    sbae_map = solara.use_memo(
+        lambda: SbaeMap(theme_state=theme_state, gee=USE_GEE), []
+    )
 
     RasterMapWatcher(sbae_map)
     # Floating legend overlay for the sample/reference points (bottom-center).
