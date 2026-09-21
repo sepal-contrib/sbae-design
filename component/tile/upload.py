@@ -16,6 +16,7 @@ from component.scripts.geospatial import (
     get_file_info,
     is_raster_file,
 )
+from component.widget.custom_widgets import use_batch
 from component.widget.map import SbaeMap
 
 logger = logging.getLogger("sbae.upload")
@@ -63,7 +64,9 @@ def RasterMapWatcher(sbae_map: SbaeMap):
 @solara.component
 def CurrentFileDisplay(sbae_map: SbaeMap = None):
     """Display the currently selected file with option to clear it."""
+    batch = use_batch()
 
+    @batch
     def clear_file():
         """Clear the current file and reset related state."""
         # Remove map layers first
@@ -281,6 +284,7 @@ def UploadTile(sbae_map: SbaeMap):
 @solara.component
 def SampleMapButton(is_loading: solara.Reactive[bool]):
     """Button to load sample map for testing."""
+    batch = use_batch()
 
     def load_sample_map():
         """Load the sample map for testing."""
@@ -291,50 +295,53 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
         if is_loading.value:  # Prevent multiple simultaneous loads
             return
 
-        is_loading.value = True
-        app_state.error_messages.value = []  # Clear errors directly
-        app_state.processing_status.value = msg("upload.loading_sample")
+        # A batch of its own: the spinner must render before the raster is read.
+        with batch:
+            is_loading.value = True
+            app_state.error_messages.value = []  # Clear errors directly
+            app_state.processing_status.value = msg("upload.loading_sample")
 
-        try:
-            # Check if file exists
-            if not os.path.exists(sample_file_path):
+        with batch:
+            try:
+                # Check if file exists
+                if not os.path.exists(sample_file_path):
+                    app_state.error_messages.value = [
+                        msg("upload.error.sample_not_found", path=sample_file_path)
+                    ]
+                    return
+
+                # Get file information and compute areas
+                file_info = get_file_info(sample_file_path)
+                area_data = compute_file_areas(sample_file_path)
+
+                # Extract color palette from file
+                class_codes = area_data["map_code"].tolist()
+                color_palette = get_color_palette(sample_file_path, class_codes)
+
+                # Initialize EUA values for all classes (default to 'high' mode)
+                eua_dict = {}
+                eua_modes_dict = {}
+                for code in class_codes:
+                    eua_dict[code] = app_state.high_eua.value  # Default to high EUA
+                    eua_modes_dict[code] = "high"  # Default mode
+
+                # Update state directly
+                app_state.uploaded_file_info.value = file_info
+                app_state.file_path.value = sample_file_path
+                app_state.area_data.value = area_data.copy()
+                app_state.original_area_data.value = area_data.copy()
+                app_state.class_colors.value = color_palette
+                app_state.expected_user_accuracies.value = eua_dict
+                app_state.eua_modes.value = eua_modes_dict
+                app_state.current_step.value = max(app_state.current_step.value, 2)
+
+            except Exception as e:
                 app_state.error_messages.value = [
-                    msg("upload.error.sample_not_found", path=sample_file_path)
+                    msg("upload.error.sample_failed", error=e)
                 ]
-                return
-
-            # Get file information and compute areas
-            file_info = get_file_info(sample_file_path)
-            area_data = compute_file_areas(sample_file_path)
-
-            # Extract color palette from file
-            class_codes = area_data["map_code"].tolist()
-            color_palette = get_color_palette(sample_file_path, class_codes)
-
-            # Initialize EUA values for all classes (default to 'high' mode)
-            eua_dict = {}
-            eua_modes_dict = {}
-            for code in class_codes:
-                eua_dict[code] = app_state.high_eua.value  # Default to high EUA
-                eua_modes_dict[code] = "high"  # Default mode
-
-            # Update state directly
-            app_state.uploaded_file_info.value = file_info
-            app_state.file_path.value = sample_file_path
-            app_state.area_data.value = area_data.copy()
-            app_state.original_area_data.value = area_data.copy()
-            app_state.class_colors.value = color_palette
-            app_state.expected_user_accuracies.value = eua_dict
-            app_state.eua_modes.value = eua_modes_dict
-            app_state.current_step.value = max(app_state.current_step.value, 2)
-
-        except Exception as e:
-            app_state.error_messages.value = [
-                msg("upload.error.sample_failed", error=e)
-            ]
-        finally:
-            app_state.processing_status.value = ""
-            is_loading.value = False
+            finally:
+                app_state.processing_status.value = ""
+                is_loading.value = False
 
     solara.Button(
         msg("upload.sample_map"),
@@ -349,6 +356,7 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
 @solara.component
 def FileUploadSection(is_loading: solara.Reactive[bool]):
     """File upload component for classification maps."""
+    batch = use_batch()
     selected_file_path = solara.use_reactive(None)
     selected_file_info_preview = solara.use_reactive(None)
     is_valid_file = solara.use_reactive(False)
@@ -451,6 +459,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
 
     solara.use_effect(handle_area_result, [area_result.state])
 
+    @batch
     def confirm_file_upload():
         """Trigger area computation for the selected file."""
         if is_loading.value or not selected_file_path.value or not is_valid_file.value:

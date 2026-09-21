@@ -12,7 +12,7 @@ from component.analysis.service import AnalysisService
 from component.message import msg
 from component.model import app_state
 from component.widget.analysis_results import AnalysisResultsView  # Task 9/10
-from component.widget.custom_widgets import Section
+from component.widget.custom_widgets import Section, use_batch
 from component.widget.sample_configuration import MethodologyHelpButton
 
 logger = logging.getLogger("sbae.analysis.ui")
@@ -203,9 +203,11 @@ def _results_are_fresh(state) -> bool:
 @solara.component
 def ExampleDataButton():
     """One-click loader for the bundled example analysis dataset."""
+    batch = use_batch()
+
     solara.Button(
         msg("analysis.reference.example_button"),
-        on_click=lambda: load_example_analysis_data(app_state),
+        on_click=batch(lambda: load_example_analysis_data(app_state)),
         color="default",
         text=True,
         small=True,
@@ -255,6 +257,7 @@ def CurrentTableDisplay(title: str, df, name: str = "", on_clear=None):
 @solara.component
 def AnalysisPanel(sbae_map=None, theme_state=None):
     """Full analysis panel filling the Analysis tab."""
+    batch = use_batch()
     reading = solara.use_reactive(False)
     ref_path = solara.use_reactive(None)
     show_ref_modal = solara.use_reactive(False)
@@ -294,6 +297,7 @@ def AnalysisPanel(sbae_map=None, theme_state=None):
 
     solara.use_effect(handle_read_result, [read_result.state])
 
+    @batch
     def clear_reference():
         """Clear the loaded reference table (mirrors the design 'clear file')."""
         ref_path.set(None)
@@ -609,6 +613,7 @@ def _FilterCard(columns: list):
 @solara.component
 def _AreaUpload():
     """Upload + read a separate area/strata CSV (standalone mode)."""
+    batch = use_batch()
     area_path = solara.use_reactive(None)
 
     def read_area_worker():
@@ -630,6 +635,7 @@ def _AreaUpload():
 
     solara.use_effect(handle, [result.state])
 
+    @batch
     def clear_area():
         """Clear the loaded area/strata table."""
         area_path.set(None)
