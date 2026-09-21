@@ -40,7 +40,7 @@ from pysepal.solara import (
     setup_theme_colors,
 )
 
-from component.message import available_locales, get_translator, use_translator
+from component.message import messages, msg
 from component.model.app_model import AppModel
 from component.tile.upload import RasterMapWatcher
 from component.widget.map import PointsLegend, SbaeMap
@@ -70,7 +70,6 @@ def on_kernel_start():
 def Page():
     """Main SBAE application page using MapApp layout."""
     theme_state = get_current_theme_state()
-    ms = use_translator()
 
     # Notification system (pysepal): mount the provider once at the app root,
     # before any component that calls use_notifications(). Kept in the same page
@@ -80,10 +79,14 @@ def Page():
     NotificationProvider(theme_state=theme_state)
     ErrorToastBridge()
 
-    app_model = AppModel()
+    # msg() re-renders this component on a language change. The map owns its
+    # layers and nothing re-adds one already added, so it must outlive renders.
+    app_model = solara.use_memo(AppModel, [])
 
     setup_theme_colors()
-    sbae_map = SbaeMap(theme_state=theme_state, gee=USE_GEE)
+    sbae_map = solara.use_memo(
+        lambda: SbaeMap(theme_state=theme_state, gee=USE_GEE), []
+    )
 
     RasterMapWatcher(sbae_map)
     # Floating legend overlay for the sample/reference points (bottom-center).
@@ -92,7 +95,7 @@ def Page():
     steps_data = [
         {
             "id": 4,
-            "name": ms.app.step_sample_design,
+            "name": msg("app.step_sample_design"),
             "icon": "mdi-tune",
             "display": "step",
             "content": [],
@@ -102,7 +105,7 @@ def Page():
 
     # Right panel configuration
     right_panel_config = {
-        "title": ms.app.right_panel_title,
+        "title": msg("app.right_panel_title"),
         "icon": "mdi-tools",
         "width": 450,
         "toggle_icon": "mdi-chevron-left",
@@ -121,9 +124,9 @@ def Page():
 
     # Create the MapApp with the shared map instance
     MapApp.element(
-        app_title=ms.app.title,
+        app_title=msg("app.title"),
         app_icon="mdi-map-marker-radius",
-        locales=available_locales(),
+        locales=messages.available_locales(),
         main_map=[sbae_map],
         steps_data=steps_data,
         initial_step=4,
@@ -142,5 +145,5 @@ def Page():
 # Routes for the application. The label is read once at import, outside any
 # render, so it stays in the default locale.
 routes = [
-    solara.Route(path="/", component=Page, label=get_translator().app.route_label),
+    solara.Route(path="/", component=Page, label=msg("app.route_label")),
 ]

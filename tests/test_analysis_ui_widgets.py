@@ -8,7 +8,6 @@ import solara
 from rasterio.transform import from_origin
 
 from component.analysis.service import AnalysisService
-from component.message import get_translator
 from component.model import app_state
 from component.model.state_manager import AppState
 from component.widget import analysis_tab
@@ -418,7 +417,7 @@ def test_run_calculation_without_inputs_reports_error_and_stays_blank():
 
 
 def test_area_source_labels_are_bijective():
-    labels = analysis_tab.area_source_labels(get_translator())
+    labels = analysis_tab.area_source_labels()
 
     assert set(labels) == {"design", "upload", "map"}
     # order presented to the user: design map, upload a map, area CSV

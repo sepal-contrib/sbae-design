@@ -10,13 +10,15 @@
         "download": "Download",
         "or_divider": "or",
         "unknown": "Unknown",
-        "class_code": "Class {}",
-        "row_singular": "row",
-        "row_plural": "rows",
-        "column_singular": "column",
-        "column_plural": "columns",
-        "class_singular": "class",
-        "class_plural": "classes"
+        "class_code": "Class {code}",
+        "rows": {
+            "one": "{rows} row",
+            "other": "{rows} rows"
+        },
+        "columns": {
+            "one": "{count} column",
+            "other": "{count} columns"
+        }
     },
     "landing": {
         "title": "Sampling-Based Area Estimation",
@@ -32,8 +34,8 @@
         },
         "reference_layer_name": "Reference points",
         "error": {
-            "sample_points_failed": "Could not render sample points on the map: {}",
-            "reference_points_failed": "Could not render reference points on the map: {}"
+            "sample_points_failed": "Could not render sample points on the map: {error}",
+            "reference_points_failed": "Could not render reference points on the map: {error}"
         }
     },
     "design": {
@@ -47,7 +49,7 @@
             "title": "Sample Design Workflow",
             "aa_design": "Olofsson AA Design",
             "advanced": "Sampling",
-            "invalid": "Invalid sample design workflow: {}"
+            "invalid": "Invalid sample design workflow: {error}"
         },
         "class_editor": {
             "button": "Edit classes & EUA",
@@ -59,14 +61,14 @@
             "high_eua_hint": "For stable, easily identifiable classes (e.g., 85-95%)",
             "low_eua": "Low EUA (%)",
             "low_eua_hint": "For difficult classes, change detection, rare classes (e.g., 65-75%)",
-            "code": "Code {}",
+            "code": "Code {code}",
             "class_name": "Class Name",
             "mode_high": "High",
             "mode_low": "Low",
             "mode_custom": "Custom",
             "custom_eua": "EUA (%)",
             "samples": "Samples",
-            "area_share": "{} ha ({}%)"
+            "area_share": "{area} ha ({percent}%)"
         },
         "point_generation": {
             "calculate_first": "Calculate sample sizes first.",
@@ -79,7 +81,7 @@
             "need_aoi": "Select an Area of Interest before generating points.",
             "need_map": "Upload a classification map before generating points.",
             "error": {
-                "generating": "Error generating points: {}",
+                "generating": "Error generating points: {error}",
                 "not_ready_stratified": "Please upload a classification map and complete sample size calculation first.",
                 "not_ready_aoi": "Please select an Area of Interest and complete sample size calculation first."
             }
@@ -90,24 +92,27 @@
             "geojson": "Sample points (GeoJSON)"
         },
         "stats": {
-            "area_ha": "{} ha",
-            "class_count": "{} classes",
-            "sample_count": "n={}",
-            "target_se": "Target SE: {}%",
+            "area_ha": "{area} ha",
+            "class_count": {
+                "one": "{count} class",
+                "other": "{count} classes"
+            },
+            "sample_count": "n={n}",
+            "target_se": "Target SE: {value}%",
             "target_se_tooltip": "Target standard error of expected overall accuracy used to calculate the stratified sample size.",
-            "moe": "MOE: {}%",
+            "moe": "MOE: {value}%",
             "moe_tooltip": "Margin of Error: The range of uncertainty in the overall accuracy estimate at the specified confidence level. Lower MOE indicates higher precision.",
             "empty": "Define an area of interest, or load a classification map for stratified sampling, to compute the sample design."
         },
         "charts": {
             "precision_curve_title": "Precision Curve",
             "precision_curve_series": "MOE vs Sample Size",
-            "precision_curve_current": "Current Design (n={})",
+            "precision_curve_current": "Current Design (n={n})",
             "sample_size_axis": "Sample Size",
             "moe_axis": "MOE (%)",
-            "current_design_chip": "n={}, MOE=±{}%",
+            "current_design_chip": "n={n}, MOE=±{moe}%",
             "per_class_title": "Per-Class Precision",
-            "max_moe_chip": "Max MOE: {} (±{}%)",
+            "max_moe_chip": "Max MOE: {name} (±{moe}%)",
             "area_proportion_title": "Proportion by Area"
         },
         "parameters": {
@@ -129,13 +134,13 @@
         },
         "error": {
             "calculation_failed": "Calculation failed",
-            "calculating": "Error calculating samples: {}",
-            "invalid_method": "Invalid sampling method: {}",
-            "invalid_total": "Invalid sample total: {}",
-            "invalid_confidence": "Invalid confidence level: {}",
-            "invalid_expected_accuracy": "Invalid expected accuracy: {}",
-            "invalid_target_error": "Invalid target error: {}",
-            "invalid_min_samples": "Invalid minimum samples: {}"
+            "calculating": "Error calculating samples: {error}",
+            "invalid_method": "Invalid sampling method: {error}",
+            "invalid_total": "Invalid sample total: {error}",
+            "invalid_confidence": "Invalid confidence level: {error}",
+            "invalid_expected_accuracy": "Invalid expected accuracy: {error}",
+            "invalid_target_error": "Invalid target error: {error}",
+            "invalid_min_samples": "Invalid minimum samples: {error}"
         }
     },
     "aoi": {
@@ -150,7 +155,7 @@
         "sample_map": "Use Sample Map",
         "layer_name": "Classification Map",
         "current_file": "Current File:",
-        "current_file_details": "Type: {} | Size: {} MB",
+        "current_file_details": "Type: {type} | Size: {size} MB",
         "optimizing": "Optimizing raster for display... this may take a moment for large files.",
         "computing_areas": "Computing class areas...",
         "loading_sample": "Loading sample map...",
@@ -165,12 +170,12 @@
         "toast": {
             "uploaded": "File uploaded successfully.",
             "optimized": "File uploaded and optimized — you can now edit class names.",
-            "optimization_failed": "Error optimizing raster: {}"
+            "optimization_failed": "Error optimizing raster: {error}"
         },
         "error": {
             "not_a_raster": "Unsupported file format. The classification map must be a raster (GeoTIFF, ERDAS Imagine, or another format rasterio can open).",
-            "sample_not_found": "Sample file not found: {}",
-            "sample_failed": "Error loading sample map: {}"
+            "sample_not_found": "Sample file not found: {path}",
+            "sample_failed": "Error loading sample map: {error}"
         }
     },
     "analysis": {
@@ -214,12 +219,15 @@
         "design_map": {
             "title": "Design map:",
             "fallback_name": "design classification",
-            "detail": "{} {} from the design step",
+            "detail": {
+                "one": "{count} class from the design step",
+                "other": "{count} classes from the design step"
+            },
             "missing": "No classification is loaded from the design step. Switch to 'Upload a classification map' or 'From an area / strata CSV'."
         },
         "classification_map": {
             "title": "Classification map:",
-            "detail": "GeoTIFF | {} MB",
+            "detail": "GeoTIFF | {size} MB",
             "layer_name": "Classification (analysis)"
         },
         "area_table": {
@@ -242,12 +250,12 @@
             "legend_mismatch": "Note: map and reference legends differ; classes present in only one are shown with zero-filled values."
         },
         "error": {
-            "example_not_found": "Example analysis data not found in {}",
-            "example_failed": "Could not load example analysis data: {}",
-            "reference_read_failed": "Could not read reference file: {}",
-            "area_read_failed": "Could not read area file: {}",
-            "classification_failed": "Classification-map analysis failed: {}",
-            "raster_render_failed": "Analysis ran, but the classification map could not be rendered on the map: {}",
+            "example_not_found": "Example analysis data not found in {path}",
+            "example_failed": "Could not load example analysis data: {error}",
+            "reference_read_failed": "Could not read reference file: {error}",
+            "area_read_failed": "Could not read area file: {error}",
+            "classification_failed": "Classification-map analysis failed: {error}",
+            "raster_render_failed": "Analysis ran, but the classification map could not be rendered on the map: {error}",
             "missing_inputs": "Provide the required inputs before calculating.",
             "failed": "Analysis failed"
         },
@@ -260,10 +268,10 @@
             "accuracy_title": "Accuracy by class",
             "class_header": "Class",
             "samples_header": "Samples",
-            "map_area_header": "Map area ({})",
-            "adjusted_area_header": "Adj. area ({})",
-            "confidence_interval_header": "± CI ({})",
-            "srs_area_header": "SRS area ({})",
+            "map_area_header": "Map area ({unit})",
+            "adjusted_area_header": "Adj. area ({unit})",
+            "confidence_interval_header": "± CI ({unit})",
+            "srs_area_header": "SRS area ({unit})",
             "users_header": "User's",
             "producers_header": "Producer's",
             "weighted_producers_header": "Weighted PA"
@@ -276,10 +284,10 @@
             "reference": "Reference input"
         },
         "charts": {
-            "area_estimate_title": "Error-adjusted area by class ({})",
-            "adjusted_area_series": "Adjusted area ({})",
+            "area_estimate_title": "Error-adjusted area by class ({unit})",
+            "adjusted_area_series": "Adjusted area ({unit})",
             "confidence_interval_series": "CI",
-            "area_axis": "Area ({})",
+            "area_axis": "Area ({unit})",
             "confusion_title": "Confusion matrix (map → reference)",
             "confusion_reference_axis": "reference",
             "confusion_map_axis": "map",
@@ -300,10 +308,13 @@
             "reference_samples_hint": "Total reference points assessed.",
             "classes": "Classes",
             "classes_hint": "Number of map classes evaluated.",
-            "overall_chip": "Overall {}%",
-            "confidence_chip": "CL {}%",
-            "samples_chip": "n={}",
-            "classes_chip": "{} classes"
+            "overall_chip": "Overall {value}%",
+            "confidence_chip": "CL {value}%",
+            "samples_chip": "n={n}",
+            "classes_chip": {
+                "one": "{count} class",
+                "other": "{count} classes"
+            }
         }
     },
     "calculator": {
@@ -320,18 +331,18 @@
         "calculating": "Calculating sample sizes...",
         "needs_map": "Please upload a classification map first.",
         "simple_results_title": "Sample Size Configuration:",
-        "sampling_method": "Sampling method: {}",
-        "total_samples": "Total samples: {}",
-        "confidence_level": "Confidence Level: {}%",
-        "distribution_note": "Samples will be distributed {} across the entire study area.",
+        "sampling_method": "Sampling method: {method}",
+        "total_samples": "Total samples: {n}",
+        "confidence_level": "Confidence Level: {value}%",
+        "distribution_note": "Samples will be distributed {distribution} across the entire study area.",
         "distribution_random": "randomly",
         "distribution_systematic": "in a systematic grid",
         "stratified_results_title": "Sample Size Calculation Results:",
-        "total_samples_needed": "Total samples needed: {}",
-        "allocation_method": "Allocation method: {}",
-        "current_moe": "Current Margin of Error: {}%",
+        "total_samples_needed": "Total samples needed: {n}",
+        "allocation_method": "Allocation method: {method}",
+        "current_moe": "Current Margin of Error: {value}%",
         "samples_per_class": "Samples per class:",
-        "class_samples": "• {}: {}",
+        "class_samples": "• {name}: {n}",
         "allocation": {
             "title": "Sample Allocation",
             "empty": "No allocation data available",
@@ -350,8 +361,8 @@
             "term_population": "• N_h: finite population size (optional, using 1 if unknown)",
             "term_deff": "• DEFF: design effect (≈1.0 for spatially balanced; >1 if clustered)",
             "analysis_title": "Current Allocation Analysis:",
-            "highest_moe": "Highest MOE: {} (±{}%, n={})",
-            "lowest_moe": "Lowest MOE: {} (±{}%, n={})",
+            "highest_moe": "Highest MOE: {name} (±{moe}%, n={n})",
+            "lowest_moe": "Lowest MOE: {name} (±{moe}%, n={n})",
             "advice": "Classes with large MOE values may need more samples for better precision.",
             "moe_axis": "Margin of Error (%)",
             "interpretation": "**Interpretation**: The bars show the margin of error for each class's user accuracy estimate. Larger bars indicate less precise estimates. If you oversample rare classes, this chart helps verify you achieved the desired per-class precision."
@@ -365,10 +376,10 @@
             "term_oa": "• OA = Overall accuracy (expected)",
             "term_n": "• n = Total sample size",
             "current_title": "Your Current Design:",
-            "current_size": "Sample size: {}",
-            "current_moe": "Margin of Error: ±{}%",
+            "current_size": "Sample size: {n}",
+            "current_moe": "Margin of Error: ±{value}%",
             "series": "MOE vs Sample Size",
-            "current_series": "Your Design (n={})",
+            "current_series": "Your Design (n={n})",
             "sample_size_axis": "Sample Size (n)",
             "moe_axis": "Margin of Error (%)",
             "insight": "**Key Insight**: Notice how the MOE decreases rapidly at first, but the improvement slows as sample size increases. This is the \"diminishing returns\" effect - doubling the sample size doesn't halve the error."

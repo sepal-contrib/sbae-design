@@ -16,7 +16,7 @@ from ipecharts.option import Grid, Legend, Option, Tooltip, XAxis, YAxis
 from ipecharts.option.series import Bar, Custom, Pie
 from ipecharts.tools import encode_js_fn
 
-from component.message import use_translator
+from component.message import msg
 from component.model import app_state
 from component.scripts.accuracy import convert_area
 from component.widget.echarts import EChartsWidget, RawEChartsWidget
@@ -37,11 +37,9 @@ def _ChartTitle(title: str):
 
 @solara.component
 def AreaEstimateChart(results: dict, unit: str, theme_state=None):
-    ms = use_translator()
     rows = results.get("class_estimates", [])
     if not rows:
         return
-    charts = ms.analysis.charts
     u = "ha" if unit == "ha" else "m²"
     names = [r["class_name"] for r in rows]
     areas = [round(convert_area(r["area_estimate"], unit), 2) for r in rows]
@@ -50,7 +48,7 @@ def AreaEstimateChart(results: dict, unit: str, theme_state=None):
     codes = [r["map_code"] for r in rows]
 
     bar = Bar(
-        name=charts.adjusted_area_series.format(u),
+        name=msg("analysis.charts.adjusted_area_series", unit=u),
         data=[
             {"value": a, "itemStyle": {"color": colors.get(code, "#5470c6")}}
             for a, code in zip(areas, codes)
@@ -59,7 +57,7 @@ def AreaEstimateChart(results: dict, unit: str, theme_state=None):
     # error bars: horizontal segments [area-ci, area+ci] per category, drawn via Custom
     err_data = [[i, areas[i] - cis[i], areas[i] + cis[i]] for i in range(len(rows))]
     error_series = Custom(
-        name=charts.confidence_interval_series,
+        name=msg("analysis.charts.confidence_interval_series"),
         data=err_data,
         renderItem=encode_js_fn(
             ["params", "api"],
@@ -83,7 +81,7 @@ def AreaEstimateChart(results: dict, unit: str, theme_state=None):
         backgroundColor="#1e1e1e00",
         xAxis=XAxis(
             type="value",
-            name=charts.area_axis.format(u),
+            name=msg("analysis.charts.area_axis", unit=u),
             nameLocation="middle",
             nameGap=28,
         ),
@@ -93,7 +91,7 @@ def AreaEstimateChart(results: dict, unit: str, theme_state=None):
         grid=Grid(left="22%", right="8%", top="8%", bottom="16%"),
     )
     with solara.Card(margin=0):
-        _ChartTitle(charts.area_estimate_title.format(u))
+        _ChartTitle(msg("analysis.charts.area_estimate_title", unit=u))
         EChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
@@ -124,11 +122,9 @@ def confusion_heatmap_data(confusion_matrix: dict):
 
 @solara.component
 def ConfusionMatrixChart(results: dict, theme_state=None):
-    ms = use_translator()
     cm = results.get("confusion_matrix")
     if not cm or not cm.get("data"):
         return
-    charts = ms.analysis.charts
     x_labels, y_labels, triples, max_count = confusion_heatmap_data(cm)
     option = {
         "backgroundColor": "#1e1e1e00",
@@ -139,7 +135,7 @@ def ConfusionMatrixChart(results: dict, theme_state=None):
         "xAxis": {
             "type": "category",
             "data": x_labels,
-            "name": charts.confusion_reference_axis,
+            "name": msg("analysis.charts.confusion_reference_axis"),
             "nameLocation": "middle",
             "nameGap": 26,
             "splitArea": {"show": True},
@@ -148,7 +144,7 @@ def ConfusionMatrixChart(results: dict, theme_state=None):
         "yAxis": {
             "type": "category",
             "data": y_labels,
-            "name": charts.confusion_map_axis,
+            "name": msg("analysis.charts.confusion_map_axis"),
             "splitArea": {"show": True},
             "axisLabel": {"fontSize": 10},
         },
@@ -178,7 +174,7 @@ def ConfusionMatrixChart(results: dict, theme_state=None):
         ],
     }
     with solara.Card(margin=0):
-        _ChartTitle(charts.confusion_title)
+        _ChartTitle(msg("analysis.charts.confusion_title"))
         RawEChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
@@ -188,11 +184,9 @@ def ConfusionMatrixChart(results: dict, theme_state=None):
 
 @solara.component
 def AccuracyByClassChart(results: dict, theme_state=None):
-    ms = use_translator()
     rows = results.get("accuracy_rows", [])
     if not rows:
         return
-    charts = ms.analysis.charts
     names = [r["class_name"] for r in rows]
     users = [round(r["users_accuracy"] * 100, 1) for r in rows]
     producers = [round(r["producers_accuracy"] * 100, 1) for r in rows]
@@ -208,12 +202,12 @@ def AccuracyByClassChart(results: dict, theme_state=None):
         yAxis=YAxis(type="value", name="%", max=100),
         grid=Grid(left="10%", right="6%", top="8%", bottom="20%"),
         series=[
-            Bar(name=charts.users_series, data=users),
-            Bar(name=charts.producers_series, data=producers),
+            Bar(name=msg("analysis.charts.users_series"), data=users),
+            Bar(name=msg("analysis.charts.producers_series"), data=producers),
         ],
     )
     with solara.Card(margin=0):
-        _ChartTitle(charts.accuracy_title)
+        _ChartTitle(msg("analysis.charts.accuracy_title"))
         EChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},
@@ -238,7 +232,6 @@ _PIE_FALLBACK = [
 def AreaProportionChart(
     results: dict, theme_state=None, legend_width: int | None = 480, card: bool = True
 ):
-    ms = use_translator()
     rows = results.get("class_estimates", [])
     if not rows:
         return
@@ -286,7 +279,7 @@ def AreaProportionChart(
     )
 
     def _body():
-        _ChartTitle(ms.analysis.charts.area_proportion_title)
+        _ChartTitle(msg("analysis.charts.area_proportion_title"))
         EChartsWidget.element(
             option=option,
             style={"height": _CHART_H, "width": "100%"},

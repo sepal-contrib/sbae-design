@@ -294,8 +294,8 @@ async def build_layer_or_notify(sbae_map, points_df):
         # points back to the app (see build_sample_points_layer's scratch_dir
         # call, which can raise a raw OSError outside build_points_pmtiles_layer's
         # own try/except).
-        from component.message import get_translator
+        from component.message import msg
 
         logger.warning("Sample points layer failed: %s", e)
-        app_state.add_error(get_translator().map.error.sample_points_failed.format(e))
+        app_state.add_error(msg("map.error.sample_points_failed", error=e))
         return None

@@ -25,11 +25,12 @@ dependencies:
   - tippecanoe>=2
   - pip:
       # 4.0 drops the sepal_ui package, moves theme onto ThemeState, and is the
-      # first release with add_raster(class_colors=...). The floor names the rc
-      # on purpose: pip only considers a pre-release when the specifier itself
-      # mentions one, so plain >=4.0.0 resolves to nothing while 4.0.0rc0 is
-      # the only 4.x on PyPI.
-      - pysepal>=4.0.0rc1
+      # first release with add_raster(class_colors=...); rc2 replaces Translator
+      # with the catalog()/msg() lookup the app's messages use. The floor names
+      # the rc on purpose: pip only considers a pre-release when the specifier
+      # itself mentions one, so plain >=4.0.0 resolves to nothing while only
+      # release candidates of 4.x are on PyPI.
+      - pysepal>=4.0.0rc2
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
       - ipecharts>=1.0.0
       - voila

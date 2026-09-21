@@ -1,14 +1,14 @@
 import solara
 
-from component.message import use_translator
+from component.message import msg
 from component.model import app_state
+from component.widget.custom_widgets import use_batch
 
 
 @solara.component
 def class_editor_table(show_sample_controls=True):
     """Editable table for class names, expected accuracies, and sample allocations."""
-    ms = use_translator()
-    editor = ms.design.class_editor
+    batch = use_batch()
     area_data = app_state.area_data.value
     sample_results = app_state.sample_results.value
     eua_dict = app_state.expected_user_accuracies.value
@@ -16,7 +16,7 @@ def class_editor_table(show_sample_controls=True):
     class_colors = app_state.class_colors.value
 
     if area_data is None or area_data.empty:
-        solara.Warning(editor.no_area_data)
+        solara.Warning(msg("design.class_editor.no_area_data"))
         return
 
     samples_dict = {}
@@ -43,32 +43,32 @@ def class_editor_table(show_sample_controls=True):
     with solara.Column():
 
         with solara.Card(
-            subtitle=editor.eua_card_title,
+            subtitle=msg("design.class_editor.eua_card_title"),
             style="margin-bottom: 16px; padding: 16px;",
         ):
             with solara.Row(gap="16px"):
                 with solara.Column(style="flex: 1;"):
                     solara.v.TextField(
-                        label=editor.high_eua,
+                        label=msg("design.class_editor.high_eua"),
                         v_model=app_state.high_eua.value * 100,
                         on_v_model=update_high_eua,
                         type="number",
                         min=30,
                         max=100,
                         step=1,
-                        hint=editor.high_eua_hint,
+                        hint=msg("design.class_editor.high_eua_hint"),
                         style="width: 100%;",
                     )
                 with solara.Column(style="flex: 1;"):
                     solara.v.TextField(
-                        label=editor.low_eua,
+                        label=msg("design.class_editor.low_eua"),
                         v_model=app_state.low_eua.value * 100,
                         on_v_model=update_low_eua,
                         type="number",
                         min=30,
                         max=100,
                         step=1,
-                        hint=editor.low_eua_hint,
+                        hint=msg("design.class_editor.low_eua_hint"),
                         style="width: 100%;",
                     )
 
@@ -76,7 +76,7 @@ def class_editor_table(show_sample_controls=True):
         for idx, row in area_data.iterrows():
             map_code = row["map_code"]
             current_name = row.get(
-                "map_edited_class", ms.common.class_code.format(map_code)
+                "map_edited_class", msg("common.class_code", code=map_code)
             )
             area_ha = row["map_area"] / 10000
             area_pct = 100 * row["map_area"] / area_data["map_area"].sum()
@@ -107,6 +107,7 @@ def class_editor_table(show_sample_controls=True):
                 return update_name
 
             def make_set_mode_callback(code, mode):
+                @batch
                 def set_mode():
                     app_state.set_eua_mode(code, mode)
 
@@ -139,12 +140,13 @@ def class_editor_table(show_sample_controls=True):
                 with solara.Row(justify="space-between", style="align-items: center;"):
                     with solara.Column(style="flex: 0 0 50px;"):
                         solara.Text(
-                            editor.code.format(map_code), style="font-weight: 500;"
+                            msg("design.class_editor.code", code=map_code),
+                            style="font-weight: 500;",
                         )
 
                     with solara.Column(style="flex: 1 1 auto; margin: 0 8px;"):
                         solara.InputText(
-                            label=editor.class_name,
+                            label=msg("design.class_editor.class_name"),
                             value=current_name,
                             on_value=make_update_name_callback(map_code),
                             style="min-width: 120px;",
@@ -153,7 +155,7 @@ def class_editor_table(show_sample_controls=True):
                     with solara.Column(style="flex: 0 0 200px; margin: 0 8px;"):
                         with solara.Row(gap="4px"):
                             solara.Button(
-                                editor.mode_high,
+                                msg("design.class_editor.mode_high"),
                                 on_click=make_set_mode_callback(map_code, "high"),
                                 color="success" if current_mode == "high" else None,
                                 outlined=current_mode != "high",
@@ -161,7 +163,7 @@ def class_editor_table(show_sample_controls=True):
                                 style="min-width: 60px;",
                             )
                             solara.Button(
-                                editor.mode_low,
+                                msg("design.class_editor.mode_low"),
                                 on_click=make_set_mode_callback(map_code, "low"),
                                 color="warning" if current_mode == "low" else None,
                                 outlined=current_mode != "low",
@@ -169,7 +171,7 @@ def class_editor_table(show_sample_controls=True):
                                 style="min-width: 60px;",
                             )
                             solara.Button(
-                                editor.mode_custom,
+                                msg("design.class_editor.mode_custom"),
                                 on_click=make_set_mode_callback(map_code, "custom"),
                                 color=("primary" if current_mode == "custom" else None),
                                 outlined=current_mode != "custom",
@@ -180,7 +182,7 @@ def class_editor_table(show_sample_controls=True):
                     if current_mode == "custom":
                         with solara.Column(style="flex: 0 0 100px; margin: 0 8px;"):
                             solara.v.TextField(
-                                label=editor.custom_eua,
+                                label=msg("design.class_editor.custom_eua"),
                                 v_model=eua_value,
                                 on_v_model=make_update_custom_eua_callback(map_code),
                                 type="number",
@@ -203,8 +205,10 @@ def class_editor_table(show_sample_controls=True):
                         style="flex: 0 0 150px; text-align: right;", gap="4px"
                     ):
                         solara.Text(
-                            editor.area_share.format(
-                                f"{area_ha:,.2f}", f"{area_pct:.1f}"
+                            msg(
+                                "design.class_editor.area_share",
+                                area=f"{area_ha:,.2f}",
+                                percent=f"{area_pct:.1f}",
                             ),
                             style="font-size: 0.9em;",
                         )
@@ -220,7 +224,7 @@ def class_editor_table(show_sample_controls=True):
                     if samples_dict and show_sample_controls:
                         with solara.Column(style="flex: 0 0 110px;"):
                             solara.v.TextField(
-                                label=editor.samples,
+                                label=msg("design.class_editor.samples"),
                                 v_model=samples,
                                 on_v_model=make_update_samples_callback(map_code),
                                 type="number",
