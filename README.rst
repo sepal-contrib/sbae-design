@@ -14,7 +14,7 @@ It allows users to upload a map (raster or vector), calculate class areas, defin
 Features
 --------
 
-- **File Input:** Supports common raster and vector geospatial file formats (e.g., GeoTIFF, Shapefile, GeoJSON).
+- **File Input:** Accepts any thematic raster GDAL can open (GeoTIFF, COG, ERDAS Imagine, ENVI, GeoPackage and more). Class areas are true ground areas, computed on the ellipsoid when the map's CRS is not planar-accurate.
 - **Area Computation:** Automatically calculates the area for each class in the input map.
 - **Class Editing:** Allows users to review and edit class names derived from the map.
 - **Expected User Accuracy Input:** Facilitates Neyman allocation by allowing users to input expected user's accuracies for each class.

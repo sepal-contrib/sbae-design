@@ -479,3 +479,91 @@ def test_analysis_panel_shows_calculate_button_when_reference_loaded(monkeypatch
         str(c) for b in rc.find(v.Btn).widgets for c in (b.children or [])
     )
     assert "Calculate" in labels
+
+
+def _write_class_raster(path, *, crs, data=None):
+    if data is None:
+        data = np.array([[1, 1], [2, 2]], dtype=np.uint8)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs=crs,
+        transform=from_origin(0, 2, 1, 1),
+    ) as dst:
+        dst.write(data, 1)
+    return str(path)
+
+
+def test_select_classification_map_stores_a_valid_raster(tmp_path):
+    path = _write_class_raster(tmp_path / "ok.tif", crs="EPSG:4326")
+    app_state.error_messages.value = []
+    app_state.analysis_classification_path.value = None
+
+    analysis_tab.select_classification_map(path)
+
+    assert app_state.analysis_classification_path.value == path
+    assert app_state.error_messages.value == []
+
+
+def test_select_classification_map_refuses_a_raster_without_crs(tmp_path):
+    path = _write_class_raster(tmp_path / "nocrs.tif", crs=None)
+    app_state.error_messages.value = []
+    app_state.analysis_classification_path.value = None
+
+    analysis_tab.select_classification_map(path)
+
+    assert app_state.analysis_classification_path.value is None
+    assert len(app_state.error_messages.value) == 1
+    assert "coordinate reference" in app_state.error_messages.value[0].lower()
+
+
+def test_select_classification_map_none_clears_the_path(tmp_path):
+    app_state.analysis_classification_path.value = "/tmp/whatever.tif"
+
+    analysis_tab.select_classification_map(None)
+
+    assert app_state.analysis_classification_path.value is None
+
+
+def test_current_raster_display_names_the_driver(tmp_path):
+    path = _write_class_raster(tmp_path / "card.tif", crs="EPSG:4326")
+
+    _, rc = solara.render(
+        analysis_tab.CurrentRasterDisplay(path, on_clear=lambda: None),
+        handle_error=False,
+    )
+
+    text = " ".join(str(c) for w in rc.find(v.Html).widgets for c in (w.children or []))
+    assert "GTiff" in text
+
+
+def test_derive_map_source_toasts_the_not_thematic_code(tmp_path):
+    # non-integer values pass selection (metadata) and fail at Calculate
+    path = _write_class_raster(
+        tmp_path / "float.tif",
+        crs="EPSG:4326",
+        data=np.array([[1.5, 1.5], [2.5, 2.5]], dtype=np.float32),
+    )
+    app_state.clear_analysis_data()
+    app_state.error_messages.value = []
+    app_state.analysis_classification_path.value = path
+    app_state.analysis_reference_df.value = pd.DataFrame(
+        {"lon": [0.5, 1.5], "lat": [1.5, 0.5], "ref_code": [1, 2]}
+    )
+    app_state.analysis_column_mapping.value = {
+        "x": "lon",
+        "y": "lat",
+        "ref": "ref_code",
+    }
+
+    dropped = analysis_tab.derive_map_source(app_state)
+
+    assert dropped is None
+    assert len(app_state.error_messages.value) == 1
+    assert "non-integer" in app_state.error_messages.value[0]
+    app_state.clear_analysis_data()

@@ -240,7 +240,7 @@
         },
         "classification_map": {
             "title": "Classification map:",
-            "detail": "GeoTIFF | {size} MB",
+            "detail": "{driver} | {size} MB",
             "layer_name": "Classification (analysis)"
         },
         "area_table": {

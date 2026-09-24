@@ -244,7 +244,7 @@
         },
         "classification_map": {
             "title": "Mapa de clasificación:",
-            "detail": "GeoTIFF | {size} MB",
+            "detail": "{driver} | {size} MB",
             "layer_name": "Clasificación (análisis)"
         },
         "area_table": {
