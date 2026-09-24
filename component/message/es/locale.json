@@ -153,7 +153,7 @@
     "upload": {
         "button": "Cargar mapa",
         "dialog_title": "Cargar mapa de clasificación",
-        "instructions": "Cargue su mapa de clasificación de cobertura del suelo como archivo raster. Los formatos admitidos incluyen GeoTIFF, ERDAS Imagine y otros formatos raster compatibles con rasterio.",
+        "instructions": "Cargue su mapa de clasificación de cobertura del suelo como archivo raster.",
         "confirm": "Usar este archivo",
         "sample_map": "Usar mapa de ejemplo",
         "layer_name": "Mapa de clasificación",
@@ -166,9 +166,18 @@
             "title": "Archivo seleccionado",
             "type": "Tipo",
             "size": "Tamaño",
-            "features": "Entidades",
+            "pixels": "Píxeles",
             "crs": "CRS",
-            "crs_missing": "No especificado"
+            "crs_missing": "No especificado",
+            "dtype": "Tipo de dato",
+            "bands": "Bandas",
+            "band": "Banda de clases",
+            "nodata": "Valor nodata",
+            "nodata_hint": "Los píxeles con este valor se ignoran. Déjelo vacío si todos los píxeles son una clase."
+        },
+        "area_method": {
+            "planar": "Áreas: planas, a partir del tamaño de píxel ({crs})",
+            "geodesic": "Áreas: geodésicas, calculadas sobre el elipsoide"
         },
         "toast": {
             "uploaded": "Archivo cargado correctamente.",
@@ -176,7 +185,11 @@
             "optimization_failed": "Error al optimizar el raster: {error}"
         },
         "error": {
-            "not_a_raster": "Formato de archivo no admitido. El mapa de clasificación debe ser un raster (GeoTIFF, ERDAS Imagine u otro formato que rasterio pueda abrir).",
+            "not_a_raster": "Formato de archivo no admitido. El mapa de clasificación debe ser un raster.",
+            "no_crs": "El raster no tiene sistema de referencia de coordenadas, por lo que sus píxeles no se pueden ubicar en el mapa.",
+            "non_integral": "El raster contiene valores no enteros. Un mapa de clasificación necesita códigos de clase enteros.",
+            "too_many_classes": "El raster tiene más de {max} valores distintos. Un mapa de clasificación tiene como máximo {max} clases.",
+            "no_valid_data": "El raster no contiene datos válidos: todos los píxeles son nodata.",
             "sample_not_found": "No se encontró el archivo de ejemplo: {path}",
             "sample_failed": "Error al cargar el mapa de ejemplo: {error}"
         }
@@ -231,7 +244,7 @@
         },
         "classification_map": {
             "title": "Mapa de clasificación:",
-            "detail": "GeoTIFF | {size} MB",
+            "detail": "{driver} | {size} MB",
             "layer_name": "Clasificación (análisis)"
         },
         "area_table": {

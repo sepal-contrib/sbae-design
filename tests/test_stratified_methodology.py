@@ -5,6 +5,7 @@ sampling methodology from the documentation.
 """
 
 import math
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -16,6 +17,7 @@ from component.scripts.calculations import (
     apply_adjusted_allocation,
     calculate_stratified_sample_size,
 )
+from component.scripts.geospatial import compute_area_from_raster
 from component.scripts.stratified import (
     calculate_openforis_stratified_design,
     calculate_per_class_moe_for_allocation,
@@ -391,6 +393,83 @@ def test_stratified_equal_allocation_is_uniform():
     assert results.allocation_method == "equal"
     by_code = {a.map_code: a for a in results.samples_per_class}
     assert by_code[1].samples == by_code[2].samples  # equal allocation
+
+
+_SAMPLE_MAP = Path(__file__).parent / "data" / "aa_test_congo.tif"
+
+# Allocations for the bundled sample map under the app defaults (1 % MOE, 95 %
+# confidence, 85 % expected accuracy, 30 minimum, 0.9 EUA per class). The map
+# is EPSG:4326: what the design depends on is the class weights, and true
+# (geodesic) areas move them only at the 6th decimal, which can cross one
+# integer rounding boundary -- hence the +-1 per class.
+_SAMPLE_MAP_CODES = (2, 4, 11, 12, 13, 31, 32, 33, 34)
+_SAMPLE_MAP_ALLOCATIONS = {
+    AllocationMethod.PROPORTIONAL: {
+        2: 30,
+        4: 30,
+        11: 564,
+        12: 30,
+        13: 664,
+        31: 30,
+        32: 30,
+        33: 30,
+        34: 30,
+    },
+    AllocationMethod.EQUAL: {code: 142 for code in _SAMPLE_MAP_CODES},
+    AllocationMethod.NEYMAN: {
+        2: 30,
+        4: 30,
+        11: 316,
+        12: 30,
+        13: 373,
+        31: 30,
+        32: 30,
+        33: 30,
+        34: 30,
+    },
+    AllocationMethod.BALANCED: {
+        2: 72,
+        4: 76,
+        11: 353,
+        12: 82,
+        13: 403,
+        31: 73,
+        32: 72,
+        33: 71,
+        34: 73,
+    },
+}
+
+
+@pytest.fixture(scope="module")
+def sample_map_areas():
+    return compute_area_from_raster(str(_SAMPLE_MAP))
+
+
+@pytest.mark.parametrize("method", list(_SAMPLE_MAP_ALLOCATIONS))
+def test_sample_map_allocation_is_stable(sample_map_areas, method):
+    codes = sample_map_areas["map_code"].tolist()
+    inputs = SamplingInputs(
+        sampling_method=SamplingMethod.STRATIFIED,
+        target_error=1.0,
+        confidence_level=95.0,
+        expected_accuracy=85.0,
+        area_data=sample_map_areas,
+        allocation_method=method,
+        min_samples_per_class=30,
+        expected_accuracies={code: 0.9 for code in codes},
+    )
+
+    results = StratifiedSamplingStrategy().calculate(inputs)
+
+    assert results.success, results.error_message
+    expected = _SAMPLE_MAP_ALLOCATIONS[method]
+    assert set(results.allocation_dict) == set(expected)
+    for code, samples in expected.items():
+        assert abs(results.allocation_dict[code] - samples) <= 1, (
+            code,
+            results.allocation_dict,
+        )
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import rasterio
+from pyproj import Geod
 from rasterio.transform import from_origin
 
 from component.analysis.service import AnalysisService
@@ -118,8 +119,14 @@ def test_standalone_map_analysis_end_to_end(tmp_path):
     # every reference point's map_code == ref_code by construction -> perfect accuracy
     assert d["overall_accuracy"] == 1.0
     assert len(d["class_estimates"]) == 4
-    # each of 4 classes covers 4 of 16 unit-area pixels -> per-class 4.0, total 16.0
-    assert sum(c["area_estimate"] for c in d["class_estimates"]) == 16.0
+    # geographic CRS -> geodesic area; the 4x4 grid is one weight tile, so the
+    # per-class areas sum to the exact geodesic footprint of lon [0,4] x lat [0,4]
+    footprint, _ = Geod(ellps="WGS84").polygon_area_perimeter(
+        [0, 4, 4, 0], [4, 4, 0, 0]
+    )
+    assert np.isclose(
+        sum(c["area_estimate"] for c in d["class_estimates"]), abs(footprint)
+    )
     # perfect agreement => diagonal confusion matrix (no off-diagonal confusion)
     cm = d["confusion_matrix"]
     for i, row in enumerate(cm["data"]):

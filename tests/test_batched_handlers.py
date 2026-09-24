@@ -198,13 +198,13 @@ def test_sample_map_shows_its_spinner_before_reading_the_raster(mount, monkeypat
     rc = mount(SampleConfiguration, lambda: SampleMapButton(is_loading=loading))
     sample_map = _button(rc, msg("upload.sample_map"))
     spinner_while_reading = []
-    compute_file_areas = upload.compute_file_areas
+    load_classification_source = upload.load_classification_source
 
-    def reading(path):
+    def reading(*args, **kwargs):
         spinner_while_reading.append(sample_map.loading)
-        return compute_file_areas(path)
+        return load_classification_source(*args, **kwargs)
 
-    monkeypatch.setattr(upload, "compute_file_areas", reading)
+    monkeypatch.setattr(upload, "load_classification_source", reading)
 
     passes = _renders_during(rc, sample_map.click)
 
