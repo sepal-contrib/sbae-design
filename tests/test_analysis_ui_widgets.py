@@ -10,6 +10,8 @@ from rasterio.transform import from_origin
 from component.analysis.service import AnalysisService
 from component.model import app_state
 from component.model.state_manager import AppState
+from component.scripts.raster_source import NotThematicError
+from component.tile.upload import area_error_message
 from component.widget import analysis_tab
 from component.widget.analysis_results import _ConfusionMatrix
 from component.widget.analysis_tab import (
@@ -565,5 +567,28 @@ def test_derive_map_source_toasts_the_not_thematic_code(tmp_path):
 
     assert dropped is None
     assert len(app_state.error_messages.value) == 1
-    assert "non-integer" in app_state.error_messages.value[0]
+    assert app_state.error_messages.value[0] == area_error_message(
+        NotThematicError("non_integral")
+    )
     app_state.clear_analysis_data()
+
+
+def test_select_classification_map_refuses_a_vanished_file(tmp_path):
+    app_state.error_messages.value = []
+    app_state.analysis_classification_path.value = None
+
+    analysis_tab.select_classification_map(str(tmp_path / "gone.tif"))
+
+    assert app_state.analysis_classification_path.value is None
+    assert len(app_state.error_messages.value) == 1
+
+
+def test_current_raster_display_survives_a_vanished_file(tmp_path):
+    _, rc = solara.render(
+        analysis_tab.CurrentRasterDisplay(
+            str(tmp_path / "gone.tif"), on_clear=lambda: None
+        ),
+        handle_error=False,
+    )
+
+    assert "gone.tif" in _html_text(rc)

@@ -1276,7 +1276,7 @@ def get_file_info(file_path: str) -> Dict:
     """
     info = {
         "file_type": "unknown",
-        "size_mb": Path(file_path).stat().st_size / (1024 * 1024),
+        "size_mb": 0.0,
         "crs": None,
         "bounds": None,
     }
@@ -1300,6 +1300,7 @@ def get_file_info(file_path: str) -> Dict:
         return "Custom CRS"
 
     try:
+        info["size_mb"] = Path(file_path).stat().st_size / (1024 * 1024)
         if is_raster_file(file_path):
             with rasterio.open(file_path) as raster:
                 info["file_type"] = "raster"

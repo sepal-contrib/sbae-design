@@ -105,3 +105,11 @@ def test_a_non_raster_raises_value_error(tmp_path):
 
     with pytest.raises(ValueError):
         load_classification_source(str(path), temp_dir=str(tmp_path / "s"))
+
+
+def test_file_info_reports_a_missing_file_as_an_error(tmp_path):
+    info = get_file_info(str(tmp_path / "gone.tif"))
+
+    assert info["file_type"] == "unknown"
+    assert "error" in info
+    assert info["size_mb"] == 0.0
