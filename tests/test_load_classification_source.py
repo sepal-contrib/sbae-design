@@ -1,14 +1,33 @@
 """load_classification_source: the one call that turns a picked file into a design source."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 import rasterio
 from rasterio.transform import from_origin
 
-from component.scripts.geospatial import get_file_info, load_classification_source
+from component.scripts.geospatial import (
+    extract_map_codes,
+    generate_sample_points,
+    get_file_info,
+    load_classification_source,
+)
 from component.scripts.raster_source import NotThematicError
 
 BASE = np.array([[0, 1, 1], [2, 2, 3], [3, 3, 5]], dtype="uint8")
+
+# Three views of the same Congo map, so picking a band visibly changes the
+# design: band 1 is the original classification, band 2 collapses it to
+# forest (1) / non-forest (2), band 3 offsets every code by 100. Geographic
+# CRS, so these also exercise the VRT against the geodesic area path, which
+# the synthetic UTM rasters above never reach.
+MULTIBAND_MAP = Path(__file__).parent / "data" / "multiband_congo.tif"
+MULTIBAND_CLASSES = {
+    1: [2, 4, 11, 12, 13, 31, 32, 33, 34],
+    2: [1, 2],
+    3: [102, 104, 111, 112, 113, 131, 132, 133, 134],
+}
 
 
 def _write(path, bands, *, nodata=0, crs="EPSG:32633"):
@@ -113,3 +132,46 @@ def test_file_info_reports_a_missing_file_as_an_error(tmp_path):
     assert info["file_type"] == "unknown"
     assert "error" in info
     assert info["size_mb"] == 0.0
+
+
+def test_the_multiband_map_offers_three_bands():
+    info = get_file_info(str(MULTIBAND_MAP))
+
+    assert info["band_count"] == 3
+    assert info["dtype"] == "uint8"
+    assert info["nodata"] == 0.0
+    assert info["crs"] == "EPSG:4326"
+
+
+@pytest.mark.parametrize("band", sorted(MULTIBAND_CLASSES))
+def test_each_band_of_the_multiband_map_yields_its_own_classes(band, tmp_path):
+    out = load_classification_source(
+        str(MULTIBAND_MAP), band=band, temp_dir=str(tmp_path)
+    )
+
+    assert out["band"] == band
+    assert out["area_data"]["map_code"].tolist() == MULTIBAND_CLASSES[band]
+    assert set(out["color_palette"]) == set(MULTIBAND_CLASSES[band])
+    # a geographic map, so its areas are ellipsoidal whichever band is picked
+    assert out["area_method"] == "geodesic"
+    assert out["area_data"]["map_area"].sum() > 0
+
+
+def test_points_generated_through_a_band_vrt_read_back_that_band(tmp_path):
+    out = load_classification_source(str(MULTIBAND_MAP), band=2, temp_dir=str(tmp_path))
+    assert out["path"] != str(MULTIBAND_MAP)  # band 2 went through a VRT
+
+    points = generate_sample_points(
+        file_path=out["path"],
+        samples_per_class={code: 5 for code in MULTIBAND_CLASSES[2]},
+        class_lookup={},
+        seed=42,
+    )
+    back, dropped = extract_map_codes(
+        points.assign(map_code=0), out["path"], "longitude", "latitude"
+    )
+
+    assert len(points) == 10
+    assert dropped == 0
+    assert back["map_code"].tolist() == points["map_code"].tolist()
+    assert set(back["map_code"]) <= set(MULTIBAND_CLASSES[2])
