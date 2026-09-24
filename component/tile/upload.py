@@ -8,13 +8,19 @@ from pysepal.mapping import prepare_for_tiles
 from pysepal.solara import use_notifications
 from pysepal.solara.components.inputs import FileInputComponent
 
+from component.config.config import MAX_CLASSES
 from component.message import msg
 from component.model import app_state
 from component.scripts.geospatial import (
-    compute_file_areas,
-    get_color_palette,
     get_file_info,
     is_raster_file,
+    load_classification_source,
+)
+from component.scripts.raster_source import (
+    NotThematicError,
+    format_nodata,
+    parse_nodata,
+    selection_reject_code,
 )
 from component.widget.custom_widgets import use_batch
 from component.widget.map import SbaeMap
@@ -91,7 +97,7 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
 
     file_info = app_state.uploaded_file_info.value
     file_path = app_state.file_path.value
-    file_name = Path(file_path).name
+    file_name = Path(file_info.get("source_path") or file_path).name
     optimization_status = app_state.raster_optimization_status.value
     is_loading = optimization_status in ("running", "adding_to_map")
 
@@ -105,7 +111,10 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
                     ),
                     style="font-size: 14px;",
                 )
-                file_type = file_info.get("file_type", "unknown").title()
+                file_type = (
+                    file_info.get("driver")
+                    or file_info.get("file_type", "unknown").title()
+                )
                 size_mb = file_info.get("size_mb", 0)
                 solara.HTML(
                     tag="div",
@@ -116,6 +125,20 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
                     ),
                     style="font-size: 12px; margin-top: 4px;",
                 )
+                area_method = file_info.get("area_method")
+                if area_method:
+                    solara.HTML(
+                        tag="div",
+                        unsafe_innerHTML=(
+                            msg(
+                                "upload.area_method.planar",
+                                crs=str(file_info.get("crs") or ""),
+                            )
+                            if area_method == "planar"
+                            else msg("upload.area_method.geodesic")
+                        ),
+                        style="font-size: 12px; margin-top: 2px;",
+                    )
 
             solara.Button(
                 label="",
@@ -132,18 +155,28 @@ def CurrentFileDisplay(sbae_map: SbaeMap = None):
         )
 
 
-def _reject_reason(file_info: dict) -> Optional[str]:
-    """Why this file cannot serve as the classification map, or ``None``.
+def reject_reason(file_info: dict) -> Optional[str]:
+    """Translated reason this file cannot serve as the classification map, or ``None``.
 
-    Raster only: the map is served as tiles and the stratified design reads its
-    classes per pixel, so a vector carries neither. ``get_file_info`` reports
-    ``"vector"`` for one and ``"unknown"`` for anything it could not open.
+    A reader error is passed through verbatim (it says more than a generic
+    message would); the other ``selection_reject_code`` codes map to
+    ``upload.error.<code>``.
     """
-    if "error" in file_info:
+    code = selection_reject_code(file_info)
+    if code is None:
+        return None
+    if code == "read_error":
         return file_info["error"]
-    if file_info.get("file_type") != "raster":
-        return msg("upload.error.not_a_raster")
-    return None
+    return msg(f"upload.error.{code}")
+
+
+def area_error_message(error: BaseException) -> str:
+    """Toast text for a failed area computation: the code's message, else the error."""
+    if isinstance(error, NotThematicError):
+        if error.code == "too_many_classes":
+            return msg("upload.error.too_many_classes", max=str(MAX_CLASSES))
+        return msg(f"upload.error.{error.code}")
+    return str(error)
 
 
 def _upload_toast(*, has_file, is_raster, state, value, error):
@@ -310,13 +343,19 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
                     ]
                     return
 
-                # Get file information and compute areas
+                source = load_classification_source(
+                    str(sample_file_path), temp_dir=app_state.temp_dir.value
+                )
                 file_info = get_file_info(sample_file_path)
-                area_data = compute_file_areas(sample_file_path)
-
-                # Extract color palette from file
+                file_info.update(
+                    source_path=source["source_path"],
+                    band=source["band"],
+                    nodata=source["nodata"],
+                    area_method=source["area_method"],
+                )
+                area_data = source["area_data"]
                 class_codes = area_data["map_code"].tolist()
-                color_palette = get_color_palette(sample_file_path, class_codes)
+                color_palette = source["color_palette"]
 
                 # Initialize EUA values for all classes (default to 'high' mode)
                 eua_dict = {}
@@ -327,7 +366,7 @@ def SampleMapButton(is_loading: solara.Reactive[bool]):
 
                 # Update state directly
                 app_state.uploaded_file_info.value = file_info
-                app_state.file_path.value = sample_file_path
+                app_state.file_path.value = source["path"]
                 app_state.area_data.value = area_data.copy()
                 app_state.original_area_data.value = area_data.copy()
                 app_state.class_colors.value = color_palette
@@ -361,6 +400,8 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
     selected_file_info_preview = solara.use_reactive(None)
     is_valid_file = solara.use_reactive(False)
     should_compute_areas = solara.use_reactive(False)
+    selected_band = solara.use_reactive(1)
+    nodata_text = solara.use_reactive("")
 
     def reset_all_state():
         """Reset all application state including map."""
@@ -370,6 +411,8 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         selected_file_info_preview.value = None
         is_valid_file.value = False
         should_compute_areas.value = False
+        selected_band.value = 1
+        nodata_text.value = ""
 
     def handle_file_selection_from_input(file_path):
         """Handle file selection from FileInputComponent (returns path directly)."""
@@ -382,7 +425,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         try:
             file_info_dict = get_file_info(file_path)
 
-            rejection = _reject_reason(file_info_dict)
+            rejection = reject_reason(file_info_dict)
             if rejection:
                 app_state.file_error.value = rejection
                 selected_file_path.value = None
@@ -393,6 +436,8 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
             selected_file_path.value = file_path
             selected_file_info_preview.value = file_info_dict
             is_valid_file.value = True
+            selected_band.value = 1
+            nodata_text.value = format_nodata(file_info_dict.get("nodata"))
             app_state.file_error.value = None
 
         except Exception as e:
@@ -402,13 +447,15 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
             is_valid_file.value = False
 
     def compute_areas_worker():
-        """Worker function for area computation in separate thread."""
+        """Resolve the selection (VRT if needed) and compute its areas, off the UI thread."""
         if not selected_file_path.value or not should_compute_areas.value:
             return None
-        area_data = compute_file_areas(selected_file_path.value)
-        class_codes = area_data["map_code"].tolist()
-        color_palette = get_color_palette(selected_file_path.value, class_codes)
-        return {"area_data": area_data, "color_palette": color_palette}
+        return load_classification_source(
+            selected_file_path.value,
+            band=selected_band.value,
+            nodata=parse_nodata(nodata_text.value),
+            temp_dir=app_state.temp_dir.value,
+        )
 
     # Use thread for area computation
     area_result = solara.use_thread(
@@ -423,7 +470,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
             is_loading.value = True
             app_state.processing_status.value = msg("upload.computing_areas")
         elif area_result.state == solara.ResultState.ERROR:
-            app_state.file_error.value = str(area_result.error)
+            app_state.file_error.value = area_error_message(area_result.error)
             app_state.processing_status.value = ""
             is_loading.value = False
             should_compute_areas.value = False
@@ -442,8 +489,14 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
                 eua_dict[code] = app_state.high_eua.value  # Default to high EUA
                 eua_modes_dict[code] = "high"  # Default mode
 
-            app_state.uploaded_file_info.value = selected_file_info_preview.value
-            app_state.file_path.value = selected_file_path.value
+            app_state.uploaded_file_info.value = {
+                **(selected_file_info_preview.value or {}),
+                "source_path": result["source_path"],
+                "band": result["band"],
+                "nodata": result["nodata"],
+                "area_method": result["area_method"],
+            }
+            app_state.file_path.value = result["path"]
             app_state.area_data.value = result["area_data"].copy()
             app_state.original_area_data.value = result["area_data"].copy()
             app_state.class_colors.value = result["color_palette"]
@@ -474,6 +527,12 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         or is_loading.value
     )
 
+    try:
+        parse_nodata(nodata_text.value)
+        nodata_valid = True
+    except ValueError:
+        nodata_valid = False
+
     notifications = use_notifications()
 
     def announce_file_error():
@@ -490,7 +549,11 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
         FileInputComponent(on_value=handle_file_selection_from_input)
 
         if selected_file_info_preview.value and not app_state.uploaded_file_info.value:
-            FilePreview(selected_file_info_preview.value)
+            FilePreview(
+                selected_file_info_preview.value,
+                band=selected_band,
+                nodata_text=nodata_text,
+            )
 
         if not app_state.uploaded_file_info.value:
             solara.Button(
@@ -499,7 +562,7 @@ def FileUploadSection(is_loading: solara.Reactive[bool]):
                 color="primary",
                 block=True,
                 loading=is_processing,
-                disabled=not is_valid_file.value or is_processing,
+                disabled=not is_valid_file.value or is_processing or not nodata_valid,
             )
 
         with solara.Row(justify="center", classes=["mt-4"]):
@@ -514,19 +577,31 @@ def FileUploadInstructions():
 
 
 @solara.component
-def FilePreview(file_info: Dict[str, Any]):
+def FilePreview(
+    file_info: Dict[str, Any],
+    band: Optional[solara.Reactive[int]] = None,
+    nodata_text: Optional[solara.Reactive[str]] = None,
+):
     """Preview of the selected file's details, shown before confirmation.
 
     A neutral, theme-aware panel (subtle border, no colored alert background).
+    ``band`` and ``nodata_text`` are the confirm-time choices: the band select
+    only renders for a multi-band file; the nodata field whenever it is given.
     """
+    band_count = int(file_info.get("band_count") or 1)
     rows = [
-        (msg("upload.preview.type"), file_info.get("file_type", "unknown").title()),
+        (
+            msg("upload.preview.type"),
+            file_info.get("driver") or file_info.get("file_type", "unknown").title(),
+        ),
         (msg("upload.preview.size"), f"{file_info.get('size_mb', 0):.1f} MB"),
-        (msg("upload.preview.features"), f"{file_info.get('feature_count', 0):,}"),
+        (msg("upload.preview.pixels"), f"{file_info.get('pixels', 0):,}"),
         (
             msg("upload.preview.crs"),
-            file_info.get("crs", msg("upload.preview.crs_missing")),
+            file_info.get("crs") or msg("upload.preview.crs_missing"),
         ),
+        (msg("upload.preview.dtype"), str(file_info.get("dtype", "unknown"))),
+        (msg("upload.preview.bands"), str(band_count)),
     ]
     with solara.Column(
         gap="2px",
@@ -542,3 +617,18 @@ def FilePreview(file_info: Dict[str, Any]):
             with solara.Row(gap="8px"):
                 solara.Text(f"{label}:", style="min-width: 72px;")
                 solara.Text(str(value))
+        if band is not None and band_count > 1:
+            solara.Select(
+                label=msg("upload.preview.band"),
+                value=band.value,
+                values=list(range(1, band_count + 1)),
+                on_value=band.set,
+            )
+        if nodata_text is not None:
+            solara.InputText(
+                label=msg("upload.preview.nodata"),
+                value=nodata_text.value,
+                on_value=nodata_text.set,
+                continuous_update=True,
+                message=msg("upload.preview.nodata_hint"),
+            )
