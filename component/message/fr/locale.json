@@ -185,7 +185,7 @@
             "optimization_failed": "Erreur lors de l'optimisation du raster : {error}"
         },
         "error": {
-            "not_a_raster": "Format de fichier non pris en charge. La carte de classification doit être un raster (GeoTIFF, ERDAS Imagine ou un autre format que rasterio peut ouvrir).",
+            "not_a_raster": "Format de fichier non pris en charge. La carte de classification doit être un raster.",
             "no_crs": "Le raster n'a pas de système de référence de coordonnées : ses pixels ne peuvent pas être placés sur la carte.",
             "non_integral": "Le raster contient des valeurs non entières. Une carte de classification nécessite des codes de classe entiers.",
             "too_many_classes": "Le raster compte plus de {max} valeurs distinctes. Une carte de classification comporte au plus {max} classes.",

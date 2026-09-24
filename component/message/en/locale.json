@@ -182,7 +182,7 @@
             "optimization_failed": "Error optimizing raster: {error}"
         },
         "error": {
-            "not_a_raster": "Unsupported file format. The classification map must be a raster (GeoTIFF, ERDAS Imagine, or another format rasterio can open).",
+            "not_a_raster": "Unsupported file format. The classification map must be a raster.",
             "no_crs": "The raster has no coordinate reference system, so its pixels cannot be placed on the map.",
             "non_integral": "The raster holds non-integer values. A classification map needs integer class codes.",
             "too_many_classes": "The raster has more than {max} distinct values. A classification map has at most {max} classes.",
