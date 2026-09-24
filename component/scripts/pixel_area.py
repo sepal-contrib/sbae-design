@@ -14,6 +14,7 @@ from typing import Tuple
 
 import numpy as np
 from pyproj import Geod, Transformer
+from rasterio.errors import CRSError
 
 from component.config.config import AREA_TILE_SIZE, PLANAR_AREA_TOLERANCE
 from component.scripts.raster_source import NotThematicError
@@ -26,7 +27,7 @@ def planar_pixel_area(transform, crs) -> float:
     """Pixel area in m² from the affine transform and the CRS linear unit."""
     try:
         _, factor = crs.linear_units_factor
-    except Exception:  # rasterio raises CRSError for a unit it cannot name
+    except CRSError:  # rasterio raises CRSError for a unit it cannot name
         factor = 1.0
     return abs(transform.a * transform.e) * factor * factor
 
@@ -98,8 +99,15 @@ class TileWeights:
         self.per_pixel = areas / np.outer(np.diff(rows), np.diff(cols))
 
     def for_window(self, window) -> np.ndarray:
-        """Weights for a rasterio ``Window``, shape ``(window.height, window.width)``."""
-        row_off, col_off = int(window.row_off), int(window.col_off)
-        rows = np.arange(row_off, row_off + int(window.height)) // self.tile
-        cols = np.arange(col_off, col_off + int(window.width)) // self.tile
+        """Weights for a rasterio ``Window`` (integer-valued block window).
+
+        Shape ``(window.height, window.width)``. Window parameters are rounded to
+        absorb float noise from coordinate transformations.
+        """
+        row_off = round(window.row_off)
+        col_off = round(window.col_off)
+        height = round(window.height)
+        width = round(window.width)
+        rows = np.arange(row_off, row_off + height) // self.tile
+        cols = np.arange(col_off, col_off + width) // self.tile
         return self.per_pixel[np.ix_(rows, cols)]

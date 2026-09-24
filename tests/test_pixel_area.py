@@ -98,3 +98,20 @@ def test_tile_weights_follow_the_lattice():
     assert w.shape == (20, 20)
     assert w[0, 0] == weights.per_pixel[0, 0]  # row 250, col 250 -> tile (0, 0)
     assert w[-1, -1] == weights.per_pixel[1, 1]  # row 269, col 269 -> tile (1, 1)
+
+
+def test_tile_weights_absorb_float_noise_in_window_offsets():
+    weights = TileWeights(GEO_60N, CRS.from_epsg(4326), width=300, height=300, tile=256)
+
+    exact = weights.for_window(Window(col_off=250, row_off=250, width=20, height=20))
+    noisy = weights.for_window(
+        Window(col_off=249.9999999, row_off=249.9999999, width=20.0000001, height=20)
+    )
+
+    assert noisy.shape == exact.shape
+    assert (noisy == exact).all()
+
+
+def test_planar_pixel_area_without_crs_fails_loud():
+    with pytest.raises(AttributeError):
+        planar_pixel_area(UTM, None)
