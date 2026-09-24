@@ -150,7 +150,7 @@
     "upload": {
         "button": "Upload Map",
         "dialog_title": "Upload classification map",
-        "instructions": "Upload your land cover classification map as a raster file. Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio.",
+        "instructions": "Upload your land cover classification map as a raster file.",
         "confirm": "Use This File",
         "sample_map": "Use Sample Map",
         "layer_name": "Classification Map",

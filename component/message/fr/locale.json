@@ -153,7 +153,7 @@
     "upload": {
         "button": "Téléverser la carte",
         "dialog_title": "Téléverser la carte de classification",
-        "instructions": "Téléversez votre carte de classification de l'occupation du sol sous forme de fichier raster. Les formats pris en charge comprennent GeoTIFF, ERDAS Imagine et les autres formats raster gérés par rasterio.",
+        "instructions": "Téléversez votre carte de classification de l'occupation du sol sous forme de fichier raster.",
         "confirm": "Utiliser ce fichier",
         "sample_map": "Utiliser la carte d'exemple",
         "layer_name": "Carte de classification",

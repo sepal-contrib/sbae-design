@@ -153,7 +153,7 @@
     "upload": {
         "button": "Cargar mapa",
         "dialog_title": "Cargar mapa de clasificación",
-        "instructions": "Cargue su mapa de clasificación de cobertura del suelo como archivo raster. Los formatos admitidos incluyen GeoTIFF, ERDAS Imagine y otros formatos raster compatibles con rasterio.",
+        "instructions": "Cargue su mapa de clasificación de cobertura del suelo como archivo raster.",
         "confirm": "Usar este archivo",
         "sample_map": "Usar mapa de ejemplo",
         "layer_name": "Mapa de clasificación",
