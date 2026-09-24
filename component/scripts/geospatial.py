@@ -23,7 +23,12 @@ from component.scripts.pixel_area import (
     choose_area_method,
     planar_pixel_area,
 )
-from component.scripts.raster_source import NotThematicError
+from component.scripts.raster_source import (
+    NotThematicError,
+    needs_vrt,
+    selection_reject_code,
+    write_vrt,
+)
 
 
 def generate_simple_random_points_from_aoi(
@@ -1274,7 +1279,6 @@ def get_file_info(file_path: str) -> Dict:
         "size_mb": Path(file_path).stat().st_size / (1024 * 1024),
         "crs": None,
         "bounds": None,
-        "feature_count": 0,
     }
 
     def get_crs_string(crs):
@@ -1299,11 +1303,15 @@ def get_file_info(file_path: str) -> Dict:
         if is_raster_file(file_path):
             with rasterio.open(file_path) as raster:
                 info["file_type"] = "raster"
+                info["driver"] = raster.driver
                 info["crs"] = get_crs_string(raster.crs)
                 info["bounds"] = list(raster.bounds)
                 info["width"] = raster.width
                 info["height"] = raster.height
-                info["feature_count"] = raster.width * raster.height
+                info["pixels"] = raster.width * raster.height
+                info["band_count"] = raster.count
+                info["dtype"] = raster.dtypes[0]
+                info["nodata"] = raster.nodata
 
         elif is_vector_file(file_path):
             gdf = gpd.read_file(file_path)
@@ -1316,6 +1324,55 @@ def get_file_info(file_path: str) -> Dict:
         info["error"] = str(e)
 
     return info
+
+
+DECLARED = object()  # load_classification_source: keep the nodata the file declares
+
+
+def load_classification_source(
+    file_path: str,
+    band: int = 1,
+    nodata=DECLARED,
+    temp_dir: Optional[str] = None,
+) -> Dict:
+    """Resolve a selected raster into the design's classification source.
+
+    Writes a VRT sidecar when ``band`` / ``nodata`` differ from what the file
+    declares (``raster_source.write_vrt``), then computes class areas and the
+    palette on the resolved path. ``path`` is what ``app_state.file_path``
+    must hold; ``source_path`` is the file the user picked.
+
+    Raises:
+        NotThematicError: no CRS, or the class count rejects the raster
+        ValueError: not a raster, or it cannot be read
+    """
+    file_path = str(file_path)
+    info = get_file_info(file_path)
+    code = selection_reject_code(info)
+    if code == "no_crs":
+        raise NotThematicError("no_crs")
+    if code is not None:
+        raise ValueError(info.get("error") or f"Unsupported file: {file_path}")
+
+    if nodata is DECLARED:
+        nodata = info.get("nodata")
+    path = file_path
+    if needs_vrt(info, band, nodata):
+        path = write_vrt(
+            file_path, band, nodata, temp_dir or scratch_dir(prefix="sbae_vrt_")
+        )
+
+    area_data = compute_area_from_raster(path)
+    area_method, _ = choose_area_method_for(path)
+    return {
+        "path": path,
+        "source_path": file_path,
+        "band": int(band),
+        "nodata": nodata,
+        "area_method": area_method,
+        "area_data": area_data,
+        "color_palette": get_color_palette(path, area_data["map_code"].tolist()),
+    }
 
 
 def extract_map_codes(

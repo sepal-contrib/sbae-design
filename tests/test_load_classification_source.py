@@ -1,0 +1,107 @@
+"""load_classification_source: the one call that turns a picked file into a design source."""
+
+import numpy as np
+import pytest
+import rasterio
+from rasterio.transform import from_origin
+
+from component.scripts.geospatial import get_file_info, load_classification_source
+from component.scripts.raster_source import NotThematicError
+
+BASE = np.array([[0, 1, 1], [2, 2, 3], [3, 3, 5]], dtype="uint8")
+
+
+def _write(path, bands, *, nodata=0, crs="EPSG:32633"):
+    data = np.stack(bands)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=data.shape[1],
+        width=data.shape[2],
+        count=data.shape[0],
+        dtype="uint8",
+        crs=crs,
+        transform=from_origin(500000, 4650000, 30, 30),
+        nodata=nodata,
+    ) as dst:
+        dst.write(data)
+    return str(path)
+
+
+def test_file_info_describes_the_raster(tmp_path):
+    path = _write(tmp_path / "m.tif", [BASE, BASE * 2])
+
+    info = get_file_info(path)
+
+    assert info["file_type"] == "raster"
+    assert info["driver"] == "GTiff"
+    assert info["band_count"] == 2
+    assert info["dtype"] == "uint8"
+    assert info["nodata"] == 0.0
+    assert info["pixels"] == 9
+    assert info["crs"] == "EPSG:32633"
+    assert "feature_count" not in info
+
+
+def test_keeps_the_original_path_for_band_1_and_declared_nodata(tmp_path):
+    path = _write(tmp_path / "a.tif", [BASE])
+
+    out = load_classification_source(
+        path, band=1, nodata=0.0, temp_dir=str(tmp_path / "s")
+    )
+
+    assert out["path"] == path
+    assert out["source_path"] == path
+    assert out["band"] == 1
+    assert out["nodata"] == 0.0
+    assert out["area_method"] == "planar"
+    assert out["area_data"]["map_code"].tolist() == [1, 2, 3, 5]
+    assert set(out["color_palette"]) == {1, 2, 3, 5}
+
+
+def test_default_nodata_is_the_declared_one(tmp_path):
+    path = _write(tmp_path / "d.tif", [BASE])
+
+    out = load_classification_source(path, temp_dir=str(tmp_path / "s"))
+
+    assert out["path"] == path
+    assert out["nodata"] == 0.0
+
+
+def test_writes_a_vrt_for_another_band(tmp_path):
+    path = _write(tmp_path / "b.tif", [BASE, BASE * 2])
+
+    out = load_classification_source(
+        path, band=2, nodata=0.0, temp_dir=str(tmp_path / "s")
+    )
+
+    assert out["path"] == str(tmp_path / "s" / "b.b2.vrt")
+    assert out["source_path"] == path
+    assert out["band"] == 2
+    assert out["area_data"]["map_code"].tolist() == [2, 4, 6, 10]
+
+
+def test_writes_a_vrt_for_another_nodata(tmp_path):
+    path = _write(tmp_path / "n.tif", [BASE], nodata=None)
+
+    out = load_classification_source(path, nodata=0.0, temp_dir=str(tmp_path / "s"))
+
+    assert out["path"].endswith("n.b1.vrt")
+    assert out["area_data"]["map_code"].tolist() == [1, 2, 3, 5]
+
+
+def test_a_raster_without_crs_raises_no_crs(tmp_path):
+    path = _write(tmp_path / "c.tif", [BASE], crs=None)
+
+    with pytest.raises(NotThematicError) as info:
+        load_classification_source(path, temp_dir=str(tmp_path / "s"))
+    assert info.value.code == "no_crs"
+
+
+def test_a_non_raster_raises_value_error(tmp_path):
+    path = tmp_path / "v.geojson"
+    path.write_text('{"type": "FeatureCollection", "features": []}')
+
+    with pytest.raises(ValueError):
+        load_classification_source(str(path), temp_dir=str(tmp_path / "s"))
