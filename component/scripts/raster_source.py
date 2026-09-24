@@ -9,7 +9,11 @@ the source breaks it, exactly as moving an uploaded file does today.
 """
 
 import math
+from pathlib import Path
 from typing import ClassVar, Optional
+from xml.sax.saxutils import escape
+
+import rasterio
 
 
 class NotThematicError(ValueError):
@@ -93,3 +97,73 @@ def needs_vrt(info: dict, band: int, nodata: Optional[float]) -> bool:
     if int(band) != 1:
         return True
     return _normalize_nodata(info.get("nodata")) != _normalize_nodata(nodata)
+
+
+# rasterio dtype name -> GDAL VRT dataType
+_VRT_DTYPES = {
+    "uint8": "Byte",
+    "int8": "Int8",
+    "uint16": "UInt16",
+    "int16": "Int16",
+    "uint32": "UInt32",
+    "int32": "Int32",
+    "uint64": "UInt64",
+    "int64": "Int64",
+    "float32": "Float32",
+    "float64": "Float64",
+}
+
+
+def write_vrt(source_path, band: int, nodata: Optional[float], dest_dir) -> str:
+    """Re-describe ``source_path`` as a single-band VRT and return its path.
+
+    Band ``band`` of the source becomes band 1, ``nodata`` (or none) becomes
+    the nodata tag and the source band's colour table is carried over. Written
+    to ``dest_dir`` as ``<stem>.b<band>.vrt``, overwriting a previous one.
+    """
+    source_path = Path(source_path).resolve()
+    band = int(band)
+    with rasterio.open(source_path) as src:
+        if not 1 <= band <= src.count:
+            raise ValueError(f"band {band} is not in 1..{src.count}")
+        width, height = src.width, src.height
+        dtype = _VRT_DTYPES[src.dtypes[band - 1]]
+        geotransform = src.transform.to_gdal()
+        wkt = src.crs.to_wkt() if src.crs else ""
+        try:
+            colormap = src.colormap(band)
+        except ValueError:
+            colormap = None
+
+    nodata = _normalize_nodata(nodata)
+    nodata_xml = f"<NoDataValue>{nodata!r}</NoDataValue>" if nodata is not None else ""
+    colortable_xml = ""
+    if colormap:
+        entries = "".join(
+            f'<Entry c1="{r}" c2="{g}" c3="{b}" c4="{a}"/>'
+            for _, (r, g, b, a) in sorted(colormap.items())
+        )
+        colortable_xml = (
+            f"<ColorInterp>Palette</ColorInterp><ColorTable>{entries}</ColorTable>"
+        )
+    xml = (
+        f'<VRTDataset rasterXSize="{width}" rasterYSize="{height}">\n'
+        f"  <SRS>{escape(wkt)}</SRS>\n"
+        f'  <GeoTransform>{", ".join(repr(v) for v in geotransform)}</GeoTransform>\n'
+        f'  <VRTRasterBand dataType="{dtype}" band="1">\n'
+        f"    {nodata_xml}{colortable_xml}\n"
+        f"    <SimpleSource>\n"
+        f'      <SourceFilename relativeToVRT="0">{escape(str(source_path))}'
+        f"</SourceFilename>\n"
+        f"      <SourceBand>{band}</SourceBand>\n"
+        f'      <SrcRect xOff="0" yOff="0" xSize="{width}" ySize="{height}"/>\n'
+        f'      <DstRect xOff="0" yOff="0" xSize="{width}" ySize="{height}"/>\n'
+        f"    </SimpleSource>\n"
+        f"  </VRTRasterBand>\n"
+        f"</VRTDataset>\n"
+    )
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{source_path.stem}.b{band}.vrt"
+    dest.write_text(xml)
+    return str(dest)
