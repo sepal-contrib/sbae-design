@@ -39,20 +39,56 @@ def test_upload_section_has_no_card_of_its_own(render_in_app):
     rc.find(v.Card).assert_empty()
 
 
-def test_file_preview_is_not_a_colored_alert():
-    info = {
-        "file_type": "raster",
-        "size_mb": 67.8,
-        "feature_count": 3_530_071_680,
-        "crs": "EPSG:4326",
-    }
+_INFO = {
+    "file_type": "raster",
+    "driver": "GTiff",
+    "size_mb": 67.8,
+    "pixels": 3_530_071_680,
+    "crs": "EPSG:4326",
+    "dtype": "uint8",
+    "band_count": 1,
+    "nodata": None,
+}
 
-    _, rc = solara.render(FilePreview(info), handle_error=False)
+
+def test_file_preview_is_not_a_colored_alert():
+    _, rc = solara.render(FilePreview(_INFO), handle_error=False)
 
     # No colored info alert (the previous blue box) and no nested card.
     rc.find(v.Alert).assert_empty()
     rc.find(v.Card).assert_empty()
     text = " ".join(str(c) for w in rc.find(v.Html).widgets for c in (w.children or []))
     assert "File selected" in text
-    assert "Raster" in text
+    assert "GTiff" in text
     assert "EPSG:4326" in text
+    assert "uint8" in text
+
+
+def test_file_preview_offers_a_band_select_only_for_multiband():
+    band = solara.reactive(1)
+    nodata = solara.reactive("")
+
+    _, rc = solara.render(
+        FilePreview({**_INFO, "band_count": 3}, band=band, nodata_text=nodata),
+        handle_error=False,
+    )
+    assert rc.find(v.Select).widgets
+
+    _, rc = solara.render(
+        FilePreview(_INFO, band=band, nodata_text=nodata), handle_error=False
+    )
+    rc.find(v.Select).assert_empty()
+
+
+def test_file_preview_nodata_field_is_prefilled():
+    nodata = solara.reactive("0")
+
+    _, rc = solara.render(
+        FilePreview(
+            {**_INFO, "nodata": 0.0}, band=solara.reactive(1), nodata_text=nodata
+        ),
+        handle_error=False,
+    )
+
+    field = rc.find(v.TextField).widget
+    assert field.v_model == "0"

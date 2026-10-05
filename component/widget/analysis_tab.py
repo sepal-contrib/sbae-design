@@ -1,7 +1,6 @@
 """Accuracy-assessment analysis UI: upload -> mapping -> compute -> results."""
 
 import logging
-import os
 from pathlib import Path
 
 import pandas as pd
@@ -11,6 +10,9 @@ from pysepal.solara.components.inputs import FileInputComponent
 from component.analysis.service import AnalysisService
 from component.message import msg
 from component.model import app_state
+from component.scripts.geospatial import get_file_info
+from component.scripts.raster_source import NotThematicError
+from component.tile.upload import area_error_message, reject_reason
 from component.widget.analysis_results import AnalysisResultsView  # Task 9/10
 from component.widget.custom_widgets import Section, use_batch
 from component.widget.sample_configuration import MethodologyHelpButton
@@ -116,6 +118,9 @@ def derive_map_source(state, sbae_map=None):
         ref_out, area_df, dropped = derive_from_classification(
             ref, state.analysis_column_mapping.value or {}, raster
         )
+    except NotThematicError as e:
+        state.add_error(area_error_message(e))
+        return None
     except Exception as e:  # surface, don't crash the Calculate task
         state.add_error(msg("analysis.error.classification_failed", error=e))
         return None
@@ -692,9 +697,9 @@ def DesignClassificationCard():
     """
     file_path = app_state.file_path.value
     area = app_state.area_data.value
-    name = (
-        Path(file_path).name if file_path else msg("analysis.design_map.fallback_name")
-    )
+    info = app_state.uploaded_file_info.value or {}
+    source = info.get("source_path") or file_path
+    name = Path(source).name if source else msg("analysis.design_map.fallback_name")
     n_classes = 0 if area is None or area.empty else int(area["map_code"].nunique())
     with solara.Card(classes=["mb-2"]):
         with solara.Column(gap="0px"):
@@ -714,16 +719,16 @@ def DesignClassificationCard():
 def CurrentRasterDisplay(path: str, on_clear=None):
     """Design-style card for the uploaded classification raster (map source).
 
-    Mirrors ``CurrentFileDisplay``: name + type/size and a clear button, instead
-    of a bare filename row.
+    Mirrors ``CurrentFileDisplay``: name + driver/size and a clear button,
+    instead of a bare filename row.
     """
+    # hooks run before the early return so their order never changes
+    info = solara.use_memo(lambda: get_file_info(path) if path else {}, [path])
     if not path:
         return
     name = Path(path).name
-    try:
-        size_mb = os.path.getsize(path) / (1024 * 1024)
-    except OSError:
-        size_mb = 0.0
+    driver = info.get("driver") or msg("upload.preview.type")
+    size_mb = info.get("size_mb", 0.0)
     with solara.Card(classes=["mb-2"]):
         with solara.Row(justify="space-between", style={"align-items": "center"}):
             with solara.Column(gap="0px"):
@@ -734,7 +739,11 @@ def CurrentRasterDisplay(path: str, on_clear=None):
                     )
                     solara.Text(name, style="font-size: 14px;")
                 solara.Text(
-                    msg("analysis.classification_map.detail", size=f"{size_mb:.1f}"),
+                    msg(
+                        "analysis.classification_map.detail",
+                        driver=driver,
+                        size=f"{size_mb:.1f}",
+                    ),
                     style="font-size: 12px;",
                 )
             if on_clear is not None:
@@ -749,12 +758,30 @@ def CurrentRasterDisplay(path: str, on_clear=None):
                 )
 
 
+def select_classification_map(path) -> None:
+    """Store a picked classification raster, or toast why it is refused.
+
+    Selection-time validation only (metadata): the raster is sampled and its
+    areas computed when the user presses Calculate.
+    """
+    if not path:
+        app_state.analysis_classification_path.value = None
+        return
+    reason = reject_reason(get_file_info(path))
+    if reason:
+        app_state.add_error(reason)
+        app_state.analysis_classification_path.value = None
+        return
+    app_state.analysis_classification_path.value = path
+
+
 @solara.component
 def _ClassificationMapUpload(sbae_map=None):
-    """Pick a classification GeoTIFF for the "map" area source.
+    """Pick a classification raster for the "map" area source.
 
-    Only selects the file. The raster is sampled (map_code + per-class areas)
-    and rendered when the user presses Calculate -- see ``derive_map_source`` /
+    Any raster GDAL can open; ``select_classification_map`` refuses the rest at
+    selection. The raster is sampled (map_code + per-class areas) and rendered
+    when the user presses Calculate -- see ``derive_map_source`` /
     ``run_calculation``. Clearing the path also drops the rendered raster layer
     (``clas_an``) so it doesn't outlive the data that produced it.
     """
@@ -768,4 +795,4 @@ def _ClassificationMapUpload(sbae_map=None):
     if path.value:
         CurrentRasterDisplay(path.value, on_clear=clear_classification)
     else:
-        FileInputComponent(extensions=[".tif", ".tiff"], on_value=lambda p: path.set(p))
+        FileInputComponent(on_value=select_classification_map)
