@@ -209,3 +209,63 @@ def test_point_generation_request_captures_inputs_for_persistent_task():
         "class_lookup": {1: "Forest"},
         "aoi_gdf": None,
     }
+
+
+def _olofsson_state(allocation=None):
+    """State holding the Olofsson et al. (2014) worked example: W = 2/1.5/32/64.5%."""
+    state = AppState()
+    state.area_data.value = pd.DataFrame(
+        {
+            "map_code": [1, 2, 3, 4],
+            "map_area": [200_000.0, 150_000.0, 3_200_000.0, 6_450_000.0],
+            "map_edited_class": ["Deforestation", "Gain", "Forest", "Non-forest"],
+        }
+    )
+    state.expected_user_accuracies.value = {1: 0.7, 2: 0.6, 3: 0.9, 4: 0.95}
+    params = {
+        "target_error": 1.0,
+        "confidence_level": 95.0,
+        "min_samples_per_class": 50,
+    }
+    if allocation:
+        params["stratified_allocation_method"] = allocation
+    state.set_sampling_parameters(**params)
+    return state
+
+
+def test_default_design_sizes_from_per_class_eua():
+    from component.sampling.service import SamplingService
+
+    state = _olofsson_state()
+    assert state.stratified_allocation_method.value == "neyman"
+
+    result = SamplingService.calculate_from_state(state)
+
+    assert result.success, result.error_message
+    # Olofsson (2014) eq. 13 with the per-class EUAs gives n = 641.
+    assert 640 <= result.total_samples <= 642
+
+
+def test_default_design_follows_a_class_eua_edit():
+    from component.sampling.service import SamplingService
+
+    state = _olofsson_state()
+    before = SamplingService.calculate_from_state(state).total_samples
+
+    state.update_expected_accuracy(4, 0.7)
+    after = SamplingService.calculate_from_state(state).total_samples
+
+    assert after > before
+
+
+def test_explicit_proportional_ignores_per_class_eua():
+    from component.sampling.service import SamplingService
+
+    state = _olofsson_state(allocation="proportional")
+    before = SamplingService.calculate_from_state(state).total_samples
+
+    state.update_expected_accuracy(4, 0.7)
+    after = SamplingService.calculate_from_state(state).total_samples
+
+    # Non-Neyman runs size from the single global expected accuracy (AGENTS.md).
+    assert after == before

@@ -54,8 +54,11 @@ class AppState:
         self.expected_accuracy = solara.reactive(85.0)
         # Sampling mode: 'stratified' (default), 'simple' (user-specified n), 'systematic'
         self.sampling_method = solara.reactive("stratified")
-        # Allocation method for stratified sampling: 'proportional', 'equal', 'neyman', 'balanced'
-        self.stratified_allocation_method = solara.reactive("proportional")
+        # Allocation method for stratified sampling: 'proportional', 'equal', 'neyman', 'balanced'.
+        # "neyman" is the per-class-EUA Olofsson design, so it must match the
+        # aa_design workflow default below; any other value makes n ignore the
+        # per-class EUA edited in the class editor.
+        self.stratified_allocation_method = solara.reactive("neyman")
         # When sampling_method == 'simple' this value is used as total sample size
         self.simple_total_samples = solara.reactive(100)
 
