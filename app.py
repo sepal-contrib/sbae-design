@@ -41,7 +41,6 @@ from pysepal.solara import (
 )
 
 from component.message import messages, msg
-from component.model.app_model import AppModel
 from component.tile.upload import RasterMapWatcher
 from component.widget.map import PointsLegend, SbaeMap
 from component.widget.notification_bridge import ErrorToastBridge
@@ -79,11 +78,9 @@ def Page():
     NotificationProvider(theme_state=theme_state)
     ErrorToastBridge()
 
+    setup_theme_colors()
     # msg() re-renders this component on a language change. The map owns its
     # layers and nothing re-adds one already added, so it must outlive renders.
-    app_model = solara.use_memo(AppModel, [])
-
-    setup_theme_colors()
     sbae_map = solara.use_memo(
         lambda: SbaeMap(theme_state=theme_state, gee=USE_GEE), []
     )
@@ -138,7 +135,6 @@ def Page():
         is_pinned=False,
         repo_url="https://github.com/your-repo/sbae-tool",
         docs_url="https://your-docs-url.com/sbae",
-        model=app_model,
     )
 
 
