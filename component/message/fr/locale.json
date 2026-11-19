@@ -153,7 +153,7 @@
     "upload": {
         "button": "Téléverser la carte",
         "dialog_title": "Téléverser la carte de classification",
-        "instructions": "Téléversez votre carte de classification de l'occupation du sol sous forme de fichier raster. Les formats pris en charge comprennent GeoTIFF, ERDAS Imagine et les autres formats raster gérés par rasterio.",
+        "instructions": "Téléversez votre carte de classification de l'occupation du sol sous forme de fichier raster.",
         "confirm": "Utiliser ce fichier",
         "sample_map": "Utiliser la carte d'exemple",
         "layer_name": "Carte de classification",
@@ -166,9 +166,18 @@
             "title": "Fichier sélectionné",
             "type": "Type",
             "size": "Taille",
-            "features": "Entités",
+            "pixels": "Pixels",
             "crs": "CRS",
-            "crs_missing": "Non spécifié"
+            "crs_missing": "Non spécifié",
+            "dtype": "Type de données",
+            "bands": "Bandes",
+            "band": "Bande des classes",
+            "nodata": "Valeur nodata",
+            "nodata_hint": "Les pixels ayant cette valeur sont ignorés. Laissez vide si chaque pixel est une classe."
+        },
+        "area_method": {
+            "planar": "Superficies : planes, d'après la taille des pixels ({crs})",
+            "geodesic": "Superficies : géodésiques, calculées sur l'ellipsoïde"
         },
         "toast": {
             "uploaded": "Fichier téléversé avec succès.",
@@ -176,7 +185,11 @@
             "optimization_failed": "Erreur lors de l'optimisation du raster : {error}"
         },
         "error": {
-            "not_a_raster": "Format de fichier non pris en charge. La carte de classification doit être un raster (GeoTIFF, ERDAS Imagine ou un autre format que rasterio peut ouvrir).",
+            "not_a_raster": "Format de fichier non pris en charge. La carte de classification doit être un raster.",
+            "no_crs": "Le raster n'a pas de système de référence de coordonnées : ses pixels ne peuvent pas être placés sur la carte.",
+            "non_integral": "Le raster contient des valeurs non entières. Une carte de classification nécessite des codes de classe entiers.",
+            "too_many_classes": "Le raster compte plus de {max} valeurs distinctes. Une carte de classification comporte au plus {max} classes.",
+            "no_valid_data": "Le raster ne contient aucune donnée valide : tous les pixels sont nodata.",
             "sample_not_found": "Fichier d'exemple introuvable : {path}",
             "sample_failed": "Erreur lors du chargement de la carte d'exemple : {error}"
         }
@@ -231,7 +244,7 @@
         },
         "classification_map": {
             "title": "Carte de classification :",
-            "detail": "GeoTIFF | {size} Mo",
+            "detail": "{driver} | {size} Mo",
             "layer_name": "Classification (analyse)"
         },
         "area_table": {

@@ -17,6 +17,19 @@ from rasterio.warp import transform as warp_transform
 from rasterio.windows import Window
 from shapely.geometry import Point
 
+from component.config.config import MAX_CLASSES
+from component.scripts.pixel_area import (
+    TileWeights,
+    choose_area_method,
+    planar_pixel_area,
+)
+from component.scripts.raster_source import (
+    NotThematicError,
+    needs_vrt,
+    selection_reject_code,
+    write_vrt,
+)
+
 
 def generate_simple_random_points_from_aoi(
     aoi_gdf: gpd.GeoDataFrame,
@@ -243,69 +256,125 @@ def get_color_palette(file_path: str, class_codes: List[int]) -> Dict[int, str]:
     }
 
 
-def compute_area_from_raster(file_path: str) -> pd.DataFrame:
-    """Compute area for each class in a raster file.
+_BINCOUNT_MAX = 65_535  # widest code np.bincount may index; past it, np.unique
 
-    Args:
-        file_path: Path to raster file
+
+def _valid_mask(block: np.ndarray, nodata) -> np.ndarray:
+    """Pixels that carry a class: not nodata, and never NaN."""
+    if np.issubdtype(block.dtype, np.floating):
+        mask = ~np.isnan(block)
+        if nodata is not None and not np.isnan(nodata):
+            mask &= block != nodata
+        return mask
+    if nodata is None:
+        return np.ones(block.shape, dtype=bool)
+    return block != nodata
+
+
+def _block_histogram(codes: np.ndarray, weights):
+    """``(codes_seen, counts, weighted_areas)`` for one block's valid pixels.
+
+    ``weights`` is ``None`` on the planar path (``weighted_areas`` is then
+    ``None`` too). bincount is O(n) but sized by the largest code, so wide
+    codes go through ``np.unique`` instead.
+    """
+    if codes.size == 0:
+        empty = np.array([], dtype=np.int64)
+        return empty, empty, None
+    lo, hi = int(codes.min()), int(codes.max())
+    if lo >= 0 and hi <= _BINCOUNT_MAX:
+        counts = np.bincount(codes)
+        seen = np.nonzero(counts)[0]
+        areas = None if weights is None else np.bincount(codes, weights=weights)[seen]
+        return seen, counts[seen], areas
+    seen, inverse, counts = np.unique(codes, return_inverse=True, return_counts=True)
+    areas = None if weights is None else np.bincount(inverse, weights=weights)
+    return seen, counts, areas
+
+
+def choose_area_method_for(file_path: str) -> "tuple[str, float]":
+    """``("planar" | "geodesic", departure)`` for the raster at ``file_path``."""
+    with rasterio.open(file_path) as raster:
+        return choose_area_method(
+            raster.transform, raster.crs, raster.width, raster.height
+        )
+
+
+def compute_area_from_raster(file_path: str) -> pd.DataFrame:
+    """Compute the ground area (m²) of each class in a raster file.
+
+    Planar (pixel count x pixel size, in metres) when the CRS keeps that
+    within ``PLANAR_AREA_TOLERANCE`` of the ellipsoid, geodesic tile weights
+    otherwise (``pixel_area.choose_area_method``). Streams the raster block by
+    block so the full band is never in memory.
 
     Returns:
-        DataFrame with columns: map_code, map_area, map_edited_class
+        DataFrame with columns: map_code (int), map_area (m²), map_edited_class
 
     Raises:
-        ValueError: If file cannot be read or processed
+        NotThematicError: no CRS, non-integer values, more than ``MAX_CLASSES``
+            distinct codes, or no valid pixel at all
+        ValueError: the file cannot be read or processed
     """
     try:
         with rasterio.open(file_path) as raster:
-            # Calculate pixel area
-            transform = raster.transform
-            pixel_area = abs(transform.a * transform.e)
-
-            nodata_value = raster.nodata
-            dtype = np.dtype(raster.dtypes[0])
-            # bincount is O(n) and avoids sorting the whole band, but only
-            # works for non-negative integers. Fall back to per-block unique
-            # for float/signed class maps.
-            use_bincount = np.issubdtype(dtype, np.integer) or np.issubdtype(
-                dtype, np.unsignedinteger
+            method, _ = choose_area_method(
+                raster.transform, raster.crs, raster.width, raster.height
             )
+            weights = (
+                TileWeights(raster.transform, raster.crs, raster.width, raster.height)
+                if method == "geodesic"
+                else None
+            )
+            nodata = raster.nodata
+            is_float = np.issubdtype(np.dtype(raster.dtypes[0]), np.floating)
 
-            # Stream the raster block by block so we never materialize the
-            # full band in memory (a single Hansen tile is ~3.5 GB read whole).
-            counts: Dict[float, int] = {}
+            counts: Dict[int, int] = {}
+            areas: Dict[int, float] = {}
             for _, window in raster.block_windows(1):
-                block = raster.read(1, window=window).ravel()
-
-                if use_bincount and block.size and block.min() >= 0:
-                    hist = np.bincount(block)
-                    for code in np.nonzero(hist)[0]:
-                        counts[int(code)] = counts.get(int(code), 0) + int(hist[code])
-                else:
-                    values, block_counts = np.unique(block, return_counts=True)
-                    for value, count in zip(values, block_counts):
-                        key = value.item()
-                        counts[key] = counts.get(key, 0) + int(count)
-
-            # Drop nodata (only if the raster actually declares one)
-            if nodata_value is not None:
-                counts.pop(nodata_value, None)
+                block = raster.read(1, window=window)
+                valid = _valid_mask(block, nodata)
+                values = block[valid]
+                if is_float and values.size and not np.all(np.mod(values, 1) == 0):
+                    raise NotThematicError("non_integral")
+                codes = values.astype(np.int64)
+                block_weights = (
+                    None if weights is None else weights.for_window(window)[valid]
+                )
+                seen, block_counts, block_areas = _block_histogram(codes, block_weights)
+                for i, code in enumerate(seen.tolist()):
+                    counts[code] = counts.get(code, 0) + int(block_counts[i])
+                    if block_areas is not None:
+                        areas[code] = areas.get(code, 0.0) + float(block_areas[i])
+                if len(counts) > MAX_CLASSES:
+                    raise NotThematicError(
+                        "too_many_classes", f"more than {MAX_CLASSES}"
+                    )
 
             if not counts:
-                raise ValueError("No valid data found in raster")
+                raise NotThematicError("no_valid_data")
 
             unique_values = sorted(counts)
-            areas = np.array([counts[code] for code in unique_values]) * pixel_area
+            if method == "planar":
+                pixel_area = planar_pixel_area(raster.transform, raster.crs)
+                area_values = (
+                    np.array([counts[code] for code in unique_values]) * pixel_area
+                )
+            else:
+                area_values = np.array([areas[code] for code in unique_values])
 
             return pd.DataFrame(
                 {
                     "map_code": unique_values,
-                    "map_area": areas,
+                    "map_area": area_values,
                     "map_edited_class": [
                         f"Class {int(code)}" for code in unique_values
                     ],
                 }
             )
 
+    except NotThematicError:
+        raise
     except Exception as e:
         raise ValueError(f"Error processing raster file: {e!s}")
 
@@ -1207,10 +1276,9 @@ def get_file_info(file_path: str) -> Dict:
     """
     info = {
         "file_type": "unknown",
-        "size_mb": Path(file_path).stat().st_size / (1024 * 1024),
+        "size_mb": 0.0,
         "crs": None,
         "bounds": None,
-        "feature_count": 0,
     }
 
     def get_crs_string(crs):
@@ -1232,14 +1300,19 @@ def get_file_info(file_path: str) -> Dict:
         return "Custom CRS"
 
     try:
+        info["size_mb"] = Path(file_path).stat().st_size / (1024 * 1024)
         if is_raster_file(file_path):
             with rasterio.open(file_path) as raster:
                 info["file_type"] = "raster"
+                info["driver"] = raster.driver
                 info["crs"] = get_crs_string(raster.crs)
                 info["bounds"] = list(raster.bounds)
                 info["width"] = raster.width
                 info["height"] = raster.height
-                info["feature_count"] = raster.width * raster.height
+                info["pixels"] = raster.width * raster.height
+                info["band_count"] = raster.count
+                info["dtype"] = raster.dtypes[0]
+                info["nodata"] = raster.nodata
 
         elif is_vector_file(file_path):
             gdf = gpd.read_file(file_path)
@@ -1252,6 +1325,55 @@ def get_file_info(file_path: str) -> Dict:
         info["error"] = str(e)
 
     return info
+
+
+DECLARED = object()  # load_classification_source: keep the nodata the file declares
+
+
+def load_classification_source(
+    file_path: str,
+    band: int = 1,
+    nodata=DECLARED,
+    temp_dir: Optional[str] = None,
+) -> Dict:
+    """Resolve a selected raster into the design's classification source.
+
+    Writes a VRT sidecar when ``band`` / ``nodata`` differ from what the file
+    declares (``raster_source.write_vrt``), then computes class areas and the
+    palette on the resolved path. ``path`` is what ``app_state.file_path``
+    must hold; ``source_path`` is the file the user picked.
+
+    Raises:
+        NotThematicError: no CRS, or the class count rejects the raster
+        ValueError: not a raster, or it cannot be read
+    """
+    file_path = str(file_path)
+    info = get_file_info(file_path)
+    code = selection_reject_code(info)
+    if code == "no_crs":
+        raise NotThematicError("no_crs")
+    if code is not None:
+        raise ValueError(info.get("error") or f"Unsupported file: {file_path}")
+
+    if nodata is DECLARED:
+        nodata = info.get("nodata")
+    path = file_path
+    if needs_vrt(info, band, nodata):
+        path = write_vrt(
+            file_path, band, nodata, temp_dir or scratch_dir(prefix="sbae_vrt_")
+        )
+
+    area_data = compute_area_from_raster(path)
+    area_method, _ = choose_area_method_for(path)
+    return {
+        "path": path,
+        "source_path": file_path,
+        "band": int(band),
+        "nodata": nodata,
+        "area_method": area_method,
+        "area_data": area_data,
+        "color_palette": get_color_palette(path, area_data["map_code"].tolist()),
+    }
 
 
 def extract_map_codes(

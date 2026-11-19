@@ -150,7 +150,7 @@
     "upload": {
         "button": "Upload Map",
         "dialog_title": "Upload classification map",
-        "instructions": "Upload your land cover classification map as a raster file. Supported formats include GeoTIFF, ERDAS Imagine, and other raster formats supported by rasterio.",
+        "instructions": "Upload your land cover classification map as a raster file.",
         "confirm": "Use This File",
         "sample_map": "Use Sample Map",
         "layer_name": "Classification Map",
@@ -163,9 +163,18 @@
             "title": "File selected",
             "type": "Type",
             "size": "Size",
-            "features": "Features",
+            "pixels": "Pixels",
             "crs": "CRS",
-            "crs_missing": "Not specified"
+            "crs_missing": "Not specified",
+            "dtype": "Data type",
+            "bands": "Bands",
+            "band": "Class band",
+            "nodata": "Nodata value",
+            "nodata_hint": "Pixels with this value are ignored. Leave empty if every pixel is a class."
+        },
+        "area_method": {
+            "planar": "Areas: planar, from the pixel size ({crs})",
+            "geodesic": "Areas: geodesic, computed on the ellipsoid"
         },
         "toast": {
             "uploaded": "File uploaded successfully.",
@@ -173,7 +182,11 @@
             "optimization_failed": "Error optimizing raster: {error}"
         },
         "error": {
-            "not_a_raster": "Unsupported file format. The classification map must be a raster (GeoTIFF, ERDAS Imagine, or another format rasterio can open).",
+            "not_a_raster": "Unsupported file format. The classification map must be a raster.",
+            "no_crs": "The raster has no coordinate reference system, so its pixels cannot be placed on the map.",
+            "non_integral": "The raster holds non-integer values. A classification map needs integer class codes.",
+            "too_many_classes": "The raster has more than {max} distinct values. A classification map has at most {max} classes.",
+            "no_valid_data": "The raster holds no valid data: every pixel is nodata.",
             "sample_not_found": "Sample file not found: {path}",
             "sample_failed": "Error loading sample map: {error}"
         }
@@ -227,7 +240,7 @@
         },
         "classification_map": {
             "title": "Classification map:",
-            "detail": "GeoTIFF | {size} MB",
+            "detail": "{driver} | {size} MB",
             "layer_name": "Classification (analysis)"
         },
         "area_table": {

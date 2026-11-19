@@ -42,17 +42,21 @@ ctx = kc.create_dummy_context()
 kc.set_current_context(ctx)
 setup_sessions()
 import app
+import ipyvue
 from ipyleaflet import Marker
 from pysepal.i18n import set_locale
-from pysepal.sepalwidgets.vue_app import MapApp
+
+from component.message import msg
+from component.widget.map import SbaeMap
 
 _, rc = solara.render(app.Page(), handle_error=False)
-before = rc.find(MapApp).widget.main_map[0]
+before = rc.find(SbaeMap).widget
 before.add_layer(Marker(location=(0, 0), name="kept"))
 
 set_locale("es")
 
-after = rc.find(MapApp).widget.main_map[0]
+rc.find(ipyvue.Html, children=[msg("app.right_panel_title")]).assert_single()
+after = rc.find(SbaeMap).widget
 assert after is before, "the language change rebuilt the map"
 assert "kept" in [layer.name for layer in after.layers]
 print("MAP_KEPT_OK")

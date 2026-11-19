@@ -9,12 +9,12 @@ SEPAL Sampling Based Area Estimation Design (sbae-design)
 
 The app is designed to be a modernization and python version of the existing Stratified Area Estimation - Design module in SEPAL based on R Shiny.
 
-It allows users to upload a map (raster or vector), calculate class areas, define sampling parameters based on overall accuracy or target class precision objectives, and generate sample points for subsequent analysis or collection. The application integrates an interactive map for visualizing the input map and the generated sample points.
+It allows users to upload a classification raster, calculate class areas, define sampling parameters based on overall accuracy or target class precision objectives, and generate sample points for subsequent analysis or collection. The application integrates an interactive map for visualizing the input map and the generated sample points.
 
 Features
 --------
 
-- **File Input:** Supports common raster and vector geospatial file formats (e.g., GeoTIFF, Shapefile, GeoJSON).
+- **File Input:** Accepts any thematic raster GDAL can open (GeoTIFF, COG, ERDAS Imagine, ENVI, GeoPackage and more). Class areas are true ground areas, computed on the ellipsoid when the map's CRS is not planar-accurate.
 - **Area Computation:** Automatically calculates the area for each class in the input map.
 - **Class Editing:** Allows users to review and edit class names derived from the map.
 - **Expected User Accuracy Input:** Facilitates Neyman allocation by allowing users to input expected user's accuracies for each class.

@@ -1,3 +1,28 @@
+## 2.1.0 (2026-11-19)
+
+### Feat
+
+- move to the native Solara MapApp
+- any raster in the analysis map picker, refused at selection
+- band and nodata choices in the upload preview, coded rejections
+- resolve a picked raster into the design source
+- planar-or-geodesic pixel area helpers
+- VRT sidecar for band and nodata choices
+- raster acceptance codes and nodata helpers
+- adapt to pysepal 4.0.0rc2
+
+### Fix
+
+- drop the chart resize nudge, require ipecharts 1.4.2
+- nudge the dashboard charts when the dialog first mounts
+- move to pysepal 4.2
+- report a vanished raster instead of raising, pin the analysis toast text
+- true class areas for any CRS and reject non-thematic rasters
+- round tile windows and fail loud on a missing CRS
+- render once per click instead of once per reactive write
+- keep the map across a language change
+- require pysepal 4.0.0rc1 for the basemap fix
+
 ## 2.0.0 (2026-08-20)
 
 ### Feat

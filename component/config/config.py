@@ -8,10 +8,10 @@ DEFAULT_MIN_SAMPLES = 20
 DEFAULT_ALLOCATION_METHOD = "Proportional"
 DEFAULT_EXPECTED_ACCURACY = 0.85
 
-# File upload constraints
-MAX_FILE_SIZE_MB = 100
-SUPPORTED_RASTER_FORMATS = [".tif", ".tiff", ".img"]
-SUPPORTED_VECTOR_FORMATS = [".shp", ".geojson", ".gpkg", ".kml"]
+# Classification raster acceptance
+MAX_CLASSES = 255  # SepalMap.add_raster(class_colors=...) serves at most 255 classes
+PLANAR_AREA_TOLERANCE = 0.01  # max |geodesic / planar - 1| that keeps pixel-count areas
+AREA_TILE_SIZE = 256  # pixels per side of the geodesic weight lattice
 
 # Calculation limits
 MIN_CONFIDENCE_LEVEL = 0.80
