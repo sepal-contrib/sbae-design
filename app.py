@@ -31,7 +31,6 @@ import logging
 
 import solara
 from pysepal.logger import setup_logging
-from pysepal.sepalwidgets.vue_app import MapApp
 from pysepal.solara import (
     NotificationProvider,
     get_current_theme_state,
@@ -39,6 +38,7 @@ from pysepal.solara import (
     setup_solara_server,
     setup_theme_colors,
 )
+from pysepal.solara.components.map_app import MapApp
 
 from component.message import messages, msg
 from component.tile.upload import RasterMapWatcher
@@ -72,9 +72,7 @@ def Page():
 
     # Notification system (pysepal): mount the provider once at the app root,
     # before any component that calls use_notifications(). Kept in the same page
-    # as MapApp so the task pill can track the right-panel offset. It takes the
-    # same ThemeState as MapApp: without it the provider falls back to a
-    # process-local default and the toasts/pill stay light under a dark app.
+    # as MapApp so the task pill can track the right-panel offset.
     NotificationProvider(theme_state=theme_state)
     ErrorToastBridge()
 
@@ -120,7 +118,7 @@ def Page():
     ]
 
     # Create the MapApp with the shared map instance
-    MapApp.element(
+    MapApp(
         app_title=msg("app.title"),
         app_icon="mdi-map-marker-radius",
         locales=messages.available_locales(),

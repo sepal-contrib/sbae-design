@@ -30,7 +30,8 @@ class _DialogResizer(ipv.VuetifyTemplate):
     """
 
     tick = Int(0).tag(sync=True)
-    template = Unicode("""
+    template = Unicode(
+        """
         <script class='sbae-dashboard-resize'>
         {
             watch: {
@@ -44,7 +45,8 @@ class _DialogResizer(ipv.VuetifyTemplate):
             }
         }
         </script>
-        """).tag(sync=True)
+        """
+    ).tag(sync=True)
 
 
 def dashboard_kpis(results: dict) -> dict:
@@ -118,8 +120,8 @@ def AnalysisDashboardModal(open, theme_state=None):
     # Hooks must run unconditionally, before the early return, for hook-order
     # stability across renders (see solara's rules-of-hooks).
     #
-    # Kick ECharts into a re-layout each time the dialog opens; otherwise the
-    # charts, mounted eagerly while the dialog was hidden, stay tiny.
+    # Kick ECharts into a re-layout each time the dialog opens; a chart drawn
+    # while the dialog was hidden stays tiny otherwise.
     resizer = solara.use_memo(_DialogResizer, [])
 
     def _resize_on_open():
@@ -133,9 +135,7 @@ def AnalysisDashboardModal(open, theme_state=None):
         return
     unit = app_state.analysis_area_unit.value
 
-    with solara.v.Dialog(
-        v_model=open.value, on_v_model=open.set, max_width=1400, eager=True
-    ):
+    with solara.v.Dialog(v_model=open.value, on_v_model=open.set, max_width=1400):
         with solara.v.Card():
             solara.v.CardTitle(children=[msg("analysis.dashboard.title")])
             with solara.v.CardText(style="max-height: 80vh; overflow-y: auto;"):

@@ -468,7 +468,6 @@ def AnalysisPanel(sbae_map=None, theme_state=None):
             v_model=show_ref_modal.value,
             on_v_model=show_ref_modal.set,
             max_width=900,
-            eager=True,
         ):
             _ReferenceUploadDialog(ref_path, on_close=lambda: show_ref_modal.set(False))
 

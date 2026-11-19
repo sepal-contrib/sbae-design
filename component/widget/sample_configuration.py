@@ -164,7 +164,6 @@ def MethodologyHelpButton(title=None, content=None):
         v_model=show,
         on_v_model=set_show,
         max_width=600,
-        eager=True,
     ):
         with solara.v.Card():
             solara.v.CardTitle(children=[title])
@@ -329,7 +328,6 @@ def ClassEditorDialogButton(
         v_model=show_editor_dialog,
         on_v_model=set_show_editor_dialog,
         max_width=900,
-        eager=True,
     ):
         with solara.v.Card():
             solara.v.CardTitle(children=[dialog_title])
