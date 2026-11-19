@@ -21,12 +21,14 @@ from component.widget.analysis_results import (
 
 
 class _DialogResizer(ipv.VuetifyTemplate):
-    """Dispatch a window resize event whenever ``tick`` changes.
+    """Dispatch a window resize event when it mounts and whenever ``tick`` changes.
 
     ECharts measures zero width when first mounted inside a not-yet-visible
     dialog, so the charts render tiny. Bumping ``tick`` once the dialog opens
-    forces the widgets to re-layout to their real column width. Mirrors the
-    resize trick used by the sepal-gee-bundle dashboards.
+    forces the widgets to re-layout to their real column width. The dialog
+    mounts its content on the first open, after ``tick`` was bumped, so the
+    mount nudges too. Mirrors the resize trick used by the sepal-gee-bundle
+    dashboards.
     """
 
     tick = Int(0).tag(sync=True)
@@ -34,13 +36,21 @@ class _DialogResizer(ipv.VuetifyTemplate):
         """
         <script class='sbae-dashboard-resize'>
         {
-            watch: {
-                tick() {
+            methods: {
+                nudge() {
                     this.$nextTick(() => {
                         setTimeout(() => {
                             window.dispatchEvent(new Event("resize"));
                         }, 120);
                     });
+                }
+            },
+            mounted() {
+                this.nudge();
+            },
+            watch: {
+                tick() {
+                    this.nudge();
                 }
             }
         }
