@@ -28,7 +28,7 @@ dependencies:
       # ported to.
       - pysepal>=4.2.0,<5
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
-      - ipecharts>=1.0.0
+      - ipecharts>=1.4.2
       - voila
       # local vector-tile server for the PMTiles map sample-points layer.
       # 0.2.2 is the first release that binds 127.0.0.1 and resolves tippecanoe
