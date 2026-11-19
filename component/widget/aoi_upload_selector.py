@@ -112,7 +112,6 @@ def AoiUploadSelector(sbae_map: SbaeMap = None):
             v_model=show_upload_modal.value,
             on_v_model=show_upload_modal.set,
             max_width=900,
-            eager=True,
         ):
             UploadDialogCard(sbae_map, on_close=close_upload_modal)
 

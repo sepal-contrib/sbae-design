@@ -24,11 +24,11 @@ dependencies:
   # tippecanoe builds the PMTiles vector tiles for the map sample-points layer.
   - tippecanoe>=2
   - pip:
-      # Tested against 4.2.0. 5.0 removes pysepal.sepalwidgets, where app.py
-      # gets MapApp.
+      # Tested against 4.2.0. 5.0 moves to ipyvuetify 3, which the app is not
+      # ported to.
       - pysepal>=4.2.0,<5
       - git+https://github.com/openforis/earthengine-api.git@v1.6.14#egg=earthengine-api&subdirectory=python
-      - ipecharts>=1.0.0
+      - ipecharts>=1.4.2
       - voila
       # local vector-tile server for the PMTiles map sample-points layer.
       # 0.2.2 is the first release that binds 127.0.0.1 and resolves tippecanoe

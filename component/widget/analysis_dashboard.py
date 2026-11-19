@@ -1,8 +1,6 @@
 """Results summary card (KPIs + button) and the analysis dashboard modal it opens."""
 
-import ipyvuetify as ipv
 import solara
-from traitlets import Int, Unicode
 
 from component.message import msg
 from component.model import app_state
@@ -18,33 +16,6 @@ from component.widget.analysis_results import (
     _ConfusionMatrix,
     _Downloads,
 )
-
-
-class _DialogResizer(ipv.VuetifyTemplate):
-    """Dispatch a window resize event whenever ``tick`` changes.
-
-    ECharts measures zero width when first mounted inside a not-yet-visible
-    dialog, so the charts render tiny. Bumping ``tick`` once the dialog opens
-    forces the widgets to re-layout to their real column width. Mirrors the
-    resize trick used by the sepal-gee-bundle dashboards.
-    """
-
-    tick = Int(0).tag(sync=True)
-    template = Unicode("""
-        <script class='sbae-dashboard-resize'>
-        {
-            watch: {
-                tick() {
-                    this.$nextTick(() => {
-                        setTimeout(() => {
-                            window.dispatchEvent(new Event("resize"));
-                        }, 120);
-                    });
-                }
-            }
-        }
-        </script>
-        """).tag(sync=True)
 
 
 def dashboard_kpis(results: dict) -> dict:
@@ -115,31 +86,15 @@ def _DashboardKpiCards(results: dict):
 
 @solara.component
 def AnalysisDashboardModal(open, theme_state=None):
-    # Hooks must run unconditionally, before the early return, for hook-order
-    # stability across renders (see solara's rules-of-hooks).
-    #
-    # Kick ECharts into a re-layout each time the dialog opens; otherwise the
-    # charts, mounted eagerly while the dialog was hidden, stay tiny.
-    resizer = solara.use_memo(_DialogResizer, [])
-
-    def _resize_on_open():
-        if open.value:
-            resizer.tick += 1
-
-    solara.use_effect(_resize_on_open, [open.value])
-
     results = app_state.analysis_results.value
     if not results:
         return
     unit = app_state.analysis_area_unit.value
 
-    with solara.v.Dialog(
-        v_model=open.value, on_v_model=open.set, max_width=1400, eager=True
-    ):
+    with solara.v.Dialog(v_model=open.value, on_v_model=open.set, max_width=1400):
         with solara.v.Card():
             solara.v.CardTitle(children=[msg("analysis.dashboard.title")])
             with solara.v.CardText(style="max-height: 80vh; overflow-y: auto;"):
-                solara.v.Html(tag="div", children=[resizer], style_="display: none;")
                 _DashboardKpiCards(results)
                 with solara.ColumnsResponsive(6, small=12):
                     ConfusionMatrixChart(results, theme_state=theme_state)
